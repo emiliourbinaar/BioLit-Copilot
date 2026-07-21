@@ -4,6 +4,14 @@ Lightweight ADRs. Newest at top. Each entry: context, decision, alternatives, co
 
 ---
 
+## ADR-0005 — String-valued enums use `enum.StrEnum`
+- **Date:** 2026-07-20
+- **Status:** Accepted
+- **Context:** The Phase 1 plan wrote enums as `class X(str, Enum)`, but the project's ruff ruleset includes `UP`, whose `UP042` rule flags that pattern and fails the required lint gate. The plan mandated both the pattern and a green gate — a conflict surfaced during Task 2.
+- **Decision:** All string-valued enums inherit from `enum.StrEnum` (Python 3.12). Behavior is identical for pydantic JSON serialization and `is`/`==` comparisons; the full `UP` ruleset stays active rather than suppressing a valid rule.
+- **Alternatives:** keep `(str, Enum)` and add `UP042` to ruff `ignore` (rejected — silences a legitimate modernization rule to preserve example code).
+- **Consequences:** `Source`, `TextType`, `LicenseTier` (Task 2) and `ContradictionLabel` (Task 3) use `StrEnum`. Applies to all future enums.
+
 ## ADR-0004 — Full-text signalling: three-state `text_type` + separate license axis
 - **Date:** 2026-07-20
 - **Status:** Accepted

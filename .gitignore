@@ -5,3 +5,6 @@ node_modules/
 .env
 .pytest_cache/
 .ruff_cache/
+.superpowers/
+.claude/tdd-guard/data/*.json
+**/.claude/tdd-guard/
