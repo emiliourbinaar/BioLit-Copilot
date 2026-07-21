@@ -1,0 +1,14 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: biolit
+      POSTGRES_PASSWORD: biolit
+      POSTGRES_DB: biolit
+    ports:
+      - "5432:5432"
+    volumes:
+      - biolit_pgdata:/var/lib/postgresql/data
+
+volumes:
+  biolit_pgdata:
