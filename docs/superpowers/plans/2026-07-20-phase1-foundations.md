@@ -985,12 +985,6 @@ def _cassette(name: str) -> str:
     return (CASSETTES / name).read_text(encoding="utf-8")
 
 
-def _oa_route(pmc_id: str, body: str):
-    return respx.get("https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi").mock(
-        return_value=httpx.Response(200, text=body)
-    ) if pmc_id else None
-
-
 @pytest.fixture
 def settings() -> Settings:
     return Settings(http_backoff_base_seconds=0.001, http_backoff_max_seconds=0.002)
@@ -1381,7 +1375,7 @@ import httpx
 
 from biolit.clients.http import RetryConfig, request_with_retry
 from biolit.config import Settings
-from biolit.domain.enums import LicenseTier, Source, TextType
+from biolit.domain.enums import Source, TextType
 from biolit.domain.licensing import extraction_allowed_for, normalize_license
 from biolit.domain.paper import Author, Paper
 
@@ -1471,9 +1465,6 @@ def dedupe(papers: list[Paper]) -> list[Paper]:
         result.append(paper)
     return result
 ```
-
-Note the unused `LicenseTier` import is removed by ruff if flagged — keep only imports the
-file uses (`Source`, `TextType` are used; drop `LicenseTier` if ruff reports F401).
 
 - [ ] **Step 5: Run to verify pass**
 
