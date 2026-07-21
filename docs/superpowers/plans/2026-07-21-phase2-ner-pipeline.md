@@ -753,7 +753,7 @@ Expected: FAIL — `ModuleNotFoundError: biolit_evals.ner_eval`.
 import argparse
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from biolit.config import get_settings
 from biolit.domain.records import Entity
@@ -805,7 +805,7 @@ def run_eval(
 def _git_sha() -> str:
     try:
         return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-    except Exception:  # noqa: BLE001 - sha is best-effort metadata
+    except Exception:  # sha is best-effort metadata; never fail an eval over it
         return "unknown"
 
 
@@ -826,7 +826,7 @@ def main(argv: list[str] | None = None) -> None:
     prf = run_eval(
         examples, model, dataset=args.dataset, split=split, model_id=settings.ner_model_id,
         log_path=DEFAULT_LOG, git_sha=_git_sha(),
-        now=datetime.now(timezone.utc).isoformat(), score_threshold=settings.ner_score_threshold,
+        now=datetime.now(UTC).isoformat(), score_threshold=settings.ner_score_threshold,
     )
     print(f"{args.dataset}: P={prf.precision:.4f} R={prf.recall:.4f} F1={prf.f1:.4f} "
           f"(tp={prf.tp} fp={prf.fp} fn={prf.fn}, n={len(examples)})")
