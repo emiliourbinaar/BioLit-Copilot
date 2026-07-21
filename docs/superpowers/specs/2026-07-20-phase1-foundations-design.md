@@ -147,5 +147,16 @@ All HTTP mocked via recorded `respx` cassettes → deterministic, network-free C
 - `PubMedClient` and `BiorxivClient` normalize to `Paper`, with the three required client tests passing (PMC restrictive license, 429 retry, bioRxiv jatsxml three-state).
 - Full state skeleton (`PipelineState`, all contracts, all adapters) present; partial-update survival test passing.
 - Storage models + migration defined and introspection-tested; container not required.
-- `ARCHITECTURE.md` written; `DECISIONS.md` seeded with ADR-0001..0004.
+- `ARCHITECTURE.md` written; `DECISIONS.md` seeded with ADR-0001..0004 (plus ADR-0005, added during implementation: string enums use `StrEnum`).
 - CI workflow runs ruff/pyright/pytest.
+
+## 10. Deferred to owning phases & known limitations
+
+Recorded during the Phase 1 whole-branch review to reconcile the Definition of Done with what was deliberately scoped down. None are correctness blockers for Phase 1; each has an owning later phase.
+
+- **Node adapters (§5):** Only the representative `project_extractor`/`merge_extractor` pair is implemented — it carries the non-destructive-merge contract that this phase needed to prove. The remaining `project_*`/`merge_*` pairs (planner, retriever, clustering, critic, synthesis) are deferred to their owning phases, where each node is actually built. Note some of those merge into `list` collections and will need the same non-destructive discipline the extractor merge establishes.
+- **Contract fixtures (§8.2):** Only the extractor contracts are instantiated in tests this phase; the other contract models are trivial pydantic definitions and get exercised when their nodes land.
+- **PubMed abstract fidelity (known limitation):** `PubMedClient` parses abstract/title via `findtext`, which keeps only the first `<AbstractText>` section and drops text after the first inline child tag. Real PubMed records often have multi-section structured abstracts (`Label="BACKGROUND|METHODS|RESULTS|…"`) and inline markup. This is acceptable for Phase 1 but **must be fixed before the Extractor/Synthesis phases consume abstract text**, since downstream value depends on abstract fidelity.
+- **bioRxiv source labelling (opportunistic hardening):** `BiorxivClient._parse` derives `source` from the record's `server` field and falls back to `biorxiv` for unknown values; it should instead fall back to the `server` argument `details()` already knows, to avoid mislabelling a medRxiv record. Trivial; apply during a later client-hardening pass.
+- **Storage row vs. `Paper` (Phase 3):** `PaperRow` persists a subset of `Paper` fields. Phase 3 repository wiring must either widen the schema (new migration) or consciously accept the projection.
+- **Other deferred minors:** see `.superpowers/sdd/progress.md` "Minor findings" — all triaged *defer* in the final review (first-record PMC selection, license-without-link edge, sequential PMC queries, dedupe collision coverage, migration `Vector(768)` literal, `chunk_index` server_default, Dockerfile `uv.lock` copy, `setup-uv@v3` pin).
