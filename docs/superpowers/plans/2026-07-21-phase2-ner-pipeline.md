@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Python **3.12+**; packaging via **uv**. Torch resolves to the **CPU** build on PyPI for Windows/Linux (no CUDA index).
+- Python **3.12+**; packaging via **uv**. Torch is pinned to the **CPU-only** wheel index (`https://download.pytorch.org/whl/cpu`) — verified: bare PyPI `torch>=2.2` is CPU-only on Windows but pulls **23 `nvidia-*` packages + triton** (multi-GB) on Linux, which is what CI runs. See Task 1 Step 1.
 - `extract_entities(text: str, model, *, score_threshold: float) -> list[Entity]` is the stable Phase-4 anchor; `Entity` is the existing `biolit.domain.records.Entity` (`text,label,start,end`).
 - Canonical entity labels this phase: exactly `"CHEMICAL"` and `"DISEASE"`.
 - **Strict entity-level scoring:** an entity is correct only on exact `(start, end, label)` match. Corpus metrics are **micro-averaged** (sum per-example TP/FP/FN; never pool span tuples across examples).
@@ -42,6 +42,21 @@ Add to `[project].dependencies` (after `pgvector>=0.3`):
     "torch>=2.2",
     "datasets>=2.20",
 ```
+
+**Pin torch to the CPU-only index.** This is required, not cosmetic: bare PyPI `torch>=2.2` resolves CPU-only on Windows, but on Linux (our `ubuntu-latest` CI) it drags in 23 `nvidia-*` packages plus `triton` — multiple GB downloaded on every `uv sync`. Because `uv.lock` is universal, the Linux CUDA stack lands in the lockfile even when locking from Windows. Add these blocks to `backend/pyproject.toml`:
+```toml
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]
+```
+`explicit = true` means only `torch` is drawn from that index; everything else stays on PyPI. Verified resolution (uv 0.11.8): `torch==2.13.0+cpu` on win32/linux, `torch==2.13.0` on darwin (macOS publishes no `+cpu` variant), and **zero** `nvidia-*`/`triton` entries in the lock.
+
 Add the eval package to the wheel targets:
 ```toml
 [tool.hatch.build.targets.wheel]
@@ -91,6 +106,12 @@ def test_ner_settings_defaults():
 
 Run: `cd backend && uv sync && uv run pytest -q && uv run ruff check . && uv run pyright`
 Expected: `uv sync` installs transformers/torch/datasets (torch is a large CPU wheel — this is expected and one-time). New test passes; full suite still green; ruff/pyright clean.
+
+**Then assert the CPU pin held**, so a CUDA stack can't silently reach CI:
+```bash
+cd backend && grep -ciE 'name = "(nvidia|triton)' uv.lock
+```
+Expected: `0`. If it prints anything else, the `[tool.uv.sources]` pin did not apply — stop and report rather than committing a multi-GB lockfile.
 
 - [ ] **Step 6: Verify the checkpoint (license + availability, NO weight download)**
 
@@ -521,6 +542,20 @@ def test_bio_tags_multitoken_entity():
     assert entities == [Entity(text="chronic kidney disease", label="DISEASE", start=0, end=22)]
 
 
+def test_bio_tags_adjacent_same_label_entities_stay_separate():
+    # Two back-to-back B- tags of the SAME type are two entities, not one merged span.
+    # This is the classic BIO-grouping bug: merging them would inflate recall on gold
+    # and silently corrupt every downstream count.
+    tokens = ["aspirin", "ibuprofen"]
+    tags = ["B-Chemical", "B-Chemical"]
+    text, entities = bio_tags_to_spans(tokens, tags)
+    assert text == "aspirin ibuprofen"
+    assert entities == [
+        Entity(text="aspirin", label="CHEMICAL", start=0, end=7),
+        Entity(text="ibuprofen", label="CHEMICAL", start=8, end=17),
+    ]
+
+
 def test_load_domain_sample_parses_provenance_and_spans():
     pairs = load_domain_sample(str(FIXTURE))
     assert len(pairs) == 2
@@ -565,30 +600,30 @@ def bio_tags_to_spans(tokens: list[str], tags: list[str]) -> tuple[str, list[Ent
     cur_label: str | None = None
     cur_start = 0
     cur_end = 0
-    for (start, end), tag in zip(offsets, tags, strict=True):
-        label = canonical_label(tag)
-        is_begin = tag.upper().startswith("B-") or (label is not None and cur_label is None)
-        if label is None:
-            if cur_label is not None:
-                entities.append(
-                    Entity(text=text[cur_start:cur_end], label=cur_label,
-                           start=cur_start, end=cur_end)
-                )
-                cur_label = None
-            continue
-        if cur_label is not None and (label != cur_label or is_begin and tag.upper().startswith("B-")):
+
+    def flush() -> None:
+        nonlocal cur_label
+        if cur_label is not None:
             entities.append(
-                Entity(text=text[cur_start:cur_end], label=cur_label, start=cur_start, end=cur_end)
+                Entity(text=text[cur_start:cur_end], label=cur_label,
+                       start=cur_start, end=cur_end)
             )
             cur_label = None
+
+    for (start, end), tag in zip(offsets, tags, strict=True):
+        label = canonical_label(tag)
+        if label is None:  # "O" or an out-of-scope type closes any open span
+            flush()
+            continue
+        # A B- tag always opens a new entity (so adjacent same-label entities stay
+        # separate); a type change mid-span closes the previous one too.
+        if cur_label is not None and (tag.upper().startswith("B-") or label != cur_label):
+            flush()
         if cur_label is None:
             cur_label, cur_start, cur_end = label, start, end
         else:
             cur_end = end
-    if cur_label is not None:
-        entities.append(
-            Entity(text=text[cur_start:cur_end], label=cur_label, start=cur_start, end=cur_end)
-        )
+    flush()
     return text, entities
 
 
@@ -635,7 +670,7 @@ Note: the `tner/bc5cdr` tag id→label map is asserted in Task 8 against the rea
 - [ ] **Step 5: Run to verify pass**
 
 Run: `cd backend && uv run pytest tests/evals/test_datasets.py -q`
-Expected: PASS (3 tests). No dataset download (only `bio_tags_to_spans` + `load_domain_sample` exercised).
+Expected: PASS (4 tests). No dataset download (only `bio_tags_to_spans` + `load_domain_sample` exercised).
 
 - [ ] **Step 6: Commit**
 
@@ -947,7 +982,14 @@ Each prints P/R/F1 and appends a line to `backend/evals/runs.jsonl`. Capture bot
 
 - [ ] **Step 4: Write `docs/EVAL_REPORT.md`**
 
-Record: the chosen checkpoint + confirmed license; the BC5CDR test-split strict entity-level P/R/F1 (headline) with `n_examples`; the domain-sample P/R/F1; and — explicitly — the methodology caveats: **blind from-scratch annotation (ADR-0006)** and the **single-annotator** limitation, plus that the BC5CDR number is the unbiased benchmark and the domain number is a supporting independent cross-check. Include the `runs.jsonl` lines.
+Record: the chosen checkpoint + confirmed license; the BC5CDR test-split strict entity-level P/R/F1 (headline) with `n_examples`; the domain-sample P/R/F1; and the `runs.jsonl` lines.
+
+The report MUST include a **"Scoring methodology"** section stating plainly:
+> Scoring uses a **custom strict entity-level matcher** implemented in `biolit_evals/scoring.py`: an entity counts as a true positive only on an exact `(start, end, label)` match, with TP/FP/FN counted per example and micro-averaged. It is **not** `seqeval`, and these numbers have not been cross-validated against a `seqeval` run. Entity spans are derived from BC5CDR BIO tags by `bio_tags_to_spans`, which joins tokens with single spaces — so character offsets are relative to that reconstructed text, not the original document.
+
+Scope the comparison claim accordingly: say the metric is *the same kind of metric* published BC5CDR results report (strict entity-level micro-F1) and give the number as a sanity check that we are in the published range — do **not** claim it is a seqeval-equivalent or directly leaderboard-comparable run.
+
+Also state the **methodology caveats**: **blind from-scratch annotation (ADR-0006)** and the **single-annotator** limitation, plus that the BC5CDR number is the unbiased benchmark and the domain number is a supporting independent cross-check.
 
 - [ ] **Step 5: Update `docs/ARCHITECTURE.md`**
 
@@ -968,7 +1010,7 @@ git commit -m "eval(ner): BC5CDR + domain F1 on the board, eval report with meth
 - `biolit.ner` module + `extract_entities` anchor (spec §3, §4) → Tasks 2, 3.
 - CPU-first, GPU auto-detect, lazy heavy imports (spec §2.5, §4.1) → Task 3.
 - Config additions (spec §4.4) → Task 1.
-- Strict entity-level P/R/F1 (spec §5.1) → Task 4 (pure span-set scorer replacing seqeval — noted deviation, equivalent metric, fewer deps).
+- Strict entity-level P/R/F1 (spec §5.1) → Task 4 (pure span-set scorer replacing seqeval — noted deviation, same metric definition, fewer deps; disclosed explicitly in the eval report per Task 8 Step 4 so the "comparable to published BC5CDR results" claim stays accurately scoped).
 - BC5CDR test-split loader + domain loader with provenance (spec §5.2) → Task 5.
 - Eval runner + `runs.jsonl` schema (spec §5.3) → Task 6.
 - Blind from-scratch annotation + provenance + methodology caveats (spec §6, ADR-0006) → Tasks 7, 8.
