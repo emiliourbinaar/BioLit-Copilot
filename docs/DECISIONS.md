@@ -4,6 +4,14 @@ Lightweight ADRs. Newest at top. Each entry: context, decision, alternatives, co
 
 ---
 
+## ADR-0006 — Domain-sample NER annotation is blind and from-scratch
+- **Date:** 2026-07-21
+- **Status:** Accepted
+- **Context:** Phase 2's hand-annotated domain sample exists to test the NER model *independently* of the BC5CDR benchmark — specifically to surface where the model fails on our own corpus. A model-assisted "pre-label then human-verify" workflow is faster but introduces anchoring bias: annotators are measurably worse at catching false negatives (entities the model missed) when reviewing a pre-populated candidate list than when reading cold. That false-negative blindness is exactly the failure mode the sample is meant to catch.
+- **Decision:** Annotate `evals/gold/domain_sample.jsonl` blind and from scratch — reading raw abstract sentences with no model predictions visible. Finalize the gold file first, then run the model and score. Any comparison of model-influenced labeling is a separate, clearly-labeled secondary artifact, never a substitute for the blind pass. Record source PMIDs/paper ids as provenance on every annotated sentence. Document both the single-annotator limitation and this methodology in the eval report.
+- **Alternatives:** model-assisted annotation then human review (rejected — undermines the sample's sole purpose by biasing it toward the model's own recall gaps); benchmark-only eval (rejected earlier — loses the "works on my actual corpus" signal).
+- **Consequences:** More annotation effort, but the domain F1 is an honest independent check. Provenance keeps the sample traceable if papers are re-pulled. The unbiased headline number remains the BC5CDR test split; the domain sample is a supporting cross-check.
+
 ## ADR-0005 — String-valued enums use `enum.StrEnum`
 - **Date:** 2026-07-20
 - **Status:** Accepted
