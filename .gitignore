@@ -7,3 +7,4 @@ node_modules/
 .ruff_cache/
 .superpowers/
 .claude/tdd-guard/data/*.json
+**/.claude/tdd-guard/
