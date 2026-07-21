@@ -1,0 +1,21 @@
+{
+  "messages": [{"status": "ok"}],
+  "collection": [
+    {
+      "doi": "10.1101/2020.09.09.20191205",
+      "title": "Restricted license preprint",
+      "authors": "Doe, J.; Roe, R.",
+      "author_corresponding": "Jane Doe",
+      "author_corresponding_institution": "Test University",
+      "date": "2021-01-01",
+      "version": "1",
+      "type": "new results",
+      "license": "cc_no",
+      "category": "neuroscience",
+      "jatsxml": "https://www.medrxiv.org/content/early/2020/09/10/2020.09.09.20191205.source.xml",
+      "abstract": "A full text abstract.",
+      "published": "10.1038/s41586-021-00000-0",
+      "server": "medrxiv"
+    }
+  ]
+}

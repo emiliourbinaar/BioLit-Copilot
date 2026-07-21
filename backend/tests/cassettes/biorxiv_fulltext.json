@@ -1,0 +1,21 @@
+{
+  "messages": [{"status": "ok"}],
+  "collection": [
+    {
+      "doi": "10.1101/2020.12.30.424878",
+      "title": "Full text preprint",
+      "authors": "Doe, J.; Roe, R.",
+      "author_corresponding": "Jane Doe",
+      "author_corresponding_institution": "Test University",
+      "date": "2021-01-01",
+      "version": "1",
+      "type": "new results",
+      "license": "cc0",
+      "category": "neuroscience",
+      "jatsxml": "https://www.biorxiv.org/content/early/2021/01/01/2020.12.30.424878.source.xml",
+      "abstract": "A full text abstract.",
+      "published": "10.1038/s41586-021-00000-0",
+      "server": "biorxiv"
+    }
+  ]
+}
