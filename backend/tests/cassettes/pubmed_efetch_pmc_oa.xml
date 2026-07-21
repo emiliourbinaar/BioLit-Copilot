@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>11111111</PMID>
+      <Article>
+        <Journal><Title>Journal of Tests</Title>
+          <JournalIssue><PubDate><Year>2021</Year></PubDate></JournalIssue>
+        </Journal>
+        <ArticleTitle>Open access paper</ArticleTitle>
+        <Abstract><AbstractText>Open abstract.</AbstractText></Abstract>
+        <AuthorList>
+          <Author><LastName>Doe</LastName><ForeName>Jane</ForeName></Author>
+        </AuthorList>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading><DescriptorName>Metformin</DescriptorName></MeshHeading>
+      </MeshHeadingList>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="doi">10.1000/open</ArticleId>
+        <ArticleId IdType="pmc">PMC1111111</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>
