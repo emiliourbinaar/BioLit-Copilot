@@ -89,8 +89,12 @@ def load_bc5cdr_test() -> list[tuple[str, list[Entity]]]:
     # not the NER model's. The model's own config.json output head uses a different id
     # map ({0:"O",1:"B-Chemical",2:"I-Chemical",3:"B-Disease",4:"I-Disease"}) — these are
     # two unrelated encodings and are NOT supposed to match. Do not "fix" this map to
-    # align with the model's config; that would silently corrupt every gold span. This
-    # map is verified against the real `ds.features` before the benchmark is run.
+    # align with the model's config; that would silently corrupt every gold span.
+    #
+    # NOT automatically verified: this map must be checked by hand against the real
+    # `ds.features` (see docs/EVAL_REPORT.md) whenever the pinned dataset changes. A
+    # silent upstream re-encoding would mislabel every gold span while still producing
+    # a plausible-looking F1.
     id2label = {
         0: "O",
         1: "B-Chemical",
