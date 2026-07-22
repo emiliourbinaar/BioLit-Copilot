@@ -28,6 +28,17 @@ def test_extract_drops_unmapped_and_subthreshold():
     assert result == []
 
 
+def test_extract_keeps_span_scoring_exactly_at_threshold():
+    # The threshold is inclusive: a span scoring exactly at it is kept, not dropped.
+    # Pinning the boundary because score_threshold is a tunable config knob, so a
+    # `<` vs `<=` slip would silently shift every downstream entity count.
+    spans = [
+        {"entity_group": "Disease", "score": 0.5, "word": "cancer", "start": 8, "end": 14},
+    ]
+    result = extract_entities("TP53 in cancer", _fake(spans), score_threshold=0.5)
+    assert result == [Entity(text="cancer", label="DISEASE", start=8, end=14)]
+
+
 def test_extract_sorts_by_start():
     spans = [
         {"entity_group": "Disease", "score": 0.9, "word": "PCOS", "start": 14, "end": 18},
