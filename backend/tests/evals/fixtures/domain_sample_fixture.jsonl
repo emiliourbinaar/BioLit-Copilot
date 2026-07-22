@@ -1,0 +1,2 @@
+{"paper_id": "10.1000/x", "pmid": "111", "source": "pubmed", "sentence_index": 0, "text": "metformin treats PCOS", "entities": [{"start": 0, "end": 9, "label": "CHEMICAL", "text": "metformin"}, {"start": 17, "end": 21, "label": "DISEASE", "text": "PCOS"}]}
+{"paper_id": "10.1000/y", "pmid": "222", "source": "pubmed", "sentence_index": 1, "text": "no entities here", "entities": []}
