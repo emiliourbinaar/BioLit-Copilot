@@ -2,6 +2,7 @@ import argparse
 import json
 import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 
 from biolit.config import get_settings
 from biolit.domain.records import Entity
@@ -10,6 +11,8 @@ from biolit.ner.model import NerModel
 from biolit_evals.datasets import load_bc5cdr_test, load_domain_sample
 from biolit_evals.scoring import PRF, score_corpus
 
+# Paths below are relative to the `backend/` directory, which is where this
+# project's commands are run from.
 DEFAULT_LOG = "evals/runs.jsonl"
 DOMAIN_GOLD = "evals/gold/domain_sample.jsonl"
 
@@ -26,6 +29,14 @@ def run_eval(
     now: str,
     score_threshold: float = 0.5,
 ) -> PRF:
+    """Run NER extraction over `examples`, score it, and append one JSON line to the log.
+
+    `examples`, `model`, `log_path`, `git_sha`, and `now` are all injected by the caller
+    so this function stays testable offline (no filesystem discovery, no live git call,
+    no wall-clock read). Creates the log file's parent directory if it does not already
+    exist, then appends (never truncates or rewrites) a single JSON record summarizing
+    the run's precision/recall/F1 and counts.
+    """
     pairs: list[tuple[list[Entity], list[Entity]]] = []
     for text, gold in examples:
         pred = extract_entities(text, model, score_threshold=score_threshold)
@@ -45,6 +56,7 @@ def run_eval(
         "n_examples": len(examples),
         "git_sha": git_sha,
     }
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(line) + "\n")
     return prf

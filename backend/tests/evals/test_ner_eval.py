@@ -30,12 +30,26 @@ def test_run_eval_scores_and_appends_log(tmp_path):
     )
     assert prf.f1 == 1.0
     line = json.loads(log.read_text(encoding="utf-8").strip())
+    assert set(line.keys()) == {
+        "timestamp",
+        "model_id",
+        "dataset",
+        "split",
+        "precision",
+        "recall",
+        "f1",
+        "tp",
+        "fp",
+        "fn",
+        "n_examples",
+        "git_sha",
+    }
     assert line["dataset"] == "synthetic"
+    assert line["split"] == "test"
     assert line["f1"] == 1.0
     assert line["n_examples"] == 1
     assert line["git_sha"] == "abc1234"
     assert line["model_id"] == "fake"
-    assert {"timestamp", "precision", "recall", "tp", "fp", "fn"} <= line.keys()
 
 
 def test_run_eval_appends_not_overwrites(tmp_path):
