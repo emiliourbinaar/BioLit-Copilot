@@ -2,7 +2,7 @@ import json
 from typing import Any, cast
 
 from biolit.domain.records import Entity
-from biolit.ner.labels import canonical_label
+from biolit.ner.labels import CHEMICAL, DISEASE, canonical_label
 
 
 def bio_tags_to_spans(tokens: list[str], tags: list[str]) -> tuple[str, list[Entity]]:
@@ -65,9 +65,17 @@ def load_domain_sample(path: str) -> list[tuple[str, list[Entity]]]:
                 start, end, label = ent["start"], ent["end"], ent["label"]
                 if not (0 <= start < end <= len(text)):
                     raise ValueError(f"span out of bounds in {rec.get('pmid')}: {ent}")
-                if label not in ("CHEMICAL", "DISEASE"):
+                if label not in (CHEMICAL, DISEASE):
                     raise ValueError(f"non-canonical label in {rec.get('pmid')}: {label}")
-                entities.append(Entity(text=text[start:end], label=label, start=start, end=end))
+                surface = text[start:end]
+                recorded_text = ent.get("text")
+                if recorded_text is not None and recorded_text != surface:
+                    record_id = rec.get("pmid") or rec.get("paper_id")
+                    raise ValueError(
+                        f"gold span text mismatch in {record_id}: recorded text "
+                        f"{recorded_text!r} does not match text[{start}:{end}] = {surface!r}"
+                    )
+                entities.append(Entity(text=surface, label=label, start=start, end=end))
             pairs.append((text, entities))
     return pairs
 
@@ -77,6 +85,12 @@ def load_bc5cdr_test() -> list[tuple[str, list[Entity]]]:
     from datasets import load_dataset
 
     ds = load_dataset("tner/bc5cdr", split="test")
+    # This is the `tner/bc5cdr` *dataset's* label encoding (its tag-id -> BIO-label map),
+    # not the NER model's. The model's own config.json output head uses a different id
+    # map ({0:"O",1:"B-Chemical",2:"I-Chemical",3:"B-Disease",4:"I-Disease"}) — these are
+    # two unrelated encodings and are NOT supposed to match. Do not "fix" this map to
+    # align with the model's config; that would silently corrupt every gold span. This
+    # map is verified against the real `ds.features` before the benchmark is run.
     id2label = {
         0: "O",
         1: "B-Chemical",
