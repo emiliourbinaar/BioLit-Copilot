@@ -4,6 +4,14 @@ Lightweight ADRs. Newest at top. Each entry: context, decision, alternatives, co
 
 ---
 
+## ADR-0007 — Structured abstracts are concatenated with section labels
+- **Date:** 2026-07-22
+- **Status:** Accepted
+- **Context:** `PubMedClient` parsed abstracts with `article.findtext(".//Abstract/AbstractText")`, which returns only the *first* matching element. PubMed structured abstracts carry one `<AbstractText>` per section, so we silently kept only the opening section. Verified live on PMID 27295427 (LEADER trial): 156 of 2259 characters — 7% — with METHODS, RESULTS, and CONCLUSIONS discarded. Phase 1's tests all passed because every committed cassette happened to contain an unstructured abstract; the bug surfaced only when a human-facing task read real pulled text. This is severe for this project specifically: the system exists to extract findings and detect contradictions, and those claims live in RESULTS/CONCLUSIONS.
+- **Decision:** Concatenate all `<AbstractText>` elements in document order. Use `"".join(el.itertext())` per element so nested inline markup (`<i>`, `<sup>`) is preserved rather than truncating the section at its first child tag. When an element carries a `Label`, prefix that section `"<LABEL>: "` — this is how PubMed itself renders structured abstracts, so it stays faithful to the source and preserves section structure for downstream extraction. Join sections with `"\n"`. Unstructured abstracts and absent abstracts keep their existing behavior exactly (plain text; `None`).
+- **Alternatives:** join section texts without labels (rejected — discards structure that the Extractor and contradiction phases can use, and PubMed renders the labels anyway); keep a list of sections on `Paper` (rejected for now — changes the Phase 1 model contract and no consumer needs per-section access yet; revisit if one does).
+- **Consequences:** Abstract text is complete. **Caveat:** because the `"LABEL: "` prefixes are synthesized, character offsets into `Paper.abstract` no longer index any contiguous string in the source document. For a citation-backed system that quotes excerpts, any future offset-based quoting into an abstract must account for this — prefer quoting the section text, not raw offsets. The Phase 2 domain gold sample was rebuilt from post-fix abstracts; the pre-fix sample was discarded rather than patched.
+
 ## ADR-0006 — Domain-sample NER annotation is blind and from-scratch
 - **Date:** 2026-07-21
 - **Status:** Accepted

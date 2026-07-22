@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     http_backoff_base_seconds: float = 0.5
     http_backoff_max_seconds: float = 8.0
 
+    ner_model_id: str = "Francesco-A/BiomedNLP-PubMedBERT-base-uncased-abstract-bc5cdr-ner-v1"
+    ner_device: str = "auto"  # auto | cpu | cuda
+    ner_cache_dir: str | None = None
+    ner_batch_size: int = 16
+    ner_score_threshold: float = 0.5
+
 
 @lru_cache
 def get_settings() -> Settings:

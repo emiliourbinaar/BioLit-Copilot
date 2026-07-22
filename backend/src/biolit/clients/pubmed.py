@@ -61,7 +61,7 @@ class PubMedClient:
     async def _parse_article(self, article: ET.Element) -> Paper:
         pmid = article.findtext(".//MedlineCitation/PMID") or ""
         title = article.findtext(".//Article/ArticleTitle") or ""
-        abstract = article.findtext(".//Abstract/AbstractText")
+        abstract = self._parse_abstract(article)
         journal = article.findtext(".//Journal/Title")
         year_text = article.findtext(".//JournalIssue/PubDate/Year")
         year = int(year_text) if year_text and year_text.isdigit() else None
@@ -109,6 +109,26 @@ class PubMedClient:
             extraction_allowed=extraction_allowed_for(tier),
             raw={"pmid": pmid, "pmc_id": pmc_id},
         )
+
+    @staticmethod
+    def _parse_abstract(article: ET.Element) -> str | None:
+        """Concatenate all AbstractText sections in document order.
+
+        PubMed *structured* abstracts contain multiple <AbstractText> elements,
+        one per section (e.g. Label="BACKGROUND"/"METHODS"/"RESULTS"/"CONCLUSIONS").
+        Using findtext (or el.text) on the first match alone silently drops every
+        section after the first. Labelled sections are prefixed "<LABEL>: " to
+        match how PubMed itself renders structured abstracts; an unstructured,
+        unlabelled single-section abstract passes through unchanged.
+        """
+        sections: list[str] = []
+        for el in article.findall(".//Abstract/AbstractText"):
+            text = "".join(el.itertext()).strip()
+            if not text:
+                continue
+            label = el.get("Label")
+            sections.append(f"{label}: {text}" if label else text)
+        return "\n".join(sections) if sections else None
 
     async def _classify_pmc(self, pmc_id: str | None) -> tuple[TextType, str | None, str | None]:
         """Cross-reference the PMC OA Web Service; never infer rights from PMC presence."""

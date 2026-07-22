@@ -10,6 +10,10 @@ dependencies = [
     "sqlalchemy>=2.0",
     "alembic>=1.13",
     "pgvector>=0.3",
+    "transformers>=4.44",
+    "torch>=2.2",
+    "datasets>=2.20",
+    "huggingface_hub>=0.24",
 ]
 
 [dependency-groups]
@@ -19,18 +23,33 @@ dev = [
     "respx>=0.21",
     "ruff>=0.5",
     "pyright>=1.1",
+    "tdd-guard-pytest>=0.1",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/biolit"]
+packages = ["src/biolit", "src/biolit_evals"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "heavy: downloads real model/dataset; deselected by default (run with -m heavy)",
+]
+addopts = "-m 'not heavy'"
 
 [tool.ruff]
 line-length = 100
