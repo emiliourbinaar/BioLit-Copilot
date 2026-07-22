@@ -80,21 +80,46 @@ def load_domain_sample(path: str) -> list[tuple[str, list[Entity]]]:
     return pairs
 
 
+def _verify_bc5cdr_label_map(id2label: dict[int, str]) -> None:
+    """Confirm the hardcoded id2label map still matches the real `tner/bc5cdr` encoding.
+
+    Fetches only `dataset/label.json` (a few dozen bytes) via `huggingface_hub`, not the
+    dataset itself — cheap relative to the test-split download `load_bc5cdr_test` is
+    about to do anyway. Raises with a clear diff if upstream ever re-encodes the labels,
+    since a silent mismatch would mislabel every gold span while still producing a
+    plausible-looking F1.
+    """
+    from huggingface_hub import hf_hub_download
+
+    path = hf_hub_download("tner/bc5cdr", "dataset/label.json", repo_type="dataset")
+    with open(path, encoding="utf-8") as fh:
+        real_label2id = cast(dict[str, int], json.load(fh))
+    expected_label2id = {label: idx for idx, label in id2label.items()}
+    if real_label2id != expected_label2id:
+        raise ValueError(
+            "tner/bc5cdr's dataset/label.json no longer matches the hardcoded id2label "
+            "map in biolit_evals.datasets.load_bc5cdr_test. "
+            f"Expected {expected_label2id}, found {real_label2id}. Update id2label to "
+            "match before trusting any BC5CDR eval numbers — this mismatch would "
+            "silently mislabel every gold span."
+        )
+
+
 def load_bc5cdr_test() -> list[tuple[str, list[Entity]]]:
     """Load the BC5CDR test split from `tner/bc5cdr` (lazy heavy import)."""
     from datasets import load_dataset
 
-    ds = load_dataset("tner/bc5cdr", split="test")
     # This is the `tner/bc5cdr` *dataset's* label encoding (its tag-id -> BIO-label map),
     # not the NER model's. The model's own config.json output head uses a different id
     # map ({0:"O",1:"B-Chemical",2:"I-Chemical",3:"B-Disease",4:"I-Disease"}) — these are
     # two unrelated encodings and are NOT supposed to match. Do not "fix" this map to
     # align with the model's config; that would silently corrupt every gold span.
     #
-    # NOT automatically verified: this map must be checked by hand against the real
-    # `ds.features` (see docs/EVAL_REPORT.md) whenever the pinned dataset changes. A
-    # silent upstream re-encoding would mislabel every gold span while still producing
-    # a plausible-looking F1.
+    # Verified against the real dataset (see docs/EVAL_REPORT.md "Step 1" for the
+    # confirmation transcript): `dataset/label.json` in `tner/bc5cdr` is exactly
+    # {"O": 0, "B-Chemical": 1, "B-Disease": 2, "I-Disease": 3, "I-Chemical": 4}, which
+    # inverts to the map below. This is now enforced automatically (not just by hand) by
+    # `_verify_bc5cdr_label_map` below, which fails loudly if upstream ever re-encodes it.
     id2label = {
         0: "O",
         1: "B-Chemical",
@@ -102,6 +127,17 @@ def load_bc5cdr_test() -> list[tuple[str, list[Entity]]]:
         3: "I-Disease",
         4: "I-Chemical",
     }
+    _verify_bc5cdr_label_map(id2label)
+
+    # `datasets>=4` dropped support for repos that ship a loading script (as
+    # `tner/bc5cdr` does via `bc5cdr.py`), so the plain `load_dataset("tner/bc5cdr",
+    # split="test")` call raises `RuntimeError: Dataset scripts are no longer
+    # supported`. HF auto-generates a script-free parquet mirror of every such dataset
+    # on the `refs/convert/parquet` ref; pin to that so this keeps working regardless of
+    # `datasets` version. Verified byte-identical to the raw `dataset/test.json` in the
+    # repo (same length, same first rows) as of the confirmation run in the eval report.
+    ds = load_dataset("tner/bc5cdr", split="test", revision="refs/convert/parquet")
+
     pairs: list[tuple[str, list[Entity]]] = []
     for raw_row in ds:
         row = cast(dict[str, Any], raw_row)
