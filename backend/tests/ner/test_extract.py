@@ -48,6 +48,28 @@ def test_extract_sorts_by_start():
     assert [e.start for e in result] == [0, 14]
 
 
+def test_extract_prefers_source_slice_over_tokenizer_word_when_offsets_present():
+    # PubMedBERT-base-uncased lowercases and strips accents, so under
+    # aggregation_strategy="simple" the pipeline's `word` field is rebuilt from the
+    # tokenizer's decoded tokens, not the source text (e.g. "Polycystic ovary
+    # syndrome" -> "polycystic ovary syndrome"). Entity.text must preserve the
+    # original surface form whenever character offsets are available, because later
+    # phases cluster entities and ground citations on this exact string — silently
+    # lowercasing/normalizing it here would corrupt both.
+    text = "Polycystic ovary syndrome is a common endocrine disorder."
+    spans = [
+        {
+            "entity_group": "Disease",
+            "score": 0.99,
+            "word": "polycystic ovary syndrome",  # tokenizer's lowercased reconstruction
+            "start": 0,
+            "end": 25,
+        },
+    ]
+    result = extract_entities(text, _fake(spans))
+    assert result == [Entity(text="Polycystic ovary syndrome", label="DISEASE", start=0, end=25)]
+
+
 def test_extract_empty_text():
     assert (
         extract_entities(

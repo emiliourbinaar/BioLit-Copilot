@@ -21,9 +21,17 @@ def extract_entities(text: str, model: NerModel, *, score_threshold: float = 0.5
             continue
         start = span.get("start")
         end = span.get("end")
-        word = span.get("word")
-        if word is None and start is not None and end is not None:
+        if start is not None and end is not None:
+            # Prefer the source slice over the pipeline's `word` field: under
+            # aggregation_strategy="simple", `word` is rebuilt from the tokenizer's
+            # decoded tokens (convert_tokens_to_string over convert_ids_to_tokens),
+            # which for an uncased checkpoint like PubMedBERT-base-uncased is
+            # lowercased and accent-stripped relative to the source text. Downstream
+            # clustering and citation grounding depend on Entity.text matching the
+            # original surface form exactly.
             word = text[start:end]
+        else:
+            word = span.get("word")
         entities.append(Entity(text=word or "", label=label, start=start, end=end))
     entities.sort(key=lambda e: e.start if e.start is not None else 0)
     return entities

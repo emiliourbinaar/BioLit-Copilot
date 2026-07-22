@@ -56,7 +56,9 @@ narrow, single-annotator, single-run sanity check on our own corpus. See "Limita
 
 The obvious reading — "the model is much worse on our corpus" — is not what the errors
 actually show. Breaking down all 57 domain errors by whether the predicted and gold
-spans overlap in character range:
+spans overlap in character range (regenerate with
+`uv run python -m biolit_evals.error_analysis --dataset domain` from `backend/`; see
+`backend/src/biolit_evals/error_analysis.py`):
 
 | | count | of which overlap a span on the other side |
 |---|---|---|
@@ -79,19 +81,47 @@ split**:
 | `SGLT2is`, `DPP4is` | partial / no span |
 | `sodium-glucose cotransporter-2 inhibitors` | `sodium-glucose` |
 | `Cangfudaotan Decoction` | `Cangfudaotan Decoc`, `Cangfudaotan` |
-| `Lp(a)` (excluded from gold) | `Lp` + `a` |
 
-This is a genuine and useful finding about the model *on this corpus*: BC5CDR is built
+The row below is **not a false negative** — `Lp(a)` was deliberately excluded from
+gold (see convention #3), so there is no missed gold span; the model's `Lp` + `a`
+prediction is a **pure false positive** with no gold counterpart at all. Listed
+separately so the table above stays coherent (every row in it is a genuine
+gold-vs-predicted boundary disagreement):
+
+| Predicted (no gold counterpart) | Why it's not a FN |
+|---|---|
+| `Lp` + `a` | `Lp(a)` is excluded from gold entirely (convention #3) — pure FP |
+
+This is a pattern worth investigating about the model *on this corpus*: BC5CDR is built
 largely around individually-named chemicals, while contemporary diabetes and
 cardiovascular literature is dense with class-level abbreviations (`GLP-1RAs`,
 `SGLT2is`, `DPP4is`) and non-Western therapeutic names. The model's subword tokenizer
 fragments exactly these, and `aggregation_strategy="simple"` does not reassemble them.
+The pattern is real in the sense that these specific fragmentations are visible in the
+predictions — but see the confound below before reading anything quantitative into it.
 
-**The honest caveat:** this measurement cannot cleanly separate *model weakness* from
-*annotation-convention mismatch*. Our annotator counted drug-class terms as CHEMICAL;
-BC5CDR's own guidelines may not, and the model was fine-tuned to BC5CDR's conventions.
-With n=49 sentences, 3 abstracts, and one non-expert annotator, the gap is a signal
-worth investigating — not a quantified statement of production accuracy.
+**Confound: the two corpora are not measured on the same input format.** BC5CDR
+examples reach the model as `bio_tags_to_spans` output — pre-tokenized dataset tokens
+rejoined with single spaces, so hyphens and punctuation are already whitespace-
+separated before the model ever sees the text (e.g. `Famotidine - associated
+delirium .`). The domain sample, by contrast, is natural sentence text with hyphens and
+punctuation left intact (`GLP-1RAs`, `sodium-glucose cotransporter-2 inhibitors`).
+Pre-separating hyphens removes exactly the failure mode this section identifies as the
+domain sample's dominant error — a hyphenated compound the tokenizer would otherwise
+fragment arrives at the model already split on whitespace, so the model never has to
+solve that sub-problem on BC5CDR the way it does on the domain sample. This means an
+unknown share of the 0.8099 → 0.6587 drop is a tokenization-format artifact of how each
+corpus was fed to the model, not corpus difficulty or annotation-convention mismatch.
+**The two F1 numbers are therefore not strictly comparable**, and the boundary-
+disagreement breakdown above should be read as evidence the pattern exists, not as a
+clean measurement of how much of the gap it explains.
+
+**The honest caveat:** this measurement cannot cleanly separate *model weakness*,
+*annotation-convention mismatch*, and the *tokenization-format confound* just described.
+Our annotator counted drug-class terms as CHEMICAL; BC5CDR's own guidelines may not, and
+the model was fine-tuned to BC5CDR's conventions. With n=49 sentences, 3 abstracts, and
+one non-expert annotator, the gap is a signal worth investigating — not a quantified
+statement of production accuracy.
 
 **Consequence for later phases (why this matters beyond a score):** Phase 3 clusters
 papers by shared entities and Phase 5 detects contradictions within those clusters. If
@@ -191,13 +221,28 @@ BC5CDR BIO tags by `bio_tags_to_spans`, which joins tokens with single spaces, s
 character offsets are relative to that reconstructed text rather than the original
 document.
 
+**This matcher is systematically stricter than seqeval, not just uncross-validated
+against it.** seqeval scores at token/tag granularity reconstructed from BIO labels, so
+a partial-overlap prediction like `CF` inside gold `CFD` cannot exist as its own scored
+unit there — the shared tokens simply contribute to the same tag sequence. Here, spans
+are compared as literal character ranges, so `CF` (predicted) vs. `CFD` (gold) is two
+distinct spans: a legal false positive for the predicted span *and* a legal false
+negative for the missed gold span. Every boundary-disagreement error in "Interpreting
+the gap" above is double-counted this way. This means the BC5CDR headline of 0.8099 is
+biased **downward** relative to published seqeval-based numbers for comparable
+models — the strict character-span matcher is intrinsically harder to score well on
+than seqeval's token-tag matching, independent of any real difference in the
+predictions.
+
 This is *the same kind of metric* published BC5CDR results report (strict
 entity-level micro-F1), so a BC5CDR F1 of 0.8099 landing inside the commonly-cited
 ~0.80–0.90 range for models of this class is a reasonable sanity check that nothing is
 badly broken — it is **not** a seqeval-equivalent or leaderboard-comparable run, and
 should not be quoted as directly comparable to any specific published leaderboard
 number, including the model card's own self-reported 0.8775 (whose scoring
-methodology is undocumented on the card).
+methodology is undocumented on the card). If anything, given the downward bias just
+described, the "same kind of metric" framing is conservative, not generous — this
+matcher does not flatter the model relative to seqeval-based comparisons.
 
 **Is 0.8099 plausible?** Yes. It sits inside the ~0.80–0.90 strict entity-level F1
 range the task brief cites as expected for models of this class, and close to — a few
@@ -226,7 +271,7 @@ below):
   - PMID 42441967 — "Glucagon-Like Peptide-1 Receptor Agonists and Risk for Ischemic
     Optic Neuropathy" (metformin/T2D topic) — 17 sentences
 - **90 total entities: CHEMICAL 49, DISEASE 41** (counted directly from the committed
-  JSONL). **Note:** the Task 7 report's prose states "CHEMICAL 49, DISEASE 41" for
+  JSONL). **Note:** the Task 7 report's prose states "CHEMICAL 47, DISEASE 43" for
   the same file/commit (`3be9b4f`) — the total (90) matches but the per-label split
   does not. This report uses the counts computed directly from the committed file,
   which is authoritative; the Task 7 prose total appears to have a transcription
@@ -292,7 +337,13 @@ below):
    There is no second rater and no adjudication process; every judgment call in the
    "Annotation conventions" above reflects one perspective only.
 2. **The domain sample is 49 sentences from only 3 abstracts** — a narrow lexical base
-   where one paper's terminology can swing the F1 substantially. Notably,
+   where one paper's terminology can swing the F1 substantially. Quantifying this: the
+   gold file has 90 entities but only **41 distinct surface forms** (counted directly
+   from `backend/evals/gold/domain_sample.jsonl`), and `CFD` alone accounts for
+   **12 of the 90 entities (13%)**, all from the one abstract that introduces it. Of
+   those 12, **10 are false negatives** (the model predicts `CF`, not `CFD` — see
+   "Interpreting the gap"), so **10 of the 35 total false negatives (29%) come from a
+   single acronym in a single abstract.** Notably,
    `lipoprotein(a)`/`Lp(a)` was **deliberately excluded** from CHEMICAL (judged a
    biomarker/lipoprotein particle rather than a chemical substance — see convention
    #3 above), which zeroed out most of one abstract's entities: 10 of that abstract's
