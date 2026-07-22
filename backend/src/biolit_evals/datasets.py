@@ -1,8 +1,9 @@
 import json
 from typing import Any, cast
 
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
-from biolit.ner.labels import CHEMICAL, DISEASE, canonical_label
+from biolit.ner.labels import canonical_label
 
 
 def bio_tags_to_spans(tokens: list[str], tags: list[str]) -> tuple[str, list[Entity]]:
@@ -21,7 +22,7 @@ def bio_tags_to_spans(tokens: list[str], tags: list[str]) -> tuple[str, list[Ent
     text = "".join(text_parts)
 
     entities: list[Entity] = []
-    cur_label: str | None = None
+    cur_label: EntityLabel | None = None
     cur_start = 0
     cur_end = 0
 
@@ -65,7 +66,7 @@ def load_domain_sample(path: str) -> list[tuple[str, list[Entity]]]:
                 start, end, label = ent["start"], ent["end"], ent["label"]
                 if not (0 <= start < end <= len(text)):
                     raise ValueError(f"span out of bounds in {rec.get('pmid')}: {ent}")
-                if label not in (CHEMICAL, DISEASE):
+                if label not in (EntityLabel.CHEMICAL, EntityLabel.DISEASE):
                     raise ValueError(f"non-canonical label in {rec.get('pmid')}: {label}")
                 surface = text[start:end]
                 recorded_text = ent.get("text")

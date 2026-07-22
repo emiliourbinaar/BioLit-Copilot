@@ -2,6 +2,7 @@ import argparse
 from collections import Counter
 from dataclasses import dataclass, field
 
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit_evals.scoring import score_corpus
 
@@ -21,8 +22,8 @@ class ErrorReport:
     n_fp: int = 0
     fn_overlapping: int = 0
     fp_overlapping: int = 0
-    fn_common: list[tuple[tuple[str, str], int]] = field(default_factory=list)
-    fp_common: list[tuple[tuple[str, str], int]] = field(default_factory=list)
+    fn_common: list[tuple[tuple[str, EntityLabel], int]] = field(default_factory=list)
+    fp_common: list[tuple[tuple[str, EntityLabel], int]] = field(default_factory=list)
 
 
 def _key(e: Entity) -> tuple[int | None, int | None, str]:

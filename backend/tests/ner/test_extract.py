@@ -1,6 +1,10 @@
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit.ner.extract import extract_entities
 from biolit.ner.model import NerModel
+
+CHEMICAL = EntityLabel.CHEMICAL
+DISEASE = EntityLabel.DISEASE
 
 
 def _fake(spans):
@@ -17,8 +21,8 @@ def test_extract_maps_labels_and_spans():
     ]
     result = extract_entities("metformin in PCOS", _fake(spans))
     assert result == [
-        Entity(text="metformin", label="CHEMICAL", start=0, end=9),
-        Entity(text="PCOS", label="DISEASE", start=13, end=17),
+        Entity(text="metformin", label=CHEMICAL, start=0, end=9),
+        Entity(text="PCOS", label=DISEASE, start=13, end=17),
     ]
 
 
@@ -39,7 +43,7 @@ def test_extract_keeps_span_scoring_exactly_at_threshold():
         {"entity_group": "Disease", "score": 0.5, "word": "cancer", "start": 8, "end": 14},
     ]
     result = extract_entities("TP53 in cancer", _fake(spans), score_threshold=0.5)
-    assert result == [Entity(text="cancer", label="DISEASE", start=8, end=14)]
+    assert result == [Entity(text="cancer", label=DISEASE, start=8, end=14)]
 
 
 def test_extract_sorts_by_start():
@@ -70,7 +74,7 @@ def test_extract_prefers_source_slice_over_tokenizer_word_when_offsets_present()
         },
     ]
     result = extract_entities(text, _fake(spans))
-    assert result == [Entity(text="Polycystic ovary syndrome", label="DISEASE", start=0, end=25)]
+    assert result == [Entity(text="Polycystic ovary syndrome", label=DISEASE, start=0, end=25)]
 
 
 def test_extract_empty_text():

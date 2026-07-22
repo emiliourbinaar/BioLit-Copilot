@@ -61,8 +61,8 @@ def test_f1_is_harmonic_mean_not_arithmetic_mean():
     # precision != recall here, so a transposed formula or an arithmetic-mean mix-up
     # (which every other test's 1.0/1.0 or 0.0/0.0 case cannot distinguish from the
     # correct harmonic mean) would produce a different, wrong f1 value.
-    gold = [_e(0, 1, "A"), _e(1, 2, "A")]
-    pred = [_e(0, 1, "A"), _e(1, 2, "A"), _e(2, 3, "A")]
+    gold = [_e(0, 1, "CHEMICAL"), _e(1, 2, "CHEMICAL")]
+    pred = [_e(0, 1, "CHEMICAL"), _e(1, 2, "CHEMICAL"), _e(2, 3, "CHEMICAL")]
     prf = score_corpus([(gold, pred)])
     assert (prf.tp, prf.fp, prf.fn) == (2, 1, 0)
     assert prf.precision == pytest.approx(2 / 3)

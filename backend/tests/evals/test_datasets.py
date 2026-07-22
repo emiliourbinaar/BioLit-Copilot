@@ -3,8 +3,12 @@ from pathlib import Path
 
 import pytest
 
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit_evals.datasets import bio_tags_to_spans, load_domain_sample
+
+CHEMICAL = EntityLabel.CHEMICAL
+DISEASE = EntityLabel.DISEASE
 
 FIXTURE = Path(__file__).parent / "fixtures" / "domain_sample_fixture.jsonl"
 
@@ -15,8 +19,8 @@ def test_bio_tags_to_spans_char_offsets():
     text, entities = bio_tags_to_spans(tokens, tags)
     assert text == "metformin treats PCOS"
     assert entities == [
-        Entity(text="metformin", label="CHEMICAL", start=0, end=9),
-        Entity(text="PCOS", label="DISEASE", start=17, end=21),
+        Entity(text="metformin", label=CHEMICAL, start=0, end=9),
+        Entity(text="PCOS", label=DISEASE, start=17, end=21),
     ]
 
 
@@ -24,7 +28,7 @@ def test_bio_tags_multitoken_entity():
     tokens = ["chronic", "kidney", "disease", "improves"]
     tags = ["B-Disease", "I-Disease", "I-Disease", "O"]
     text, entities = bio_tags_to_spans(tokens, tags)
-    assert entities == [Entity(text="chronic kidney disease", label="DISEASE", start=0, end=22)]
+    assert entities == [Entity(text="chronic kidney disease", label=DISEASE, start=0, end=22)]
 
 
 def test_bio_tags_adjacent_same_label_entities_stay_separate():
@@ -36,8 +40,8 @@ def test_bio_tags_adjacent_same_label_entities_stay_separate():
     text, entities = bio_tags_to_spans(tokens, tags)
     assert text == "aspirin ibuprofen"
     assert entities == [
-        Entity(text="aspirin", label="CHEMICAL", start=0, end=7),
-        Entity(text="ibuprofen", label="CHEMICAL", start=8, end=17),
+        Entity(text="aspirin", label=CHEMICAL, start=0, end=7),
+        Entity(text="ibuprofen", label=CHEMICAL, start=8, end=17),
     ]
 
 
@@ -49,7 +53,7 @@ def test_bio_tags_stray_i_tag_opens_new_span():
     tags = ["I-Disease", "I-Disease"]
     text, entities = bio_tags_to_spans(tokens, tags)
     assert text == "foo bar"
-    assert entities == [Entity(text="foo bar", label="DISEASE", start=0, end=7)]
+    assert entities == [Entity(text="foo bar", label=DISEASE, start=0, end=7)]
 
 
 def test_bio_tags_label_change_mid_span_without_b_tag_splits_entities():
@@ -62,8 +66,8 @@ def test_bio_tags_label_change_mid_span_without_b_tag_splits_entities():
     text, entities = bio_tags_to_spans(tokens, tags)
     assert text == "foo bar"
     assert entities == [
-        Entity(text="foo", label="DISEASE", start=0, end=3),
-        Entity(text="bar", label="CHEMICAL", start=4, end=7),
+        Entity(text="foo", label=DISEASE, start=0, end=3),
+        Entity(text="bar", label=CHEMICAL, start=4, end=7),
     ]
 
 

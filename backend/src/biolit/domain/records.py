@@ -2,10 +2,12 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from biolit.domain.enums import EntityLabel
+
 
 class Entity(BaseModel):
     text: str
-    label: str  # e.g. CHEMICAL, DISEASE, GENE
+    label: EntityLabel  # type-checked at the Phase 4 extraction seam
     start: int | None = None
     end: int | None = None
 

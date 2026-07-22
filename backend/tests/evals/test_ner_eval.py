@@ -1,14 +1,17 @@
 import json
 
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit.ner.model import NerModel
 from biolit_evals.ner_eval import run_eval
+
+CHEMICAL = EntityLabel.CHEMICAL
 
 
 def test_run_eval_scores_and_appends_log(tmp_path):
     # Gold examples: (text, gold_entities). The fake model predicts from a lookup by text.
     examples = [
-        ("metformin in PCOS", [Entity(text="metformin", label="CHEMICAL", start=0, end=9)]),
+        ("metformin in PCOS", [Entity(text="metformin", label=CHEMICAL, start=0, end=9)]),
     ]
     preds = {
         "metformin in PCOS": [

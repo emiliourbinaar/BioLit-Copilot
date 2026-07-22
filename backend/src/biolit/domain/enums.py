@@ -18,3 +18,10 @@ class LicenseTier(StrEnum):
     non_commercial = "non_commercial"
     restricted = "restricted"
     unknown = "unknown"
+
+
+class EntityLabel(StrEnum):
+    # Values stay uppercase: they are the canonical NER labels baked into the gold
+    # JSONL, the eval report, and BC5CDR scoring. Only the *type* is being tightened.
+    CHEMICAL = "CHEMICAL"
+    DISEASE = "DISEASE"
