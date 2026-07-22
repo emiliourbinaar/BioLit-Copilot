@@ -22,6 +22,7 @@ dev = [
     "respx>=0.21",
     "ruff>=0.5",
     "pyright>=1.1",
+    "tdd-guard-pytest>=0.1",
 ]
 
 [build-system]
