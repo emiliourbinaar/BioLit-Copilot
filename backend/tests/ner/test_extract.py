@@ -10,12 +10,15 @@ def _fake(spans):
 def test_extract_maps_labels_and_spans():
     spans = [
         {"entity_group": "Chemical", "score": 0.99, "word": "metformin", "start": 0, "end": 9},
-        {"entity_group": "Disease", "score": 0.97, "word": "PCOS", "start": 14, "end": 18},
+        # "PCOS" is at [13:17] in "metformin in PCOS" — an earlier version of this
+        # fixture said [14:18] ("COS"), which passed only because extract_entities
+        # used to trust the model's `word` field over the source slice.
+        {"entity_group": "Disease", "score": 0.97, "word": "PCOS", "start": 13, "end": 17},
     ]
     result = extract_entities("metformin in PCOS", _fake(spans))
     assert result == [
         Entity(text="metformin", label="CHEMICAL", start=0, end=9),
-        Entity(text="PCOS", label="DISEASE", start=14, end=18),
+        Entity(text="PCOS", label="DISEASE", start=13, end=17),
     ]
 
 
@@ -41,11 +44,11 @@ def test_extract_keeps_span_scoring_exactly_at_threshold():
 
 def test_extract_sorts_by_start():
     spans = [
-        {"entity_group": "Disease", "score": 0.9, "word": "PCOS", "start": 14, "end": 18},
+        {"entity_group": "Disease", "score": 0.9, "word": "PCOS", "start": 13, "end": 17},
         {"entity_group": "Chemical", "score": 0.9, "word": "metformin", "start": 0, "end": 9},
     ]
     result = extract_entities("metformin in PCOS", _fake(spans))
-    assert [e.start for e in result] == [0, 14]
+    assert [e.start for e in result] == [0, 13]
 
 
 def test_extract_prefers_source_slice_over_tokenizer_word_when_offsets_present():
