@@ -52,6 +52,55 @@ domain: P=0.7143 R=0.6111 F1=0.6587 (tp=55 fp=22 fn=35, n=49)
 This number is **not** a second benchmark result of equal standing to BC5CDR — it is a
 narrow, single-annotator, single-run sanity check on our own corpus. See "Limitations."
 
+## Interpreting the gap: why 0.66 here vs 0.81 on the benchmark
+
+The obvious reading — "the model is much worse on our corpus" — is not what the errors
+actually show. Breaking down all 57 domain errors by whether the predicted and gold
+spans overlap in character range:
+
+| | count | of which overlap a span on the other side |
+|---|---|---|
+| False negatives | 35 | 16 (46%) |
+| False positives | 22 | 18 (82%) |
+| **Total** | **57** | **34 (60%)** |
+
+**60% of the errors are boundary disagreements on entities the model did detect**, not
+failures to find an entity at all. Strict exact-span matching penalises each of these
+*twice* — once as a false positive for the wrong span, once as a false negative for the
+missed gold span — so a single tokenisation slip costs two errors.
+
+The dominant pattern is **drug-class abbreviations and hyphenated compound names being
+split**:
+
+| Gold entity (missed) | What the model predicted instead |
+|---|---|
+| `CFD` (×10) | `CF` (×4) |
+| `GLP-1RAs`, `GLP-1RA` | `GLP` + `1RA` |
+| `SGLT2is`, `DPP4is` | partial / no span |
+| `sodium-glucose cotransporter-2 inhibitors` | `sodium-glucose` |
+| `Cangfudaotan Decoction` | `Cangfudaotan Decoc`, `Cangfudaotan` |
+| `Lp(a)` (excluded from gold) | `Lp` + `a` |
+
+This is a genuine and useful finding about the model *on this corpus*: BC5CDR is built
+largely around individually-named chemicals, while contemporary diabetes and
+cardiovascular literature is dense with class-level abbreviations (`GLP-1RAs`,
+`SGLT2is`, `DPP4is`) and non-Western therapeutic names. The model's subword tokenizer
+fragments exactly these, and `aggregation_strategy="simple"` does not reassemble them.
+
+**The honest caveat:** this measurement cannot cleanly separate *model weakness* from
+*annotation-convention mismatch*. Our annotator counted drug-class terms as CHEMICAL;
+BC5CDR's own guidelines may not, and the model was fine-tuned to BC5CDR's conventions.
+With n=49 sentences, 3 abstracts, and one non-expert annotator, the gap is a signal
+worth investigating — not a quantified statement of production accuracy.
+
+**Consequence for later phases (why this matters beyond a score):** Phase 3 clusters
+papers by shared entities and Phase 5 detects contradictions within those clusters. If
+`GLP-1RAs` fragments into `GLP` and `1RA` inconsistently across papers, entity-keyed
+clustering will split papers that belong together, and the failure will surface as
+missing clusters rather than as a visible NER error. Entity normalisation — or at
+minimum an abbreviation-aware span merge — should be treated as a prerequisite for
+clustering, not a later refinement.
+
 ## Raw `runs.jsonl` lines
 
 Both runs appended one line each to `backend/evals/runs.jsonl` (append-only log,
@@ -177,7 +226,7 @@ below):
   - PMID 42441967 — "Glucagon-Like Peptide-1 Receptor Agonists and Risk for Ischemic
     Optic Neuropathy" (metformin/T2D topic) — 17 sentences
 - **90 total entities: CHEMICAL 49, DISEASE 41** (counted directly from the committed
-  JSONL). **Note:** the Task 7 report's prose states "CHEMICAL 47, DISEASE 43" for
+  JSONL). **Note:** the Task 7 report's prose states "CHEMICAL 49, DISEASE 41" for
   the same file/commit (`3be9b4f`) — the total (90) matches but the per-label split
   does not. This report uses the counts computed directly from the committed file,
   which is authoritative; the Task 7 prose total appears to have a transcription
