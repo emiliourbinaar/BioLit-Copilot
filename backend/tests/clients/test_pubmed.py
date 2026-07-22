@@ -84,6 +84,42 @@ async def test_efetch_no_pmc_is_abstract_only(settings):
     assert paper.text_type is TextType.abstract_only
     assert paper.full_text_pointer is None
     assert paper.license_tier is LicenseTier.unknown
+    # Unstructured abstract (single unlabelled AbstractText) must pass through
+    # unchanged: plain text, no label prefix, no whitespace changes.
+    assert paper.abstract == "Open abstract."
+
+
+@respx.mock
+async def test_efetch_structured_abstract_concatenates_all_sections(settings):
+    # PubMed structured abstracts have multiple <AbstractText Label="..."> sections
+    # (BACKGROUND/METHODS/RESULTS/CONCLUSIONS). All must be captured, in order,
+    # each prefixed with its label and joined by newlines -- not just the first.
+    respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi").mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_abstract_structured.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["44444444"])
+    paper = papers[0]
+    assert paper.abstract == (
+        "BACKGROUND: Diabetes affects millions worldwide.\n"
+        "METHODS: We conducted a randomized controlled trial.\n"
+        # Nested inline markup (<i>...</i>) inside a section must be included
+        # via itertext(), not truncated at the first child tag.
+        "RESULTS: Response rate improved by 12% (p < 0.05).\n"
+        "CONCLUSIONS: The intervention was effective."
+    )
+
+
+@respx.mock
+async def test_efetch_no_abstract_element_is_none(settings):
+    # Absence must still yield None, not "", preserving the pre-existing contract.
+    respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi").mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_no_abstract.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["55555555"])
+    paper = papers[0]
+    assert paper.abstract is None
 
 
 @respx.mock

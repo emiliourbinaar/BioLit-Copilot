@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>44444444</PMID>
+      <Article>
+        <Journal><Title>Journal of Tests</Title>
+          <JournalIssue><PubDate><Year>2022</Year></PubDate></JournalIssue>
+        </Journal>
+        <ArticleTitle>Structured abstract paper</ArticleTitle>
+        <Abstract>
+          <AbstractText Label="BACKGROUND">Diabetes affects millions worldwide.</AbstractText>
+          <AbstractText Label="METHODS">We conducted a randomized controlled trial.</AbstractText>
+          <AbstractText Label="RESULTS">Response rate improved by <i>12</i>% (<i>p</i> &lt; 0.05).</AbstractText>
+          <AbstractText Label="CONCLUSIONS">The intervention was effective.</AbstractText>
+        </Abstract>
+        <AuthorList>
+          <Author><LastName>Doe</LastName><ForeName>Jane</ForeName></Author>
+        </AuthorList>
+      </Article>
+      <MeshHeadingList>
+        <MeshHeading><DescriptorName>Metformin</DescriptorName></MeshHeading>
+      </MeshHeadingList>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="doi">10.1000/structured</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>
