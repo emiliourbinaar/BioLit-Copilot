@@ -18,3 +18,24 @@ def test_entity_rejects_non_canonical_label():
     # out-of-vocabulary label (e.g. GENE) the way a bare `str` field allowed.
     with pytest.raises(ValidationError):
         Entity.model_validate({"text": "BRCA1", "label": "GENE", "start": 0, "end": 5})
+
+
+def test_entity_canonical_fields_default_to_none():
+    ent = Entity.model_validate({"text": "metformin", "label": "CHEMICAL", "start": 0, "end": 9})
+    assert ent.canonical_id is None
+    assert ent.canonical_name is None
+
+
+def test_entity_carries_canonical_id_and_name():
+    ent = Entity.model_validate(
+        {
+            "text": "metformin",
+            "label": "CHEMICAL",
+            "start": 0,
+            "end": 9,
+            "canonical_id": "MESH:D008687",
+            "canonical_name": "Metformin",
+        }
+    )
+    assert ent.canonical_id == "MESH:D008687"
+    assert ent.canonical_name == "Metformin"
