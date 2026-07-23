@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     ner_batch_size: int = 16
     ner_score_threshold: float = 0.5
 
+    mesh_artifact_path: str = "data/canon/mesh_aliases.json.gz"
+    ctd_chemicals_url: str = "https://ctdbase.org/reports/CTD_chemicals.tsv.gz"
+    ctd_diseases_url: str = "https://ctdbase.org/reports/CTD_diseases.tsv.gz"
+    bc5cdr_cdr_zip_url: str = (
+        "https://huggingface.co/datasets/bigbio/bc5cdr/resolve/main/CDR_Data.zip"
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:
