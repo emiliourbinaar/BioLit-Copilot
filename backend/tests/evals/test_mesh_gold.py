@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from biolit.domain.enums import EntityLabel
 from biolit_evals.mesh_gold import load_domain_norm_sample, parse_pubtator, reconcile_mesh_id
@@ -26,3 +29,19 @@ def test_parse_pubtator_extracts_mentions_and_skips_non_target_types():
 def test_load_domain_norm_sample_parses_mesh_ids():
     mentions = load_domain_norm_sample(str(_FIX / "domain_norm_fixture.jsonl"))
     assert [m.mesh_ids for m in mentions] == [("MESH:D008687",), ("MESH:D011085",)]
+
+
+def test_load_domain_norm_sample_rejects_span_text_mismatch(tmp_path):
+    # An annotator off-by-one: offsets in bounds but pointing at the wrong substring.
+    # Silently trusting them would corrupt the normalization gold with no downstream signal.
+    rec = {
+        "pmid": "1",
+        "text": "Metformin treats PCOS",
+        "entities": [
+            {"start": 0, "end": 9, "label": "CHEMICAL", "text": "WRONG", "mesh_id": "D008687"}
+        ],
+    }
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text(json.dumps(rec) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_domain_norm_sample(str(bad))

@@ -62,16 +62,27 @@ def load_domain_norm_sample(path: str) -> list[GoldMention]:
                 continue
             rec = json.loads(line)
             pmid = str(rec.get("pmid") or rec.get("paper_id") or "")
+            text = rec["text"]
             for ent in rec.get("entities", []):
+                start, end = int(ent["start"]), int(ent["end"])
+                if not (0 <= start < end <= len(text)):
+                    raise ValueError(f"span out of bounds in {pmid}: {ent}")
                 label = canonical_label(ent["label"])
                 if label is None:
                     raise ValueError(f"non-canonical label in {pmid}: {ent['label']}")
+                surface = text[start:end]
+                recorded_text = ent["text"]
+                if recorded_text != surface:
+                    raise ValueError(
+                        f"gold span text mismatch in {pmid}: recorded text "
+                        f"{recorded_text!r} does not match text[{start}:{end}] = {surface!r}"
+                    )
                 mentions.append(
                     GoldMention(
                         pmid=pmid,
-                        start=int(ent["start"]),
-                        end=int(ent["end"]),
-                        text=ent["text"],
+                        start=start,
+                        end=end,
+                        text=surface,
                         label=label,
                         mesh_ids=reconcile_mesh_id(str(ent["mesh_id"])),
                     )
