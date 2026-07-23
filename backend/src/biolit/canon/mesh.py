@@ -78,31 +78,82 @@ def _add_alias(
     bucket.append(AliasEntry(concept, is_pref))
 
 
-def _ingest_rows(table: dict[str, list[AliasEntry]], rows: list[list[str]], id_prefix: str) -> None:
-    for row in rows:
-        if len(row) < 2:
+def _read_ctd_dump(text: str) -> tuple[list[str], list[list[str]]]:
+    """Split a raw CTD TSV dump into (column_names, data_rows).
+
+    CTD ships many '#'-prefixed comment lines; the column header is the single '#'
+    line whose first field names a known column. Columns are matched BY NAME, not
+    position, because CTD periodically adds columns -- a fixed-index assumption
+    silently misreads ids/synonyms (which is exactly the defect this replaced).
+    """
+    header: list[str] = []
+    rows: list[list[str]] = []
+    for line in text.splitlines():
+        if not line:
             continue
-        name = row[0].strip()
-        raw_id = row[1].strip()
+        if line.startswith("#"):
+            fields = line.lstrip("#").strip().split("\t")
+            if fields and fields[0] in ("ChemicalName", "DiseaseName"):
+                header = fields
+            continue
+        rows.append(line.split("\t"))
+    return header, rows
+
+
+def _ingest_ctd(
+    table: dict[str, list[AliasEntry]],
+    text: str,
+    *,
+    name_col: str,
+    id_col: str,
+    synonym_cols: list[str],
+) -> None:
+    header, rows = _read_ctd_dump(text)
+    if not header:
+        raise ValueError(f"CTD header row not found (expected a '# {name_col}...' line)")
+    idx = {col: i for i, col in enumerate(header)}
+    name_i, id_i = idx[name_col], idx[id_col]
+    syn_i = [idx[c] for c in synonym_cols if c in idx]
+    for row in rows:
+        if len(row) <= max(name_i, id_i):
+            continue
+        name = row[name_i].strip()
+        raw_id = row[id_i].strip()
         if not name or not raw_id:
             continue
-        concept = MeshConcept(id=f"{id_prefix}{raw_id}", name=name)
+        # CTD ids already carry their MESH:/OMIM: prefix; keep verbatim, and only
+        # prefix a bare accession defensively.
+        concept_id = raw_id if ":" in raw_id else f"MESH:{raw_id}"
+        concept = MeshConcept(id=concept_id, name=name)
         _add_alias(table, name, concept, True)
-        synonyms = row[7] if len(row) > 7 else ""
-        for syn in synonyms.split("|"):
-            if syn.strip():
-                _add_alias(table, syn, concept, False)
+        for col in syn_i:
+            if col < len(row):
+                for syn in row[col].split("|"):
+                    if syn.strip():
+                        _add_alias(table, syn, concept, False)
 
 
-def build_alias_table(
-    chem_rows: list[list[str]], disease_rows: list[list[str]]
-) -> dict[str, list[AliasEntry]]:
-    """Build a normalized alias -> [AliasEntry] table from CTD chemical + disease rows.
+def build_alias_table(chem_text: str, disease_text: str) -> dict[str, list[AliasEntry]]:
+    """Build a normalized alias -> [AliasEntry] table from raw CTD chemical + disease
+    TSV dumps (full text, including the '# ...' column header).
 
-    CTD chemical IDs are bare MeSH accessions (`D008687`) and get a `MESH:` prefix; CTD
-    disease IDs already carry their `MESH:`/`OMIM:` prefix and are used verbatim.
+    Columns are resolved by name from each file's header. CTD chemical and disease IDs
+    both already carry a MESH:/OMIM: prefix and are kept verbatim. Chemicals contribute
+    their MESHSynonyms; diseases their Synonyms.
     """
     table: dict[str, list[AliasEntry]] = {}
-    _ingest_rows(table, chem_rows, "MESH:")
-    _ingest_rows(table, disease_rows, "")
+    _ingest_ctd(
+        table,
+        chem_text,
+        name_col="ChemicalName",
+        id_col="ChemicalID",
+        synonym_cols=["MESHSynonyms"],
+    )
+    _ingest_ctd(
+        table,
+        disease_text,
+        name_col="DiseaseName",
+        id_col="DiseaseID",
+        synonym_cols=["Synonyms"],
+    )
     return table

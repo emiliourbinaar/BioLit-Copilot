@@ -11,9 +11,8 @@ from biolit.canon.mesh import (
 _FIX = Path(__file__).parent / "fixtures"
 
 
-def _rows(name: str) -> list[list[str]]:
-    lines = (_FIX / name).read_text(encoding="utf-8").splitlines()
-    return [ln.split("\t") for ln in lines if ln and not ln.startswith("#")]
+def _text(name: str) -> str:
+    return (_FIX / name).read_text(encoding="utf-8")
 
 
 def test_normalize_surface_casefolds_and_collapses_whitespace():
@@ -61,11 +60,11 @@ def test_lookup_ambiguous_no_preferred_picks_smallest_id():
 
 
 def test_build_alias_table_prefixes_chemicals_and_keeps_disease_prefix():
-    table = build_alias_table(_rows("ctd_chemicals_sample.tsv"), _rows("ctd_diseases_sample.tsv"))
-    # chemical preferred name -> MESH-prefixed id
+    table = build_alias_table(_text("ctd_chemicals_sample.tsv"), _text("ctd_diseases_sample.tsv"))
+    # chemical preferred name -> MESH-prefixed id (already prefixed in real CTD data)
     met = table["metformin"]
     assert len(met) == 1 and met[0].concept.id == "MESH:D008687" and met[0].is_preferred_name
-    # chemical synonym -> non-preferred, same concept
+    # chemical synonym (from MESHSynonyms column) -> non-preferred, same concept
     assert table["glucophage"][0].concept.id == "MESH:D008687"
     assert table["glucophage"][0].is_preferred_name is False
     # disease id prefix preserved as-is
@@ -73,7 +72,7 @@ def test_build_alias_table_prefixes_chemicals_and_keeps_disease_prefix():
 
 
 def test_artifact_round_trip(tmp_path):
-    table = build_alias_table(_rows("ctd_chemicals_sample.tsv"), _rows("ctd_diseases_sample.tsv"))
+    table = build_alias_table(_text("ctd_chemicals_sample.tsv"), _text("ctd_diseases_sample.tsv"))
     d = MeshDictionary(table)
     path = str(tmp_path / "mesh.json.gz")
     d.save_artifact(path)
@@ -84,8 +83,6 @@ def test_artifact_round_trip(tmp_path):
 
 
 def test_build_alias_table_skips_header_comment_rows():
-    # Guard: a UTF-8 BOM or stray formatting must not let the "# ..." header row leak
-    # into the table as a bogus alias (a silent-wrongness defect the other tests miss).
-    table = build_alias_table(_rows("ctd_chemicals_sample.tsv"), _rows("ctd_diseases_sample.tsv"))
-    assert "synonyms" not in table
+    table = build_alias_table(_text("ctd_chemicals_sample.tsv"), _text("ctd_diseases_sample.tsv"))
+    assert "chemicalname" not in table and "diseasename" not in table
     assert not any(key.startswith("#") or "﻿" in key for key in table)

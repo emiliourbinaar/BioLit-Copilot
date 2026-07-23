@@ -5,13 +5,13 @@ from biolit.config import get_settings
 
 @pytest.mark.heavy
 def test_real_ctd_dictionary_links_known_chemical():
-    from biolit.canon.build_mesh import _download_tsv_gz
+    from biolit.canon.build_mesh import _download_ctd
     from biolit.canon.linker import DictionaryLinker
     from biolit.canon.mesh import MeshDictionary, build_alias_table
 
     s = get_settings()
-    chem = _download_tsv_gz(s.ctd_chemicals_url)
-    dis = _download_tsv_gz(s.ctd_diseases_url)
+    chem = _download_ctd(s.ctd_chemicals_url)
+    dis = _download_ctd(s.ctd_diseases_url)
     linker = DictionaryLinker(MeshDictionary(build_alias_table(chem, dis)))
     result = linker.link("Metformin")
     assert result.concept is not None and result.concept.id == "MESH:D008687"
