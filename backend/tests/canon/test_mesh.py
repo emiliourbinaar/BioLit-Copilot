@@ -81,3 +81,11 @@ def test_artifact_round_trip(tmp_path):
     r = reloaded.lookup("Glucophage")
     assert r.concept is not None and r.concept.id == "MESH:D008687"
     assert r.concept.name == "Metformin"
+
+
+def test_build_alias_table_skips_header_comment_rows():
+    # Guard: a UTF-8 BOM or stray formatting must not let the "# ..." header row leak
+    # into the table as a bogus alias (a silent-wrongness defect the other tests miss).
+    table = build_alias_table(_rows("ctd_chemicals_sample.tsv"), _rows("ctd_diseases_sample.tsv"))
+    assert "synonyms" not in table
+    assert not any(key.startswith("#") or "﻿" in key for key in table)
