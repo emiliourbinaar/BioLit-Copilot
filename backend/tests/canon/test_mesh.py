@@ -1,9 +1,19 @@
+from pathlib import Path
+
 from biolit.canon.mesh import (
     AliasEntry,
     MeshConcept,
     MeshDictionary,
+    build_alias_table,
     normalize_surface,
 )
+
+_FIX = Path(__file__).parent / "fixtures"
+
+
+def _rows(name: str) -> list[list[str]]:
+    lines = (_FIX / name).read_text(encoding="utf-8").splitlines()
+    return [ln.split("\t") for ln in lines if ln and not ln.startswith("#")]
 
 
 def test_normalize_surface_casefolds_and_collapses_whitespace():
@@ -48,3 +58,26 @@ def test_lookup_ambiguous_no_preferred_picks_smallest_id():
     r = _dict().lookup("ambignopref")
     assert r.concept is not None and r.concept.id == "MESH:D000001"  # lexicographically smallest
     assert r.tiebroken is True
+
+
+def test_build_alias_table_prefixes_chemicals_and_keeps_disease_prefix():
+    table = build_alias_table(_rows("ctd_chemicals_sample.tsv"), _rows("ctd_diseases_sample.tsv"))
+    # chemical preferred name -> MESH-prefixed id
+    met = table["metformin"]
+    assert len(met) == 1 and met[0].concept.id == "MESH:D008687" and met[0].is_preferred_name
+    # chemical synonym -> non-preferred, same concept
+    assert table["glucophage"][0].concept.id == "MESH:D008687"
+    assert table["glucophage"][0].is_preferred_name is False
+    # disease id prefix preserved as-is
+    assert table["pcos"][0].concept.id == "MESH:D011085"
+
+
+def test_artifact_round_trip(tmp_path):
+    table = build_alias_table(_rows("ctd_chemicals_sample.tsv"), _rows("ctd_diseases_sample.tsv"))
+    d = MeshDictionary(table)
+    path = str(tmp_path / "mesh.json.gz")
+    d.save_artifact(path)
+    reloaded = MeshDictionary.from_artifact(path)
+    r = reloaded.lookup("Glucophage")
+    assert r.concept is not None and r.concept.id == "MESH:D008687"
+    assert r.concept.name == "Metformin"
