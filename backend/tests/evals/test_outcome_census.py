@@ -1,7 +1,13 @@
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit_evals.mesh_gold import GoldMention
-from biolit_evals.outcome_census import Outcome, TruncationKind, classify_outcome
+from biolit_evals.outcome_census import (
+    Outcome,
+    OutcomeRecord,
+    TruncationKind,
+    census,
+    classify_outcome,
+)
 
 CHEMICAL = EntityLabel.CHEMICAL
 DISEASE = EntityLabel.DISEASE
@@ -61,3 +67,28 @@ def test_other_label_predictions_are_ignored():
     # A DISEASE prediction sitting exactly on a CHEMICAL gold span is not a match.
     rec = classify_outcome(_gold(0, 9, "metformin", CHEMICAL), [_pred(0, 9, "metformin", DISEASE)])
     assert rec.outcome is Outcome.MISSED
+
+
+def test_census_counts_pooled_and_per_label():
+    records = [
+        OutcomeRecord(CHEMICAL, Outcome.EXACT, TruncationKind.NOT_TRUNCATED, 0),
+        OutcomeRecord(CHEMICAL, Outcome.TRUNCATED, TruncationKind.PREFIX_OF_GOLD, 1),
+        OutcomeRecord(DISEASE, Outcome.TRUNCATED, TruncationKind.SUFFIX_OF_GOLD, 8),
+        OutcomeRecord(DISEASE, Outcome.MISSED, TruncationKind.NOT_TRUNCATED, 0),
+    ]
+    c = census(records)
+    assert c.total == 4
+    assert c.outcomes == {"EXACT": 1, "TRUNCATED": 2, "MISSED": 1}
+    # only TRUNCATED records contribute to the truncation breakdown
+    assert c.truncation == {"PREFIX_OF_GOLD": 1, "SUFFIX_OF_GOLD": 1}
+    assert c.by_label["CHEMICAL"] == {"EXACT": 1, "TRUNCATED": 1}
+    assert c.by_label["DISEASE"] == {"TRUNCATED": 1, "MISSED": 1}
+    assert c.truncation_by_label["CHEMICAL"] == {"PREFIX_OF_GOLD": 1}
+    assert c.truncation_by_label["DISEASE"] == {"SUFFIX_OF_GOLD": 1}
+
+
+def test_census_of_no_records_is_empty():
+    c = census([])
+    assert c.total == 0
+    assert c.outcomes == {} and c.truncation == {}
+    assert c.by_label == {} and c.truncation_by_label == {}

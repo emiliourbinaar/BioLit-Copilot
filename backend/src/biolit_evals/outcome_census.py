@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -69,3 +70,39 @@ def classify_outcome(gold: GoldMention, predictions: list[Entity]) -> OutcomeRec
         kind = TruncationKind.INTERIOR_OR_OTHER
     delta = (gold.end - gold.start) - (pred.end - pred.start)
     return OutcomeRecord(gold.label, Outcome.TRUNCATED, kind, delta)
+
+
+@dataclass(frozen=True)
+class Census:
+    """Categorical breakdown of how NER covered the gold mentions.
+
+    Keys are plain strings (StrEnum values) so the whole structure serializes straight into
+    the JSONL run log.
+    """
+
+    total: int
+    outcomes: dict[str, int]
+    truncation: dict[str, int]
+    by_label: dict[str, dict[str, int]]
+    truncation_by_label: dict[str, dict[str, int]]
+
+
+def census(records: list[OutcomeRecord]) -> Census:
+    outcomes: Counter[str] = Counter()
+    truncation: Counter[str] = Counter()
+    by_label: dict[str, Counter[str]] = {}
+    truncation_by_label: dict[str, Counter[str]] = {}
+    for record in records:
+        label = record.label.value
+        outcomes[record.outcome.value] += 1
+        by_label.setdefault(label, Counter())[record.outcome.value] += 1
+        if record.outcome is Outcome.TRUNCATED:
+            truncation[record.truncation.value] += 1
+            truncation_by_label.setdefault(label, Counter())[record.truncation.value] += 1
+    return Census(
+        total=len(records),
+        outcomes=dict(outcomes),
+        truncation=dict(truncation),
+        by_label={k: dict(v) for k, v in by_label.items()},
+        truncation_by_label={k: dict(v) for k, v in truncation_by_label.items()},
+    )
