@@ -430,17 +430,27 @@ Scoring is restricted to gold mentions that have a real MeSH ID. Mentions annota
 unlinkable (`-1` in BC5CDR, `-1` in the domain sample) are excluded from precision/recall
 rather than counted as "correct NILs", which would inflate the score.
 
+Two further scoring conventions worth stating plainly. **Composite mentions are scored
+leniently:** where BC5CDR gold carries several IDs for one mention (`D1|D2`), a link to
+*either* counts as correct. **`nil_rate` is a share of linkable gold**, not of all
+mentions — its denominator is the same `n` as recall's.
+
 ## Interpreting the result: the failure mode is abstention, not error
 
 Both datasets show the same shape, and it is the actionable finding:
 
-- **Precision is high** (0.92 benchmark, 1.00 domain). When the dictionary linker
-  commits to a concept, it is almost always right; on the domain sample all 41 links were
-  correct.
-- **Recall is capped almost entirely by NIL** (25.9% benchmark, 40.6% domain) — surfaces
-  absent from the CTD alias table after case/whitespace normalization.
+- **Precision is high** (0.92 benchmark, 1.00 domain). When the dictionary linker commits
+  to a concept it is usually right — though "usually" is not "always": on BC5CDR it linked
+  7204 mentions and got 6635 correct, so **569 links (8% of its commitments) are wrong.**
+  On the domain sample all 41 links happened to be correct, but that is 41 links from 3
+  abstracts and should not be read as "the linker never errs".
+- **NIL dominates the recall gap** (25.9% benchmark, 40.6% domain — as a share of
+  *linkable* gold mentions): surfaces absent from the CTD alias table after
+  case/whitespace normalization. Of BC5CDR's 3083 non-correct mentions, 2514 (~81%) are
+  NIL and 569 (~19%) are wrong links.
 
-So the dictionary linker does not guess wrong; it declines. That directly answers the
+So the linker's dominant failure mode is abstention rather than error — but not
+exclusively. That answers the
 question ADR-0008 deferred: **an embedding-based fallback (e.g. SapBERT) should be aimed
 at unmatched surfaces, not at correcting wrong links**, and the `Linker` protocol seam
 exists precisely so one can be added behind `DictionaryLinker` without a redesign. The
@@ -451,20 +461,28 @@ carry — the same lexical territory the Phase 2 error analysis flagged.
 The **ambiguous-alias tiebreak rate is logged as its own metric** rather than folded into
 accuracy, because a silent arbitrary resolution on a common surface would otherwise be
 invisible inside the aggregate. It fires on 0.3% of benchmark mentions and 4.3% of domain
-mentions (3 of 69), so the deterministic rule (exact-name over synonym, then
-lexicographically smallest ID) is **not** a hidden source of error at this scale. If that
-rate climbs, the rule needs revisiting.
+mentions (3 of 69). That **bounds** how much damage the deterministic rule (exact-name over
+synonym, then lexicographically smallest ID) can do — it cannot account for more than 0.3%
+of benchmark outcomes — but it is a bound, not a measurement: the scorer counts `tiebroken`
+and `correct` independently and never crosses them, so the code cannot currently say
+whether tiebroken links were right. (On the domain sample it is implied: precision is
+1.0000, so all 3 were correct. On BC5CDR's 31, unknown.) If that rate climbs, the rule
+needs revisiting — and the scorer should then also report `tiebroken_correct`.
 
 ## Blind annotation methodology (ADR-0006)
 
 The domain normalization gold was annotated **blind**, which here means **not anchored to
 `DictionaryLinker`'s own output** — the annotator never ran the linker, never loaded the
 CTD artifact, and never saw a system prediction. It does **not** mean annotating with zero
-reference tools: the annotator **consulted the official NLM MeSH resource directly** (the
-`id.nlm.nih.gov/mesh/lookup/descriptor` API) to find and verify concept IDs, and recorded
-`-1` wherever no MeSH concept could be verified. Every assigned ID is API-confirmed; none
-were recalled from memory. This distinction matters — the point of blindness is to avoid
-the anchoring bias of reviewing a pre-populated candidate list, not to force unaided guessing.
+reference tools: the annotator **consulted the official NLM MeSH lookup API directly** to
+find and verify concept IDs, and recorded `-1` wherever no MeSH concept could be verified.
+Every assigned ID was confirmed against that API rather than recalled from memory. Note
+that the gold includes three Supplementary Concept Records (`C541528`, `C047353`,
+`C047331`), which are resolved through MeSH's supplementary-concept lookup rather than the
+descriptor endpoint — so "the MeSH lookup API" here means the descriptor *and*
+supplementary-record paths, not the descriptor endpoint alone. This distinction matters —
+the point of blindness is to avoid the anchoring bias of reviewing a pre-populated
+candidate list, not to force unaided guessing.
 
 ## Reproducing these numbers
 
@@ -479,6 +497,18 @@ uv run python -m biolit_evals.canon_eval --dataset domain
 
 The artifact built for this report contains **551,669 aliases** from the CTD chemical and
 disease vocabularies.
+
+Re-running both evals after the final review fixes reproduced the numbers exactly, and the
+run log now records the alias count of the artifact that was scored:
+
+```json
+{"timestamp": "2026-07-24T00:43:29.490329+00:00", "git_sha": "f4ffee0", "dataset": "domain", "artifact_source": "data/canon/mesh_aliases.json.gz", "n_aliases": 551669, "n": 69, "correct": 41, "linked": 41, "precision": 1.0, "recall": 0.5942028985507246, "f1": 0.7454545454545455, "nil_rate": 0.4057971014492754, "tiebreak_rate": 0.043478260869565216}
+{"timestamp": "2026-07-24T00:43:34.388943+00:00", "git_sha": "f4ffee0", "dataset": "bc5cdr", "artifact_source": "data/canon/mesh_aliases.json.gz", "n_aliases": 551669, "n": 9718, "correct": 6635, "linked": 7204, "precision": 0.9210161021654636, "recall": 0.6827536530150237, "f1": 0.7841862663987708, "nil_rate": 0.25869520477464497, "tiebreak_rate": 0.003189956781230706}
+```
+
+`n_aliases` exists because `artifact_source` alone is a constant path string — identical on
+the invalid pre-fix line below and the good ones. The alias count is the cheapest available
+detector of "the artifact was rebuilt wrong again".
 
 ## A defect this eval caught (and why the first log line is wrong)
 
@@ -506,18 +536,29 @@ a green test suite coexisting with a wrong result.
 
 1. **Linking is scored on gold mentions only.** These numbers do not measure end-to-end
    (NER → canonicalization) performance, and must not be quoted as such.
-2. **The domain sample is small and single-annotator.** 69 linkable mentions drawn from
+2. **The fragment-merge is not measured by these numbers at all.** The scorer calls
+   `Linker.link()` on gold surface forms directly; it never calls `canonicalize()`, so
+   neither `merge_fragments` nor the merge-then-link orchestration contributes anything to
+   the reported 0.7842 / 0.7455. That matters because `merge_fragments` — the direct fix
+   for the ADR-0008 fragmentation finding, and the most heuristic component here — is
+   currently backed by **unit tests only**. Its merge rule is deliberately permissive (a
+   connector-joined run merges when *any* token is fragment-shaped), so combination
+   notation like `ASA/clopidogrel` will also merge; `canonicalize` therefore applies a
+   merged concept only to constituents that did not link individually, so a spurious merge
+   can fill a gap but never overwrite a correct link. An eval that exercises the merge path
+   end-to-end is outstanding work.
+3. **The domain sample is small and single-annotator.** 69 linkable mentions drawn from
    3 abstracts, annotated by an LLM subagent — API-grounded, but **not a domain expert**,
    with no inter-annotator agreement. The domain precision of 1.0000 rests on only 41
    links and should not be read as "the linker is perfect".
-3. **BC5CDR is the unbiased headline; the domain sample is a supporting cross-check**
+4. **BC5CDR is the unbiased headline; the domain sample is a supporting cross-check**
    only, exactly as with the Phase 2 NER numbers.
-4. **CTD is a moving target.** The alias table is built from live CTD downloads, so
+5. **CTD is a moving target.** The alias table is built from live CTD downloads, so
    re-running later may shift these numbers as CTD adds concepts and synonyms. The run log
    records the git SHA but not a CTD release version.
-5. **`CTDCuratedSynonyms` is deliberately excluded** from the alias table (it mixes CAS
+6. **`CTDCuratedSynonyms` is deliberately excluded** from the alias table (it mixes CAS
    numbers and non-MeSH variants). Including it might lift recall at some cost to
    precision; this has not been measured.
-6. **Normalization is light** (casefold + whitespace collapse). No plural stripping,
+7. **Normalization is light** (casefold + whitespace collapse). No plural stripping,
    punctuation folding, or abbreviation expansion is applied before lookup — a
    deliberate v1 choice, and part of why the NIL rate is what it is.
