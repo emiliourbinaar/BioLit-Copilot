@@ -562,3 +562,147 @@ a green test suite coexisting with a wrong result.
 7. **Normalization is light** (casefold + whitespace collapse). No plural stripping,
    punctuation folding, or abbreviation expansion is applied before lookup — a
    deliberate v1 choice, and part of why the NIL rate is what it is.
+
+---
+
+# End-to-end canonicalization (Phase 3B)
+
+Everything above measures linking with **gold** surface forms fed to the linker. This
+section measures the **production path** for the first time:
+`extract_entities` → `canonicalize` (merge + link) → `canonical_id`, scored against gold
+MeSH IDs. It is the only eval that exercises `merge_fragments` at all.
+
+Run log: `backend/evals/e2e_runs.jsonl`. Both corpora run on **natural text** (BC5CDR from
+`CDR_Data.zip`, not the space-joined `tner/bc5cdr` tokens), so the Phase 2 tokenization
+confound does not apply here.
+
+## Concept-level results
+
+The primary metric is **concept-level P/R/F1**: per document, the set of predicted
+`canonical_id`s against the set of gold MeSH IDs. This is what clustering consumes — a
+paper's concepts, not its character spans. Averaging is **micro** (tp/fp/fn summed across
+all documents, then P/R/F1 computed once from those totals), matching the Phase 2 scorer's
+discipline. Within a document the ids are **sets**, so a concept mentioned five times
+counts once and cannot dominate the corpus totals.
+
+| | P | R | **F1** | tp / fp / fn | docs | e2e NIL |
+|---|---|---|---|---|---|---|
+| **BC5CDR** | 0.8822 | 0.6826 | **0.7697** | 2336 / 312 / 1086 | 500 | 0.320 |
+| Domain sample | 0.7838 | 0.5000 | **0.6105** | 29 / 8 / 29 | 49 | 0.455 |
+
+Per label:
+
+| Corpus | Label | P | R | F1 |
+|---|---|---|---|---|
+| BC5CDR | CHEMICAL | 0.877 | 0.801 | **0.837** |
+| BC5CDR | DISEASE | 0.886 | 0.597 | **0.713** |
+| Domain | CHEMICAL | 0.588 | 0.333 | **0.426** |
+| Domain | DISEASE | 0.950 | 0.679 | **0.792** |
+
+**End-to-end NIL vs gold-surface NIL.** e2e NIL (0.320 BC5CDR / 0.455 domain) sits above
+the gold-surface NIL reported earlier (0.259 / 0.406), which is expected: it is computed
+over *model predictions*, including imperfect spans, while gold-surface NIL is computed
+over *gold mentions*. **The two have different populations and denominators — they are
+comparable in direction only and must never be subtracted.**
+
+## The outcome census
+
+Every gold mention classified by how NER covered it. This is the categorical breakdown of
+the number above; it accounts for every point of loss.
+
+**BC5CDR (9809 gold mentions):**
+
+| Outcome | Count | Share |
+|---|---|---|
+| `EXACT` | 8052 | 82.1% |
+| `MISSED` | 782 | 8.0% |
+| `TRUNCATED` | 714 | 7.3% |
+| `MERGEABLE` | 261 | 2.7% |
+
+Truncation kind: `INTERIOR_OR_OTHER` 276 (38.7%), `PREFIX_OF_GOLD` 238 (33.3%),
+`SUFFIX_OF_GOLD` 200 (28.0%).
+
+Per label — `EXACT` share: **CHEMICAL 4594/5385 = 85.3%**, **DISEASE 3458/4424 = 78.2%**.
+DISEASE carries 2.5× more truncation (509 vs 205); CHEMICAL carries more mergeable
+fragmentation (182 vs 79).
+
+**Validation:** the census totals reproduce the canonical BC5CDR counts exactly — 9809
+mentions, 5385 chemical, 4424 disease — which no assertion in the eval enforces. A parsing,
+alignment, or double-counting bug would have shifted them.
+
+**Domain sample (90 gold mentions):** `EXACT` 55, `MISSED` 22, `TRUNCATED` 11,
+`MERGEABLE` 2; truncation `PREFIX_OF_GOLD` 9, `SUFFIX_OF_GOLD` 2.
+
+## What this changes: the 49-sentence probe was wrong on all three counts
+
+This eval was scoped because a 49-sentence probe suggested `merge_fragments` was inert and
+truncation dominated. **At full scale, all three of the probe's conclusions fail to hold.**
+
+1. **Merging is not inert.** Probe: 2 candidates, 0 useful. At scale: **129 candidates
+   proposed, 78 exactly reconstruct a gold span, 54 link to a concept, and 94 entity
+   constituents received a concept they would not otherwise have had.** 261 gold mentions
+   (2.7%) sit in the mergeable shape. `merge_fragments` earns its place.
+2. **Truncation is not systematically suffix-dropping.** The domain sample's 9-of-11
+   `PREFIX_OF_GOLD` looked like a clean signal; at scale truncation splits roughly evenly
+   three ways (38.7% / 33.3% / 28.0%). There is no single dominant boundary-error mode to
+   target.
+3. **The label asymmetry reverses.** The domain sample showed CHEMICAL as the problem
+   (39% exact vs DISEASE 88%). At scale **CHEMICAL is the stronger label** (85.3% vs 78.2%
+   exact), and DISEASE truncates 2.5× more often.
+
+The domain sample retains its value as an in-domain cross-check, but with 90 mentions from
+3 abstracts it cannot support conclusions about error *composition* — every apparent
+pattern in it was reversed or flattened by the full corpus. That is the finding.
+
+The merge audit is reported as **raw counts, not precision/recall**: a rate over 129
+candidates invites over-reading, and the useful question ("does merging recover concepts
+that would otherwise be NIL?") is answered by the 94 constituents directly.
+
+## A second production bug this eval caught
+
+The first full-scale run **crashed**:
+
+```
+RuntimeError: The size of tensor a (549) must match the size of tensor b (512)
+```
+
+This checkpoint's tokenizer declares no `model_max_length`, so it never truncates, and
+BERT-family position embeddings cap input at 512 tokens. **11 of the 500 BC5CDR abstracts
+(2.2%) exceed it** (median 267 tokens, max 722). It had never surfaced because every prior
+measurement — Phase 2 NER, Phase 3A linking, the domain sample — ran on *sentences*. Phase
+4's Extractor feeds whole abstracts, so this would have crashed on roughly 2% of real
+papers in production.
+
+Fixed in `fce5fa6` by windowing inside `NerModel`, not in the eval: fixing it only in the
+eval would have made this report claim success against a code path production does not
+run. Windows are packed from whole sentences (an entity practically never spans a sentence
+boundary), consecutive windows overlap by one sentence so a mis-placed boundary cannot cut
+an entity in half, and offsets are shifted back into document coordinates and
+de-duplicated. The overlap guarantee is pinned as a property — every internal window
+boundary is spanned by some other window — with a paired test showing that guarantee
+genuinely fails when overlap is disabled. The heavy regression test asserts more than "no
+crash": entities must be recovered from text **beyond** the old 512-token cutoff, with
+every offset still slicing correctly out of the document.
+
+Like the CTD schema defect above, this is recorded rather than quietly fixed: both are
+cases where a green test suite coexisted with broken behavior on real input, and both were
+caught only by running real data end to end.
+
+## Limitations
+
+1. **Concept-level scoring is document-level set matching.** It rewards finding *a*
+   mention of the right concept and is blind to how many times or how precisely it was
+   found. That is the right metric for clustering, and the wrong one for judging span
+   quality — the census is there for that.
+2. **The domain sample is too small for composition claims** (90 mentions, 3 abstracts,
+   single non-expert annotator). See above: every error-composition pattern it showed was
+   contradicted at scale. Treat its *numbers* as a cross-check and its *breakdowns* as
+   anecdote.
+3. **`MERGEABLE` counts opportunity, not success.** It marks gold mentions where ≥2
+   predictions overlap, i.e. where merging *could* help; whether the merged surface then
+   links is a separate question, answered by the merge audit.
+4. **Windowing changes NER behavior on long documents**, so end-to-end numbers here are
+   not directly comparable to the Phase 2 sentence-level NER F1.
+5. **These are single-run point measurements** against a CTD artifact built on one day
+   (551,669 aliases); CTD is a moving target and the run log records the alias count but no
+   CTD release version.
