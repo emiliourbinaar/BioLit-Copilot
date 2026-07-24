@@ -10,7 +10,7 @@ def test_concept_counts_for_one_document():
 
 def test_metrics_are_micro_averaged_not_macro():
     # Doc 1: tp=1 fp=0 fn=0 (perfect). Doc 2: tp=1 fp=3 fn=0 (precision 0.25).
-    # Micro precision over pooled totals = 2/6 = 0.3333, while the MACRO average of the
+    # Micro precision over pooled totals = 2/5 = 0.4, while the MACRO average of the
     # two per-document precisions would be (1.0 + 0.25)/2 = 0.625. Pinning the micro value
     # is what makes a macro-average regression fail this test.
     d1 = concept_counts({"MESH:A"}, {"MESH:A"})
