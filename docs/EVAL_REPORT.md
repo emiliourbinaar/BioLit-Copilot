@@ -689,6 +689,33 @@ The domain sample retains its value as an in-domain cross-check, but with 90 men
 3 abstracts it cannot support conclusions about error *composition* — every apparent
 pattern in it was reversed or flattened by the full corpus. That is the finding.
 
+### Truncation: a null result, and why no truncation-recovery work is scoped
+
+This is stated as a **null result**, not as an open task deferred for lack of time.
+
+The 90-mention probe suggested a clean, designable target: truncation that consistently
+drops suffixes (9 of 11), concentrated in CHEMICAL. At 9809 mentions **every part of that
+picture is contradicted**:
+
+- The suffix-dropping pattern flattens into a near-even three-way split
+  (38.6% / 33.3% / 28.1%).
+- The label asymmetry **inverts** — CHEMICAL is the *stronger* label (85.3% exact vs
+  DISEASE 78.2%), and DISEASE truncates 2.5× more often, the opposite of what the probe
+  showed.
+- The largest bucket, `INTERIOR_OR_OTHER` (38.6%), is a **catch-all mixing distinct failure
+  types** — interior truncations and predictions extending *past* gold are counted
+  together. It is not one phenomenon.
+
+So there is **no single systematic pattern to design a repair mechanism against.** A
+truncation-recovery sub-project scoped today would be designed against a pattern that the
+full corpus says does not exist; the probe's apparent signal was small-sample noise. That
+is the reason none is being scoped — not that it was skipped.
+
+What would change this conclusion is a *finer* census, not a bigger one: splitting
+`INTERIOR_OR_OTHER` by the sign of `char_delta` (already computed per mention, not yet
+aggregated) would establish whether over-extension and interior truncation are separate,
+individually-systematic phenomena. Until that exists, any repair design would be guesswork.
+
 The merge audit is reported as **raw counts, not precision/recall**: a rate over 122
 candidates invites over-reading. The question those counts cannot answer — whether the
 recovered concepts are *correct* — is answered by the ablation above, not by the audit.
