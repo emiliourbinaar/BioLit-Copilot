@@ -585,10 +585,18 @@ all documents, then P/R/F1 computed once from those totals), matching the Phase 
 discipline. Within a document the ids are **sets**, so a concept mentioned five times
 counts once and cannot dominate the corpus totals.
 
-| | P | R | **F1** | tp / fp / fn | docs | e2e NIL |
+| | P | R | **F1** | tp / fp / fn | units scored | e2e NIL |
 |---|---|---|---|---|---|---|
-| **BC5CDR** | 0.8822 | 0.6826 | **0.7697** | 2336 / 312 / 1086 | 500 | 0.320 |
-| Domain sample | 0.7838 | 0.5000 | **0.6105** | 29 / 8 / 29 | 49 | 0.455 |
+| **BC5CDR** | 0.8822 | 0.6826 | **0.7697** | 2336 / 312 / 1086 | 500 abstracts | 0.320 |
+| Domain sample | 0.7838 | 0.5000 | **0.6105** | 29 / 8 / 29 | 49 **sentences** (3 abstracts) | 0.455 |
+
+**The two rows are not on the same unit of analysis.** BC5CDR scores whole abstracts. The
+domain gold is annotated per sentence, so each *sentence* is scored as a document — 49
+units drawn from only 3 abstracts. That inflates the concept denominator relative to
+abstract-level scoring (58 gold concept slots at sentence granularity versus 26 at abstract
+granularity) and partly defeats the set-semantics rationale below: a concept appearing in
+five sentences of one abstract counts five times here, not once. Read the domain row as a
+sentence-level sanity check, never as an abstract-level result comparable to BC5CDR.
 
 Per label:
 
@@ -627,8 +635,9 @@ DISEASE carries 2.5× more truncation (509 vs 205); CHEMICAL carries more mergea
 fragmentation (182 vs 79).
 
 **Validation:** the census totals reproduce the canonical BC5CDR counts exactly — 9809
-mentions, 5385 chemical, 4424 disease — which no assertion in the eval enforces. A parsing,
-alignment, or double-counting bug would have shifted them.
+mentions, **5385 chemical, 4424 disease**. The 9809 total *is* asserted by the heavy smoke
+test, so it is a guard rather than an independent check; the **per-label split is not
+pinned anywhere**, and a parsing, alignment, or double-counting bug would have shifted it.
 
 **Domain sample (90 gold mentions):** `EXACT` 55, `MISSED` 22, `TRUNCATED` 11,
 `MERGEABLE` 2; truncation `PREFIX_OF_GOLD` 9, `SUFFIX_OF_GOLD` 2.
@@ -638,14 +647,40 @@ alignment, or double-counting bug would have shifted them.
 This eval was scoped because a 49-sentence probe suggested `merge_fragments` was inert and
 truncation dominated. **At full scale, all three of the probe's conclusions fail to hold.**
 
-1. **Merging is not inert.** Probe: 2 candidates, 0 useful. At scale: **129 candidates
-   proposed, 78 exactly reconstruct a gold span, 54 link to a concept, and 94 entity
-   constituents received a concept they would not otherwise have had.** 261 gold mentions
-   (2.7%) sit in the mergeable shape. `merge_fragments` earns its place.
+1. **Merging is not inert — but its effect is small.** Probe: 2 candidates, 0 useful. At
+   scale: 129 candidates proposed, 78 exactly reconstruct a gold span, 54 link, and 94
+   entity constituents received a concept they would not otherwise have had. 261 gold
+   mentions (2.7%) sit in the mergeable shape.
+
+   Those counts describe activity, not benefit, so they were checked against an **ablation**
+   — the same corpus scored with merged-candidate gap-filling disabled:
+
+   | | P | R | F1 | tp | fp |
+   |---|---|---|---|---|---|
+   | With merging | 0.8822 | 0.6826 | **0.7697** | 2336 | 312 |
+   | Without merging | 0.8820 | 0.6794 | **0.7676** | 2325 | 311 |
+   | **Delta** | +0.0002 | +0.0032 | **+0.0021** | **+11** | +1 |
+
+   So merging is worth **+0.0021 F1 — 11 additional correct concepts out of 3422 gold
+   slots**, at the cost of one extra false positive. Real, positive, and much smaller than
+   the raw audit counts suggest: 94 constituents gaining a concept converts to only 11
+   concept-level gains, because document-level set semantics collapse constituents whose
+   concept was already found elsewhere in the same document. The correct reading is
+   "merging is not inert and is not harmful", **not** "merging is important".
+
+   On the domain corpus the probe's result is unchanged in this branch's own run
+   (`candidates=2, linked=0, matching_gold=0`); the reversal is a BC5CDR-scale finding only.
 2. **Truncation is not systematically suffix-dropping.** The domain sample's 9-of-11
-   `PREFIX_OF_GOLD` looked like a clean signal; at scale truncation splits roughly evenly
-   three ways (38.7% / 33.3% / 28.0%). There is no single dominant boundary-error mode to
-   target.
+   `PREFIX_OF_GOLD` looked like a clean signal; at scale the three kinds are far more even
+   (38.7% / 33.3% / 28.0%), so there is no single dominant boundary-error mode to target.
+
+   **Caveat on that split:** `INTERIOR_OR_OTHER` — the largest bucket — is a catch-all that
+   also holds predictions extending *past* gold (an over-extension, recorded with a
+   negative `char_delta`), not only interior truncations. So the honest claim is that the
+   clean prefix-dropping pattern seen in the domain sample **does not survive at scale**;
+   the precise composition of the remaining 38.7% is not separated by the current census.
+   `char_delta` is computed per mention but not yet aggregated, which is what would split
+   it — see Limitations.
 3. **The label asymmetry reverses.** The domain sample showed CHEMICAL as the problem
    (39% exact vs DISEASE 88%). At scale **CHEMICAL is the stronger label** (85.3% vs 78.2%
    exact), and DISEASE truncates 2.5× more often.
@@ -655,8 +690,15 @@ The domain sample retains its value as an in-domain cross-check, but with 90 men
 pattern in it was reversed or flattened by the full corpus. That is the finding.
 
 The merge audit is reported as **raw counts, not precision/recall**: a rate over 129
-candidates invites over-reading, and the useful question ("does merging recover concepts
-that would otherwise be NIL?") is answered by the 94 constituents directly.
+candidates invites over-reading. The question those counts cannot answer — whether the
+recovered concepts are *correct* — is answered by the ablation above, not by the audit.
+
+**Windowing caveat on the audit.** Long-document windowing (below) was introduced in the
+same branch as this measurement, and windowing can in principle create span shapes that
+generate extra merge candidates. Attributing candidates to their source documents:
+**88 of the 129 (68%) come from documents that were never windowed** and therefore cannot
+be windowing artifacts; 41 come from the 32 windowed documents. The finding survives the
+caveat, but the audit counts are not windowing-independent.
 
 ## A second production bug this eval caught
 
@@ -706,3 +748,20 @@ caught only by running real data end to end.
 5. **These are single-run point measurements** against a CTD artifact built on one day
    (551,669 aliases); CTD is a moving target and the run log records the alias count but no
    CTD release version.
+6. **The domain row scores sentences, not abstracts** (see the note under the results
+   table). Its 49 units come from 3 abstracts, so it is not on the same unit of analysis as
+   the BC5CDR row and the two F1 values should not be compared directly.
+7. **`INTERIOR_OR_OTHER` is a catch-all.** It holds interior truncations *and*
+   over-extensions (predictions longer than gold, recorded with a negative `char_delta`).
+   `char_delta` is computed per mention but not aggregated into the census or the run log,
+   so the report cannot presently say what share of that 38.7% is over-extension. Splitting
+   it is the obvious next refinement of the census.
+8. **Pooled concept metrics are label-blind.** The pooled sets are built from concept ids
+   without regard to label, so a CHEMICAL prediction carrying an id that gold annotated as
+   DISEASE still scores as a true positive (visible in the run log: pooled fp=312 against
+   per-label fps summing to 314). Defensible for clustering, which keys on concepts rather
+   than types, but it means the headline F1 does not penalize label confusion. The
+   per-label rows do.
+9. **Windowing statistics are not recorded in the run log.** "11 of 500 documents exceed
+   512 tokens; 32 exceed the 450-token window budget" comes from ad-hoc measurement, not
+   from a logged field, so it is not self-verifying on a future run.

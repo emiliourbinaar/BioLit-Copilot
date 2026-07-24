@@ -21,6 +21,31 @@ def _sentence_spans(text: str) -> list[tuple[int, int]]:
     return spans or [(0, len(text))]
 
 
+def _hard_split(
+    text: str, start: int, end: int, count_tokens: Callable[[str], int], max_tokens: int
+) -> list[tuple[int, int]]:
+    """Split [start, end) at character granularity so every piece fits the budget.
+
+    Last-resort path for a run with no whitespace to split on (a long identifier or a
+    malformed document). Splitting mid-word can cut an entity, but the alternative is
+    handing the model an over-budget window, which raises a tensor-size error and loses the
+    whole document.
+    """
+    pieces: list[tuple[int, int]] = []
+    cursor = start
+    while cursor < end:
+        lo, hi, fit = cursor + 1, end, cursor + 1
+        while lo <= hi:  # bisect for the longest prefix that still fits
+            mid = (lo + hi) // 2
+            if count_tokens(text[cursor:mid]) <= max_tokens:
+                fit, lo = mid, mid + 1
+            else:
+                hi = mid - 1
+        pieces.append((cursor, fit))
+        cursor = fit
+    return pieces
+
+
 def _split_oversized(
     text: str, span: tuple[int, int], count_tokens: Callable[[str], int], max_tokens: int
 ) -> list[tuple[int, int]]:
@@ -29,7 +54,9 @@ def _split_oversized(
     Only reachable for a sentence longer than the whole budget, which is pathological in
     abstracts but must not crash: the caller's overlap cannot help here, so this splits
     greedily at word boundaries and accepts that a word-level split point could in
-    principle land inside an entity.
+    principle land inside an entity. Any resulting piece that STILL exceeds the budget
+    (a whitespace-free run longer than the budget) is split at character granularity, so
+    this function's postcondition -- every piece fits -- always holds.
     """
     start, end = span
     pieces: list[tuple[int, int]] = []
@@ -43,7 +70,13 @@ def _split_oversized(
         last_fit = ws
     if piece_start < end:
         pieces.append((piece_start, end))
-    return pieces
+    resolved: list[tuple[int, int]] = []
+    for piece in pieces:
+        if count_tokens(text[piece[0] : piece[1]]) > max_tokens:
+            resolved.extend(_hard_split(text, piece[0], piece[1], count_tokens, max_tokens))
+        else:
+            resolved.append(piece)
+    return resolved
 
 
 def plan_windows(
@@ -61,6 +94,13 @@ def plan_windows(
     simple sentence regex splits in the wrong place (an abbreviation or a decimal) and
     would otherwise have cut an entity in half. Overlap makes spans appear twice; the
     caller is responsible for de-duplicating them.
+
+    **The overlap is conditional, not universal:** it only materializes when a window holds
+    more than one sentence, since a window holding a single sentence cannot step back
+    without failing to advance. At the production budget (450 tokens against sentences of
+    a few dozen tokens) windows hold many sentences and every internal boundary is spanned;
+    a single sentence filling an entire window is pathological, and in that case its
+    boundaries are hard cuts.
 
     `count_tokens` is injected so this stays a pure function, testable with no tokenizer.
     """
@@ -102,10 +142,16 @@ def predict_windowed(
     """Run `run` over `text` in windows and return spans in DOCUMENT coordinates.
 
     `run` is the model call; it sees one window at a time and reports offsets relative to
-    that window, so every offset is shifted back by the window's start. Windows overlap, so
-    the same span is usually predicted more than once -- results are de-duplicated on
-    (start, end, group), keeping the highest-scoring copy, so an entity seen whole in one
-    window wins over a partial sighting at another window's edge.
+    that window, so every offset is shifted back by the window's start.
+
+    Overlapping windows see the same text twice, which produces two kinds of repeat:
+    identical spans (same start, end and group -- de-duplicated, keeping the
+    highest-scoring copy), and spans where one window caught an entity whole while another
+    caught it clipped at a window edge. The clipped one is strictly CONTAINED in the whole
+    one, and both would otherwise survive de-duplication because their end offsets differ,
+    emitting nested spans that cannot occur on single-window input. So a span strictly
+    contained in another span of the same group is dropped. Two separate occurrences of the
+    same surface form are not contained in one another and both survive.
 
     Both `run` and `count_tokens` are injected, keeping this pure and testable with no
     model or tokenizer.
@@ -134,4 +180,25 @@ def predict_windowed(
                 previous.get("score", 0.0)
             ):
                 best[key] = shifted
-    return sorted(best.values(), key=lambda s: (s.get("start") or 0, s.get("end") or 0))
+
+    spans = sorted(best.values(), key=lambda s: (s.get("start") or 0, s.get("end") or 0))
+    return [s for s in spans if not _is_contained(s, spans)]
+
+
+def _is_contained(span: dict, spans: list[dict]) -> bool:
+    """True if `span` lies strictly inside another span of the same group."""
+    start, end = span.get("start"), span.get("end")
+    if start is None or end is None:
+        return False
+    group = span.get("entity_group") or span.get("entity")
+    for other in spans:
+        if other is span:
+            continue
+        if (other.get("entity_group") or other.get("entity")) != group:
+            continue
+        o_start, o_end = other.get("start"), other.get("end")
+        if o_start is None or o_end is None:
+            continue
+        if o_start <= start and end <= o_end and (o_start, o_end) != (start, end):
+            return True
+    return False
