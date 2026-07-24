@@ -1,11 +1,16 @@
+import argparse
+import json
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 from biolit.canon.canonicalize import canonicalize
 from biolit.canon.fragments import merge_fragments
 from biolit.canon.linker import Linker
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
+from biolit_evals._meta import git_sha
 from biolit_evals.mesh_gold import GoldDocument
 from biolit_evals.outcome_census import Census, OutcomeRecord, census, classify_outcome
 
@@ -126,3 +131,113 @@ def score_end_to_end(
         merge_candidates_matching_gold=cand_gold,
         merged_constituents=merged_constituents,
     )
+
+
+DEFAULT_LOG = "evals/e2e_runs.jsonl"
+DOMAIN_NORM_GOLD = "evals/gold/domain_normalization_sample.jsonl"
+
+
+def run_e2e_eval(
+    *,
+    documents: list[GoldDocument],
+    predict: Callable[[str], list[Entity]],
+    linker: Linker,
+    dataset: str,
+    artifact_source: str,
+    n_aliases: int,
+    log_path: str,
+    git_sha: str,
+    now: str,
+) -> E2EMetrics:
+    """Score end to end and append one JSON line to `log_path`.
+
+    Every impure input is injected (documents, predict, linker, log_path, git_sha, now) so
+    this stays offline-testable, matching `run_eval` and `run_canon_eval`.
+    """
+    m = score_end_to_end(documents, predict=predict, linker=linker)
+    line = {
+        "timestamp": now,
+        "git_sha": git_sha,
+        "dataset": dataset,
+        "artifact_source": artifact_source,
+        "n_aliases": n_aliases,
+        "n_documents": m.n_documents,
+        "tp": m.concepts.tp,
+        "fp": m.concepts.fp,
+        "fn": m.concepts.fn,
+        "precision": m.concepts.precision,
+        "recall": m.concepts.recall,
+        "f1": m.concepts.f1,
+        "e2e_nil_rate": m.e2e_nil_rate,
+        "n_predicted": m.n_predicted,
+        "n_predicted_linked": m.n_predicted_linked,
+        "census": asdict(m.census),
+        "concepts_by_label": {k: asdict(v) for k, v in m.concepts_by_label.items()},
+        "merge_audit": {
+            "candidates": m.merge_candidates,
+            "candidates_linked": m.merge_candidates_linked,
+            "candidates_matching_gold": m.merge_candidates_matching_gold,
+            "merged_constituents": m.merged_constituents,
+        },
+    }
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+    return m
+
+
+def main(argv: list[str] | None = None) -> None:
+    # Heavy imports are local so importing this module for scoring stays cheap and offline.
+    from biolit.canon.linker import DictionaryLinker
+    from biolit.canon.mesh import MeshDictionary
+    from biolit.config import get_settings
+    from biolit.ner.extract import extract_entities
+    from biolit.ner.model import NerModel
+    from biolit_evals.mesh_gold import load_domain_norm_documents
+    from biolit_evals.mesh_gold_download import load_bc5cdr_documents
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset", choices=["bc5cdr", "domain"], required=True)
+    args = parser.parse_args(argv)
+
+    settings = get_settings()
+    dictionary = MeshDictionary.from_artifact(settings.mesh_artifact_path)
+    linker = DictionaryLinker(dictionary)
+    model = NerModel.load(settings)
+
+    if args.dataset == "bc5cdr":
+        documents = load_bc5cdr_documents(settings.bc5cdr_cdr_zip_url)
+    else:
+        documents = load_domain_norm_documents(DOMAIN_NORM_GOLD)
+
+    m = run_e2e_eval(
+        documents=documents,
+        predict=lambda text: extract_entities(
+            text, model, score_threshold=settings.ner_score_threshold
+        ),
+        linker=linker,
+        dataset=args.dataset,
+        artifact_source=settings.mesh_artifact_path,
+        n_aliases=len(dictionary),
+        log_path=DEFAULT_LOG,
+        git_sha=git_sha(),
+        now=datetime.now(UTC).isoformat(),
+    )
+    c = m.concepts
+    print(
+        f"{args.dataset}: concept P={c.precision:.4f} R={c.recall:.4f} F1={c.f1:.4f} "
+        f"(tp={c.tp} fp={c.fp} fn={c.fn}, docs={m.n_documents}) "
+        f"e2e_NIL={m.e2e_nil_rate:.3f}"
+    )
+    print(f"  census: {m.census.outcomes}")
+    print(f"  truncation: {m.census.truncation}")
+    print(f"  by label: {m.census.by_label}")
+    print(
+        f"  merge audit: candidates={m.merge_candidates} linked={m.merge_candidates_linked} "
+        f"matching_gold={m.merge_candidates_matching_gold} "
+        f"constituents={m.merged_constituents}"
+    )
+
+
+if __name__ == "__main__":
+    main()

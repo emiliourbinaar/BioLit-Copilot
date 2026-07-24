@@ -1,10 +1,10 @@
 import argparse
 import json
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
 from biolit.canon.linker import DictionaryLinker, Linker
+from biolit_evals._meta import git_sha
 from biolit_evals.linking_scoring import LinkingMetrics, score_linking
 from biolit_evals.mesh_gold import GoldMention
 
@@ -47,13 +47,6 @@ def run_canon_eval(
     return metrics
 
 
-def _git_sha() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-    except Exception:  # best-effort metadata; never fail an eval over it
-        return "unknown"
-
-
 def main(argv: list[str] | None = None) -> None:
     # Heavy imports (artifact load, gold download) are local so importing this module for
     # `run_canon_eval` stays cheap and offline.
@@ -81,7 +74,7 @@ def main(argv: list[str] | None = None) -> None:
         artifact_source=settings.mesh_artifact_path,
         n_aliases=len(dictionary),
         log_path=DEFAULT_LOG,
-        git_sha=_git_sha(),
+        git_sha=git_sha(),
         now=datetime.now(UTC).isoformat(),
     )
     print(
