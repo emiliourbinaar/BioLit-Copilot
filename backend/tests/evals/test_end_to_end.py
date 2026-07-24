@@ -1,6 +1,55 @@
 import pytest
 
-from biolit_evals.end_to_end import concept_counts, metrics_from_counts
+from biolit.canon.linker import DictionaryLinker
+from biolit.canon.mesh import AliasEntry, MeshConcept, MeshDictionary
+from biolit.domain.enums import EntityLabel
+from biolit.domain.records import Entity
+from biolit_evals.end_to_end import concept_counts, metrics_from_counts, score_end_to_end
+from biolit_evals.mesh_gold import GoldDocument, GoldMention
+
+CHEMICAL = EntityLabel.CHEMICAL
+
+
+def _linker():
+    met = MeshConcept(id="MESH:D008687", name="Metformin")
+    return DictionaryLinker(MeshDictionary({"metformin": [AliasEntry(met, True)]}))
+
+
+def test_score_end_to_end_scores_concepts_and_censuses_outcomes():
+    doc = GoldDocument(
+        pmid="1",
+        text="metformin treats PCOS",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=9,
+                text="metformin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:D008687",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=17,
+                end=21,
+                text="PCOS",
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D011085",),
+            ),
+        ],
+    )
+    # Predict the chemical exactly; miss the disease entirely.
+    preds = [Entity(text="metformin", label=CHEMICAL, start=0, end=9)]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=_linker())
+
+    assert m.n_documents == 1
+    assert (m.concepts.tp, m.concepts.fp, m.concepts.fn) == (1, 0, 1)
+    assert m.census.outcomes == {"EXACT": 1, "MISSED": 1}
+    assert m.concepts_by_label["CHEMICAL"].tp == 1
+    assert m.concepts_by_label["DISEASE"].fn == 1
+    assert m.n_predicted == 1 and m.n_predicted_linked == 1
+    assert m.e2e_nil_rate == pytest.approx(0.0)
+    assert m.merge_candidates == 0
 
 
 def test_concept_counts_for_one_document():
@@ -35,3 +84,35 @@ def test_repeated_concept_in_one_document_counts_once():
     # a single much-repeated entity cannot dominate the corpus totals.
     tp, fp, fn = concept_counts({"MESH:A"}, {"MESH:A"})
     assert (tp, fp, fn) == (1, 0, 0)
+
+
+def test_merge_audit_counts_candidates_and_nil_gap_fills():
+    # "GLP" + "1RA" is the ADR-0008 shape: neither fragment links alone, the merged
+    # surface does, so both constituents inherit it and the audit records one candidate.
+    glp = MeshConcept(id="MESH:D000067299", name="GLP-1 Receptor Agonists")
+    linker = DictionaryLinker(MeshDictionary({"glp-1ra": [AliasEntry(glp, True)]}))
+    doc = GoldDocument(
+        pmid="1",
+        text="GLP-1RA therapy",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=7,
+                text="GLP-1RA",
+                label=CHEMICAL,
+                mesh_ids=("MESH:D000067299",),
+            )
+        ],
+    )
+    preds = [
+        Entity(text="GLP", label=CHEMICAL, start=0, end=3),
+        Entity(text="1RA", label=CHEMICAL, start=4, end=7),
+    ]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=linker)
+    assert m.merge_candidates == 1
+    assert m.merge_candidates_linked == 1
+    assert m.merge_candidates_matching_gold == 1
+    assert m.merged_constituents == 2
+    assert m.census.outcomes == {"MERGEABLE": 1}
+    assert m.e2e_nil_rate == pytest.approx(0.0)
