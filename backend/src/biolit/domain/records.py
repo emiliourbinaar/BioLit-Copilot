@@ -10,6 +10,8 @@ class Entity(BaseModel):
     label: EntityLabel  # type-checked at the Phase 4 extraction seam
     start: int | None = None
     end: int | None = None
+    canonical_id: str | None = None  # e.g. "MESH:D008687" / "OMIM:125853"; None = NIL
+    canonical_name: str | None = None  # CTD preferred name; None = NIL
 
 
 class ExtractedRecord(BaseModel):

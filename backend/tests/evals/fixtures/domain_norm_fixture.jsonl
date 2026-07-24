@@ -1,0 +1,1 @@
+{"pmid": "1234", "text": "Metformin treats PCOS", "entities": [{"start": 0, "end": 9, "label": "CHEMICAL", "text": "Metformin", "mesh_id": "D008687"}, {"start": 17, "end": 21, "label": "DISEASE", "text": "PCOS", "mesh_id": "MESH:D011085"}]}
