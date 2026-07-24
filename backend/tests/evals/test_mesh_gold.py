@@ -5,6 +5,7 @@ import pytest
 
 from biolit.domain.enums import EntityLabel
 from biolit_evals.mesh_gold import (
+    load_domain_norm_documents,
     load_domain_norm_sample,
     parse_pubtator,
     parse_pubtator_documents,
@@ -75,3 +76,27 @@ def test_parse_pubtator_documents_offsets_index_the_document_text():
         for doc in docs:
             for m in doc.mentions:
                 assert doc.text[m.start : m.end] == m.text, (path, doc.pmid, m)
+
+
+def test_load_domain_norm_documents_carries_text_and_matches_flat_loader():
+    docs = load_domain_norm_documents(str(_FIX / "domain_norm_fixture.jsonl"))
+    flat = load_domain_norm_sample(str(_FIX / "domain_norm_fixture.jsonl"))
+    assert [m for d in docs for m in d.mentions] == flat
+    assert docs[0].text == "Metformin treats PCOS"
+    for doc in docs:
+        for m in doc.mentions:
+            assert doc.text[m.start : m.end] == m.text
+
+
+def test_load_domain_norm_documents_rejects_span_text_mismatch(tmp_path):
+    rec = {
+        "pmid": "1",
+        "text": "Metformin treats PCOS",
+        "entities": [
+            {"start": 0, "end": 9, "label": "CHEMICAL", "text": "WRONG", "mesh_id": "D008687"}
+        ],
+    }
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text(json.dumps(rec) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_domain_norm_documents(str(bad))
