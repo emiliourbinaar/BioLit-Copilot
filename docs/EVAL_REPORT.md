@@ -377,3 +377,147 @@ below):
 - `backend/evals/runs.jsonl` — two new lines (domain, bc5cdr), appended.
 - `docs/EVAL_REPORT.md` — this file.
 - `docs/ARCHITECTURE.md` — "NER layer (Phase 2)" section added.
+
+---
+
+# Entity canonicalization (NEN) — Phase 3, sub-project A
+
+Everything below concerns the **named-entity normalization** layer
+(`biolit.canon.canonicalize`), which maps each detected CHEMICAL/DISEASE span to a MeSH
+concept ID so clustering can key on a concept rather than a surface string. It is a
+separate concern from the NER numbers above, with its own gold, metric, and run log
+(`backend/evals/canon_runs.jsonl`).
+
+## Headline: BC5CDR linking (gold MeSH IDs)
+
+| | value |
+|---|---|
+| Precision | **0.9210** |
+| Recall | **0.6828** |
+| **F1** | **0.7842** |
+| Correct / n | 6635 / 9718 |
+| Linked | 7204 |
+| **NIL rate** | **0.259** |
+| **Ambiguous-tiebreak rate** | **0.003** |
+
+## Supporting cross-check: blind domain sample
+
+| | value |
+|---|---|
+| Precision | **1.0000** |
+| Recall | **0.5942** |
+| **F1** | **0.7455** |
+| Correct / n | 41 / 69 |
+| Linked | 41 |
+| **NIL rate** | **0.406** |
+| **Ambiguous-tiebreak rate** | **0.043** |
+
+The blind domain gold holds 90 annotated mentions (CHEMICAL 49 / DISEASE 41 — identical
+composition to the Phase 2 NER domain sample, confirming offsets were preserved). Of
+those, **21 have no correct MeSH concept at all** and are excluded from scoring, leaving
+n = 69 linkable mentions.
+
+## What is being measured (and what is not)
+
+Linking is scored on **gold mentions**: the gold surface form is fed directly to the
+linker and we check whether the returned concept ID is among the mention's gold MeSH
+IDs. This deliberately **isolates linking quality from NER quality** — a linking
+regression cannot hide behind an NER change, and vice versa. These numbers therefore say
+nothing about end-to-end extraction accuracy; they are a measurement of the normalization
+layer alone.
+
+Scoring is restricted to gold mentions that have a real MeSH ID. Mentions annotated as
+unlinkable (`-1` in BC5CDR, `-1` in the domain sample) are excluded from precision/recall
+rather than counted as "correct NILs", which would inflate the score.
+
+## Interpreting the result: the failure mode is abstention, not error
+
+Both datasets show the same shape, and it is the actionable finding:
+
+- **Precision is high** (0.92 benchmark, 1.00 domain). When the dictionary linker
+  commits to a concept, it is almost always right; on the domain sample all 41 links were
+  correct.
+- **Recall is capped almost entirely by NIL** (25.9% benchmark, 40.6% domain) — surfaces
+  absent from the CTD alias table after case/whitespace normalization.
+
+So the dictionary linker does not guess wrong; it declines. That directly answers the
+question ADR-0008 deferred: **an embedding-based fallback (e.g. SapBERT) should be aimed
+at unmatched surfaces, not at correcting wrong links**, and the `Linker` protocol seam
+exists precisely so one can be added behind `DictionaryLinker` without a redesign. The
+higher domain NIL rate (40.6% vs 25.9%) is consistent with our corpus being dense with
+drug-class abbreviations and non-Western therapeutic names that CTD's alias list does not
+carry — the same lexical territory the Phase 2 error analysis flagged.
+
+The **ambiguous-alias tiebreak rate is logged as its own metric** rather than folded into
+accuracy, because a silent arbitrary resolution on a common surface would otherwise be
+invisible inside the aggregate. It fires on 0.3% of benchmark mentions and 4.3% of domain
+mentions (3 of 69), so the deterministic rule (exact-name over synonym, then
+lexicographically smallest ID) is **not** a hidden source of error at this scale. If that
+rate climbs, the rule needs revisiting.
+
+## Blind annotation methodology (ADR-0006)
+
+The domain normalization gold was annotated **blind**, which here means **not anchored to
+`DictionaryLinker`'s own output** — the annotator never ran the linker, never loaded the
+CTD artifact, and never saw a system prediction. It does **not** mean annotating with zero
+reference tools: the annotator **consulted the official NLM MeSH resource directly** (the
+`id.nlm.nih.gov/mesh/lookup/descriptor` API) to find and verify concept IDs, and recorded
+`-1` wherever no MeSH concept could be verified. Every assigned ID is API-confirmed; none
+were recalled from memory. This distinction matters — the point of blindness is to avoid
+the anchoring bias of reviewing a pre-populated candidate list, not to force unaided guessing.
+
+## Reproducing these numbers
+
+The MeSH alias artifact and the BC5CDR gold corpus are **downloaded, not committed**
+(they are gitignored). Rebuild and re-run from `backend/`:
+
+```
+uv run python -m biolit.canon.build_mesh              # CTD -> data/canon/mesh_aliases.json.gz
+uv run python -m biolit_evals.canon_eval --dataset bc5cdr
+uv run python -m biolit_evals.canon_eval --dataset domain
+```
+
+The artifact built for this report contains **551,669 aliases** from the CTD chemical and
+disease vocabularies.
+
+## A defect this eval caught (and why the first log line is wrong)
+
+The **first** `bc5cdr` line in `backend/evals/canon_runs.jsonl` (git_sha `0bfb783`) reads
+P=0.4211 / R=0.2695 / F1=0.3287. **That run is invalid** and is retained only because the
+run log is append-only history.
+
+The first real CTD build silently produced a broken alias table: chemical IDs came out
+**double-prefixed** (`MESH:MESH:D008687`) and chemical synonyms were read from the
+`Definition` column. Root cause: the unit-test fixtures had been written against an
+outdated, simplified CTD schema, so positional column parsing passed every offline test
+while misreading the real files. The real `CTD_chemicals.tsv` carries an
+already-prefixed `ChemicalID` and splits synonyms into `MESHSynonyms` / `CTDCuratedSynonyms`.
+Every chemical link therefore failed to match gold.
+
+It was caught by probing the real artifact with known terms before trusting the number,
+not by the test suite. The fix (`8b49f30`) resolves CTD columns **by name from the file
+header** instead of by fixed index, so a future CTD column addition cannot silently
+misread ids or synonyms again; the fixtures were rewritten to the real schema. The alias
+table grew from 275,451 to 551,669 entries, and F1 went from 0.3287 to 0.7842. This is
+recorded rather than quietly amended because it is the clearest example in this project of
+a green test suite coexisting with a wrong result.
+
+## Limitations
+
+1. **Linking is scored on gold mentions only.** These numbers do not measure end-to-end
+   (NER → canonicalization) performance, and must not be quoted as such.
+2. **The domain sample is small and single-annotator.** 69 linkable mentions drawn from
+   3 abstracts, annotated by an LLM subagent — API-grounded, but **not a domain expert**,
+   with no inter-annotator agreement. The domain precision of 1.0000 rests on only 41
+   links and should not be read as "the linker is perfect".
+3. **BC5CDR is the unbiased headline; the domain sample is a supporting cross-check**
+   only, exactly as with the Phase 2 NER numbers.
+4. **CTD is a moving target.** The alias table is built from live CTD downloads, so
+   re-running later may shift these numbers as CTD adds concepts and synonyms. The run log
+   records the git SHA but not a CTD release version.
+5. **`CTDCuratedSynonyms` is deliberately excluded** from the alias table (it mixes CAS
+   numbers and non-MeSH variants). Including it might lift recall at some cost to
+   precision; this has not been measured.
+6. **Normalization is light** (casefold + whitespace collapse). No plural stripping,
+   punctuation folding, or abbreviation expansion is applied before lookup — a
+   deliberate v1 choice, and part of why the NIL rate is what it is.
