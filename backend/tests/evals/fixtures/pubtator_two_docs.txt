@@ -1,0 +1,11 @@
+1|t|Metformin therapy.
+1|a|Metformin treats PCOS.
+1	0	9	Metformin	Chemical	D008687
+1	19	28	Metformin	Chemical	D008687
+1	36	40	PCOS	Disease	D011085
+
+2|t|Aspirin study.
+2|a|Aspirin and cancer.
+2	0	7	Aspirin	Chemical	D001241
+2	15	22	Aspirin	Chemical	D001241
+2	27	33	cancer	Disease	D009369

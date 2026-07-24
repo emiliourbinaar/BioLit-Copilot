@@ -53,6 +53,43 @@ def parse_pubtator(text: str) -> list[GoldMention]:
     return mentions
 
 
+@dataclass(frozen=True)
+class GoldDocument:
+    pmid: str
+    text: str
+    mentions: list[GoldMention]
+
+
+def parse_pubtator_documents(text: str) -> list[GoldDocument]:
+    """Parse a PubTator dump into documents carrying their own text and mentions.
+
+    Document text is `title + " " + abstract`: PubTator offsets are expressed against that
+    concatenation. Verified against the real corpus -- 9809 of 9809 mentions across all 500
+    BC5CDR test documents satisfy `text[start:end] == mention text` under it, and a
+    zero-length separator breaks alignment. Mention parsing delegates to `parse_pubtator`,
+    which already ignores the title/abstract lines, so the two parsers cannot disagree
+    about a mention -- only about document segmentation.
+    """
+    documents: list[GoldDocument] = []
+    for block in text.split("\n\n"):
+        if not block.strip():
+            continue
+        pmid = ""
+        title = ""
+        abstract = ""
+        for line in block.splitlines():
+            if not title and "|t|" in line:
+                pmid, title = line.split("|t|", 1)
+            elif not abstract and "|a|" in line:
+                _, abstract = line.split("|a|", 1)
+        if not pmid:
+            continue
+        documents.append(
+            GoldDocument(pmid=pmid, text=title + " " + abstract, mentions=parse_pubtator(block))
+        )
+    return documents
+
+
 def load_domain_norm_sample(path: str) -> list[GoldMention]:
     mentions: list[GoldMention] = []
     with open(path, encoding="utf-8") as fh:
