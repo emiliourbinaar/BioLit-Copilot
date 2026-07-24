@@ -977,7 +977,27 @@ def test_run_e2e_eval_appends_one_log_line_with_exact_schema(tmp_path):
 Run: `cd backend && uv run pytest tests/evals/test_end_to_end.py -k run_e2e_eval -v`
 Expected: FAIL — `ImportError: cannot import name 'run_e2e_eval'`.
 
-- [ ] **Step 3: Implement** — append to `backend/src/biolit_evals/end_to_end.py` (add `import argparse`, `import json`, `import subprocess`, `from dataclasses import asdict`, `from datetime import UTC, datetime`, `from pathlib import Path` to the imports):
+- [ ] **Step 2b: Extract the shared `git_sha` helper first (DRY)** — `ner_eval.py` and `canon_eval.py` each already carry a verbatim copy of this 4-line helper; this task would add a third, which the review rubric treats as duplication of a logic block. Create `backend/src/biolit_evals/_meta.py`:
+
+```python
+import subprocess
+
+
+def git_sha() -> str:
+    """Short HEAD SHA for run-log provenance. Best-effort: never fail an eval over it."""
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
+    except Exception:
+        return "unknown"
+```
+
+Then update the two existing runners to use it, deleting their private copies:
+- In `backend/src/biolit_evals/ner_eval.py`: delete the `_git_sha` function, add `from biolit_evals._meta import git_sha` to the imports, and change the `git_sha=_git_sha()` call site in `main()` to `git_sha=git_sha()`. Remove the now-unused `import subprocess`.
+- In `backend/src/biolit_evals/canon_eval.py`: same three changes.
+
+Run `cd backend && uv run pytest -q` — all existing tests must still pass (the helper is only called from `main()`, which tests do not exercise).
+
+- [ ] **Step 3: Implement** — append to `backend/src/biolit_evals/end_to_end.py` (add `import argparse`, `import json`, `from dataclasses import asdict`, `from datetime import UTC, datetime`, `from pathlib import Path`, and `from biolit_evals._meta import git_sha` to the imports):
 
 ```python
 DEFAULT_LOG = "evals/e2e_runs.jsonl"
@@ -1033,13 +1053,6 @@ def run_e2e_eval(
     return m
 
 
-def _git_sha() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-    except Exception:  # best-effort metadata; never fail an eval over it
-        return "unknown"
-
-
 def main(argv: list[str] | None = None) -> None:
     # Heavy imports are local so importing this module for scoring stays cheap and offline.
     from biolit.canon.linker import DictionaryLinker
@@ -1074,7 +1087,7 @@ def main(argv: list[str] | None = None) -> None:
         artifact_source=settings.mesh_artifact_path,
         n_aliases=len(dictionary),
         log_path=DEFAULT_LOG,
-        git_sha=_git_sha(),
+        git_sha=git_sha(),
         now=datetime.now(UTC).isoformat(),
     )
     c = m.concepts
@@ -1148,7 +1161,7 @@ Expected: `1 deselected` (heavy, deselected by default). Do NOT run the real dow
 
 ```bash
 cd backend && uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q
-cd .. && git add backend/src/biolit_evals/end_to_end.py backend/src/biolit_evals/mesh_gold_download.py backend/tests/evals/test_end_to_end.py backend/tests/evals/test_e2e_smoke.py
+cd .. && git add backend/src/biolit_evals/end_to_end.py backend/src/biolit_evals/_meta.py backend/src/biolit_evals/ner_eval.py backend/src/biolit_evals/canon_eval.py backend/src/biolit_evals/mesh_gold_download.py backend/tests/evals/test_end_to_end.py backend/tests/evals/test_e2e_smoke.py
 git commit -m "feat(evals): end-to-end runner, run log, and CLI"
 ```
 
