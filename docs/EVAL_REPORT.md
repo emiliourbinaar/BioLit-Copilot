@@ -624,15 +624,15 @@ the number above; it accounts for every point of loss.
 |---|---|---|
 | `EXACT` | 8052 | 82.1% |
 | `MISSED` | 782 | 8.0% |
-| `TRUNCATED` | 714 | 7.3% |
-| `MERGEABLE` | 261 | 2.7% |
+| `TRUNCATED` | 715 | 7.3% |
+| `MERGEABLE` | 260 | 2.7% |
 
-Truncation kind: `INTERIOR_OR_OTHER` 276 (38.7%), `PREFIX_OF_GOLD` 238 (33.3%),
-`SUFFIX_OF_GOLD` 200 (28.0%).
+Truncation kind: `INTERIOR_OR_OTHER` 276 (38.6%), `PREFIX_OF_GOLD` 238 (33.3%),
+`SUFFIX_OF_GOLD` 201 (28.1%).
 
 Per label — `EXACT` share: **CHEMICAL 4594/5385 = 85.3%**, **DISEASE 3458/4424 = 78.2%**.
-DISEASE carries 2.5× more truncation (509 vs 205); CHEMICAL carries more mergeable
-fragmentation (182 vs 79).
+DISEASE carries 2.5× more truncation (509 vs 206); CHEMICAL carries more mergeable
+fragmentation (181 vs 79).
 
 **Validation:** the census totals reproduce the canonical BC5CDR counts exactly — 9809
 mentions, **5385 chemical, 4424 disease**. The 9809 total *is* asserted by the heavy smoke
@@ -648,8 +648,8 @@ This eval was scoped because a 49-sentence probe suggested `merge_fragments` was
 truncation dominated. **At full scale, all three of the probe's conclusions fail to hold.**
 
 1. **Merging is not inert — but its effect is small.** Probe: 2 candidates, 0 useful. At
-   scale: 129 candidates proposed, 78 exactly reconstruct a gold span, 54 link, and 94
-   entity constituents received a concept they would not otherwise have had. 261 gold
+   scale: 122 candidates proposed, 74 exactly reconstruct a gold span, 52 link, and 91
+   entity constituents received a concept they would not otherwise have had. 260 gold
    mentions (2.7%) sit in the mergeable shape.
 
    Those counts describe activity, not benefit, so they were checked against an **ablation**
@@ -663,7 +663,7 @@ truncation dominated. **At full scale, all three of the probe's conclusions fail
 
    So merging is worth **+0.0021 F1 — 11 additional correct concepts out of 3422 gold
    slots**, at the cost of one extra false positive. Real, positive, and much smaller than
-   the raw audit counts suggest: 94 constituents gaining a concept converts to only 11
+   the raw audit counts suggest: 91 constituents gaining a concept converts to only 11
    concept-level gains, because document-level set semantics collapse constituents whose
    concept was already found elsewhere in the same document. The correct reading is
    "merging is not inert and is not harmful", **not** "merging is important".
@@ -672,13 +672,13 @@ truncation dominated. **At full scale, all three of the probe's conclusions fail
    (`candidates=2, linked=0, matching_gold=0`); the reversal is a BC5CDR-scale finding only.
 2. **Truncation is not systematically suffix-dropping.** The domain sample's 9-of-11
    `PREFIX_OF_GOLD` looked like a clean signal; at scale the three kinds are far more even
-   (38.7% / 33.3% / 28.0%), so there is no single dominant boundary-error mode to target.
+   (38.6% / 33.3% / 28.1%), so there is no single dominant boundary-error mode to target.
 
    **Caveat on that split:** `INTERIOR_OR_OTHER` — the largest bucket — is a catch-all that
    also holds predictions extending *past* gold (an over-extension, recorded with a
    negative `char_delta`), not only interior truncations. So the honest claim is that the
    clean prefix-dropping pattern seen in the domain sample **does not survive at scale**;
-   the precise composition of the remaining 38.7% is not separated by the current census.
+   the precise composition of the remaining 38.6% is not separated by the current census.
    `char_delta` is computed per mention but not yet aggregated, which is what would split
    it — see Limitations.
 3. **The label asymmetry reverses.** The domain sample showed CHEMICAL as the problem
@@ -689,16 +689,18 @@ The domain sample retains its value as an in-domain cross-check, but with 90 men
 3 abstracts it cannot support conclusions about error *composition* — every apparent
 pattern in it was reversed or flattened by the full corpus. That is the finding.
 
-The merge audit is reported as **raw counts, not precision/recall**: a rate over 129
+The merge audit is reported as **raw counts, not precision/recall**: a rate over 122
 candidates invites over-reading. The question those counts cannot answer — whether the
 recovered concepts are *correct* — is answered by the ablation above, not by the audit.
 
 **Windowing caveat on the audit.** Long-document windowing (below) was introduced in the
 same branch as this measurement, and windowing can in principle create span shapes that
 generate extra merge candidates. Attributing candidates to their source documents:
-**88 of the 129 (68%) come from documents that were never windowed** and therefore cannot
-be windowing artifacts; 41 come from the 32 windowed documents. The finding survives the
-caveat, but the audit counts are not windowing-independent.
+**88 of the 122 (72%) come from documents that were never windowed** and therefore cannot
+be windowing artifacts; 34 come from the 32 windowed documents. This was measured: before
+nested-span de-duplication was added the audit reported 129 candidates, so 7 of those were
+windowing artifacts and are now gone. The finding survives, but the audit counts are not
+windowing-independent.
 
 ## A second production bug this eval caught
 
