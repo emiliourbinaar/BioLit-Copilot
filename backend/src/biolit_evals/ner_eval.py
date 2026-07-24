@@ -1,6 +1,5 @@
 import argparse
 import json
-import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -8,6 +7,7 @@ from biolit.config import get_settings
 from biolit.domain.records import Entity
 from biolit.ner.extract import extract_entities
 from biolit.ner.model import NerModel
+from biolit_evals._meta import git_sha
 from biolit_evals.datasets import load_bc5cdr_test, load_domain_sample
 from biolit_evals.scoring import PRF, score_corpus
 
@@ -62,13 +62,6 @@ def run_eval(
     return prf
 
 
-def _git_sha() -> str:
-    try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
-    except Exception:  # sha is best-effort metadata; never fail an eval over it
-        return "unknown"
-
-
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", choices=["bc5cdr", "domain"], required=True)
@@ -90,7 +83,7 @@ def main(argv: list[str] | None = None) -> None:
         split=split,
         model_id=settings.ner_model_id,
         log_path=DEFAULT_LOG,
-        git_sha=_git_sha(),
+        git_sha=git_sha(),
         now=datetime.now(UTC).isoformat(),
         score_threshold=settings.ner_score_threshold,
     )

@@ -49,3 +49,17 @@ Evaluation lives in `biolit_evals.canon_eval`: linking precision/recall/F1 score
 mentions (isolating linking from NER), plus a **NIL rate** and an **ambiguous-tiebreak
 rate**, against BC5CDR's gold MeSH IDs and a blind-annotated domain sample, appended to
 `evals/canon_runs.jsonl`. See `docs/EVAL_REPORT.md` for results and methodology.
+
+`biolit_evals.end_to_end` measures the production path (`extract_entities` → `canonicalize`
+→ `canonical_id`) against gold MeSH IDs — the only eval that exercises `merge_fragments`.
+Its primary metric is concept-level micro-averaged P/R/F1 (document-level set matching,
+because clustering consumes a paper's concept set, not its spans), reported pooled and per
+label, alongside a permanent outcome census (exact / mergeable / truncated / missed, with
+truncation sub-classified) that accounts categorically for every point of loss.
+
+`NerModel` windows long inputs before inference: this checkpoint's tokenizer declares no
+`model_max_length`, so a document over BERT's 512-token limit would otherwise reach the
+model and raise a tensor-size error (2.2% of real abstracts). Windows are packed from whole
+sentences with a one-sentence overlap, and offsets are shifted back into document
+coordinates and de-duplicated, so `extract_entities` is safe on text of any length and
+every consumer inherits that.
