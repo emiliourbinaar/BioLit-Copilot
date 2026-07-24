@@ -45,3 +45,29 @@ def test_does_not_mutate_input_entities():
     ents = [Entity(text="metformin", label=CHEMICAL, start=0, end=9)]
     canonicalize(ents, text, linker=_linker())
     assert ents[0].canonical_id is None  # original untouched
+
+
+def test_spurious_merge_does_not_overwrite_correct_individual_links():
+    # "aspirin/metformin"-style combination notation: merge_fragments is permissive
+    # enough to propose a merge here, and the merged surface happens to resolve -- but
+    # each constituent links correctly on its own, so each must KEEP its own concept.
+    asa = MeshConcept(id="MESH:D001241", name="Aspirin")
+    met = MeshConcept(id="MESH:D008687", name="Metformin")
+    combo = MeshConcept(id="MESH:D999999", name="Wrong Combo Concept")
+    linker = DictionaryLinker(
+        MeshDictionary(
+            {
+                "asa": [AliasEntry(asa, True)],
+                "metformin": [AliasEntry(met, True)],
+                "asa/metformin": [AliasEntry(combo, True)],
+            }
+        )
+    )
+    text = "ASA/metformin therapy"
+    ents = [
+        Entity(text="ASA", label=CHEMICAL, start=0, end=3),
+        Entity(text="metformin", label=CHEMICAL, start=4, end=13),
+    ]
+    out = canonicalize(ents, text, linker=linker)
+    assert out[0].canonical_id == "MESH:D001241"
+    assert out[1].canonical_id == "MESH:D008687"

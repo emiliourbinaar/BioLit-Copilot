@@ -34,6 +34,9 @@ class MeshDictionary:
     def __init__(self, aliases: dict[str, list[AliasEntry]]) -> None:
         self._aliases = aliases
 
+    def __len__(self) -> int:
+        return len(self._aliases)
+
     def lookup(self, surface: str) -> LinkResult:
         entries = self._aliases.get(normalize_surface(surface))
         if not entries:
@@ -113,7 +116,10 @@ def _ingest_ctd(
         raise ValueError(f"CTD header row not found (expected a '# {name_col}...' line)")
     idx = {col: i for i, col in enumerate(header)}
     name_i, id_i = idx[name_col], idx[id_col]
-    syn_i = [idx[c] for c in synonym_cols if c in idx]
+    missing = [c for c in synonym_cols if c not in idx]
+    if missing:
+        raise ValueError(f"CTD synonym column(s) {missing} not found in header {header}")
+    syn_i = [idx[c] for c in synonym_cols]
     for row in rows:
         if len(row) <= max(name_i, id_i):
             continue

@@ -18,6 +18,7 @@ def run_canon_eval(
     linker: Linker,
     dataset: str,
     artifact_source: str,
+    n_aliases: int,
     log_path: str,
     git_sha: str,
     now: str,
@@ -30,6 +31,7 @@ def run_canon_eval(
         "git_sha": git_sha,
         "dataset": dataset,
         "artifact_source": artifact_source,
+        "n_aliases": n_aliases,
         "n": metrics.n,
         "correct": metrics.correct,
         "linked": metrics.linked,
@@ -65,7 +67,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     settings = get_settings()
-    linker = DictionaryLinker(MeshDictionary.from_artifact(settings.mesh_artifact_path))
+    dictionary = MeshDictionary.from_artifact(settings.mesh_artifact_path)
+    linker = DictionaryLinker(dictionary)
     if args.dataset == "bc5cdr":
         gold = load_bc5cdr_norm_gold(settings.bc5cdr_cdr_zip_url)
     else:
@@ -76,6 +79,7 @@ def main(argv: list[str] | None = None) -> None:
         linker=linker,
         dataset=args.dataset,
         artifact_source=settings.mesh_artifact_path,
+        n_aliases=len(dictionary),
         log_path=DEFAULT_LOG,
         git_sha=_git_sha(),
         now=datetime.now(UTC).isoformat(),

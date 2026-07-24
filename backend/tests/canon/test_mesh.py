@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from biolit.canon.mesh import (
     AliasEntry,
     MeshConcept,
@@ -26,8 +28,11 @@ def _dict() -> MeshDictionary:
         {
             "metformin": [AliasEntry(metformin, True)],
             "glucophage": [AliasEntry(metformin, False)],
-            # ambiguous: two distinct concepts, one via preferred name
-            "ambig": [AliasEntry(metformin, False), AliasEntry(other, True)],
+            # ambiguous: two distinct concepts, one via preferred name. The preferred
+            # entry (metformin) deliberately carries the LARGER id so only the
+            # preferred-name filter -- not the lexicographic fallback -- can produce
+            # the expected answer.
+            "ambig": [AliasEntry(other, False), AliasEntry(metformin, True)],
             # ambiguous, no preferred name -> smallest id wins
             "ambignopref": [AliasEntry(metformin, False), AliasEntry(other, False)],
         }
@@ -49,7 +54,25 @@ def test_lookup_miss_returns_nil():
 
 def test_lookup_ambiguous_prefers_preferred_name_and_flags_tiebreak():
     r = _dict().lookup("ambig")
-    assert r.concept is not None and r.concept.id == "MESH:D000001"  # preferred-name entry
+    # Preferred entry (metformin, MESH:D008687) holds the LARGER id here -- asserting
+    # the non-smallest id is what makes this test actually exercise the preferred-name
+    # filter, rather than passing vacuously via the lexicographic fallback.
+    assert r.concept is not None and r.concept.id == "MESH:D008687"
+    assert r.tiebroken is True
+
+
+def test_lookup_ambiguous_two_preferred_picks_smallest_among_preferred():
+    # Two preferred entries compete, and a NON-preferred entry holds an even smaller id:
+    # the winner must be the smallest *among the preferred*, proving the lexicographic
+    # tiebreak is applied AFTER the preferred filter, not instead of it.
+    a = MeshConcept(id="MESH:D000002", name="A")
+    b = MeshConcept(id="MESH:D000003", name="B")
+    small = MeshConcept(id="MESH:D000001", name="Small")
+    d = MeshDictionary(
+        {"multi": [AliasEntry(small, False), AliasEntry(b, True), AliasEntry(a, True)]}
+    )
+    r = d.lookup("multi")
+    assert r.concept is not None and r.concept.id == "MESH:D000002"
     assert r.tiebroken is True
 
 
@@ -86,3 +109,15 @@ def test_build_alias_table_skips_header_comment_rows():
     table = build_alias_table(_text("ctd_chemicals_sample.tsv"), _text("ctd_diseases_sample.tsv"))
     assert "chemicalname" not in table and "diseasename" not in table
     assert not any(key.startswith("#") or "﻿" in key for key in table)
+
+
+def test_len_returns_alias_count():
+    assert len(_dict()) == 4
+
+
+def test_ingest_raises_when_synonym_column_missing():
+    # A silently-dropped synonym column would halve the alias table with every offline
+    # test still green -- the same failure class as the CTD schema defect this replaced.
+    dump = "# ChemicalName\tChemicalID\nMetformin\tMESH:D008687\n"
+    with pytest.raises(ValueError):
+        build_alias_table(dump, dump)
