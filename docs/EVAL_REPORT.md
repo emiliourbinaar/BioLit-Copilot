@@ -642,6 +642,80 @@ pinned anywhere**, and a parsing, alignment, or double-counting bug would have s
 **Domain sample (90 gold mentions):** `EXACT` 55, `MISSED` 22, `TRUNCATED` 11,
 `MERGEABLE` 2; truncation `PREFIX_OF_GOLD` 9, `SUFFIX_OF_GOLD` 2.
 
+## Linking on exact spans: sizing what a fallback linker could actually reach
+
+The census stops at span quality. Its largest cell — `EXACT`, 8052 mentions — says NER got
+the span exactly right, but says nothing about whether linking then succeeded. That cell is
+where the classic *"correct span, missing alias"* failure lives, and it is the only place a
+fallback linker could operate: `MISSED` has no span to link, and `TRUNCATED`/`MERGEABLE`
+reach the linker damaged.
+
+So the `EXACT` cell is partitioned by what linking did with it. Four outcomes, not two —
+"did not produce the right id" conflates three different problems:
+
+**BC5CDR, all 8052 exact-span gold mentions:**
+
+| Outcome | Count | Share | Reachable by a fallback linker? |
+|---|---|---|---|
+| `LINKED_CORRECT` | 5832 | 72.4% | — already correct |
+| `NIL` | **1679** | **20.9%** | **Yes — this is the addressable population** |
+| `LINKED_WRONG` | 488 | 6.1% | **No** — the dictionary answered confidently and wrongly; a fallback is never consulted |
+| `GOLD_UNLINKABLE` | 53 | 0.7% | No — gold is annotated `-1`; abstaining is the *correct* answer |
+
+Separating `GOLD_UNLINKABLE` and `LINKED_WRONG` out matters: lumping them into "not linked"
+would put the addressable figure at 2220 rather than 1679 — a **32% overstatement** of what
+a fallback could reach.
+
+**The original abstention finding survives, re-scoped.** On gold surfaces (Phase 3A) NIL was
+~81% of the recall gap. On *predicted* exact spans it is 1679 of 2167 non-correct linkable
+outcomes = **77.5%**. Abstention still dominates error; that conclusion was narrow, not
+wrong. (The rates themselves — 21.0% NIL here on linkable exact spans vs 25.9% on all gold
+surfaces — are **not comparable**: different populations. Mentions whose span NER nails are
+plausibly the more canonical surfaces, so a lower NIL rate is the expected direction, but
+this run does not test that.)
+
+### The asymmetry: this is a DISEASE problem
+
+| Label | Exact spans | `LINKED_CORRECT` | `NIL` | `LINKED_WRONG` | `GOLD_UNLINKABLE` | NIL rate (linkable) |
+|---|---|---|---|---|---|---|
+| CHEMICAL | 4594 | 3580 | 680 | 314 | 20 | **14.9%** |
+| DISEASE | 3458 | 2252 | **999** | 174 | 33 | **29.2%** |
+
+**DISEASE abstains on perfect spans at 1.96× the CHEMICAL rate**, and supplies **59.5% of
+the entire addressable population (999 of 1679)** despite contributing fewer exact spans in
+the first place. The two stages compound in the same direction: DISEASE is already the
+weaker label at NER (78.2% exact vs 85.3%), and is then the weaker label at linking.
+
+This is the finding that bears on *what kind* of work is worth scoping. A general embedding
+fallback treats both labels alike; a nearly 2× concentration in one entity type is instead
+consistent with **thinner disease-side alias coverage in CTD** — which targeted dictionary
+expansion would address more cheaply and more verifiably than a fallback model. **That
+hypothesis is not tested here.** The direct check is to count aliases contributed per source
+file when building the artifact, which the builder does not currently record; the current
+551,669 aliases are pooled and `MeshConcept` carries no source label.
+
+### Sizing caveat: 1679 mentions is not 1679 concepts
+
+Against the full 9809-mention corpus: `EXACT`-but-`NIL` is **17.1%** of all gold mentions —
+the **largest single recoverable bucket**, larger than the detection gap (`MISSED`, 8.0%)
+and larger than span damage (`TRUNCATED` + `MERGEABLE`, 9.9%). It is, however, slightly
+*smaller* than those two combined (1679 vs 1757).
+
+**These are mention counts, and the headline metric is document-level concept sets.** This
+report has already been burned by exactly that conversion once: the merge audit's 91
+constituents gaining a concept converted to **11** concept-level gains, because set
+semantics collapse concepts already found elsewhere in the same document. The same collapse
+applies here and its magnitude is unknown, so **no claim is made about what fixing these
+1679 mentions would be worth in F1.**
+
+The measurement that would settle it is an **oracle ceiling**, built like the merge
+ablation: re-score the corpus granting every `EXACT`-but-`NIL` mention its gold id — a
+perfect fallback, with perfect precision, on exactly this population — and read off the
+concept F1. That converts "1679 mentions" into "at most +X F1" and is the number the
+fallback-vs-dictionary-expansion decision should actually turn on. It is not built yet.
+
+**Nothing here decides the SapBERT fallback.** It sizes the population and locates it.
+
 ## What this changes: the 49-sentence probe was wrong on all three counts
 
 This eval was scoped because a 49-sentence probe suggested `merge_fragments` was inert and
@@ -791,6 +865,15 @@ caught only by running real data end to end.
    per-label fps summing to 314). Defensible for clustering, which keys on concepts rather
    than types, but it means the headline F1 does not penalize label confusion. The
    per-label rows do.
-9. **Windowing statistics are not recorded in the run log.** "11 of 500 documents exceed
+9. **The exact-span link audit is sized in mentions, not concepts.** Its 1679 addressable
+   mentions have not been converted to a concept-level F1 ceiling (see the oracle-ceiling
+   note above), and the merge ablation showed that conversion can shrink a count by ~8×.
+   The audit locates and bounds the population; it does not price it.
+10. **Alias coverage is not attributed per source file.** The DISEASE-concentration finding
+    points at thinner disease-side CTD coverage, but the artifact builder pools all aliases
+    and `MeshConcept` records no source, so that explanation is untested — an alternative
+    (disease surfaces in abstracts are simply more variable than chemical names) is equally
+    consistent with the same numbers.
+11. **Windowing statistics are not recorded in the run log.** "11 of 500 documents exceed
    512 tokens; 32 exceed the 450-token window budget" comes from ad-hoc measurement, not
    from a logged field, so it is not self-verifying on a future run.
