@@ -16,6 +16,7 @@ from biolit_evals.outcome_census import (
     Census,
     ExactLinkAudit,
     ExactLinkRecord,
+    ExactLinkStatus,
     OutcomeRecord,
     census,
     classify_exact_link,
@@ -59,6 +60,27 @@ def metrics_from_counts(tp: int, fp: int, fn: int) -> ConceptMetrics:
 
 
 @dataclass(frozen=True)
+class OracleCeiling:
+    """Upper bound on what a perfect fallback linker could be worth.
+
+    Re-scores the same predictions while granting each `EXACT`-span mention the linker
+    abstained on (`ExactLinkStatus.NIL`) its gold concept id: a fallback with perfect recall
+    AND perfect precision over exactly that population, and nothing else. `LINKED_WRONG` is
+    deliberately not granted -- a fallback is never consulted when the dictionary already
+    answered -- so this bounds the fallback, not linking in general.
+
+    Granted ids are by construction gold ids, so this can never add a false positive: the
+    ceiling moves recall only. It exists because the addressable population is counted in
+    mentions while the metric is document-level concept sets, a conversion that shrank the
+    merge audit's 91 constituents to 11 concepts.
+    """
+
+    n_granted: int
+    concepts: ConceptMetrics
+    concepts_by_label: dict[str, ConceptMetrics]
+
+
+@dataclass(frozen=True)
 class E2EMetrics:
     n_documents: int
     concepts: ConceptMetrics
@@ -68,6 +90,7 @@ class E2EMetrics:
     e2e_nil_rate: float
     census: Census
     exact_link: ExactLinkAudit
+    oracle: OracleCeiling
     merge_candidates: int
     merge_candidates_linked: int
     merge_candidates_matching_gold: int
@@ -88,6 +111,9 @@ def score_end_to_end(
     """
     totals = [0, 0, 0]
     label_totals: dict[str, list[int]] = {}
+    oracle_totals = [0, 0, 0]
+    oracle_label_totals: dict[str, list[int]] = {}
+    n_granted = 0
     records: list[OutcomeRecord] = []
     link_records: list[ExactLinkRecord] = []
     n_predicted = n_linked = 0
@@ -113,14 +139,26 @@ def score_end_to_end(
         n_linked += sum(1 for e in canon if e.canonical_id is not None)
 
         records.extend(classify_outcome(m, preds) for m in doc.mentions)
-        link_records.extend(
-            r for m in doc.mentions if (r := classify_exact_link(m, canon)) is not None
-        )
+
+        # The oracle grant set: gold ids of exact-span mentions the linker abstained on.
+        granted: set[str] = set()
+        granted_by_label: dict[str, set[str]] = {}
+        for m in doc.mentions:
+            r = classify_exact_link(m, canon)
+            if r is None:
+                continue
+            link_records.append(r)
+            if r.status is ExactLinkStatus.NIL:
+                n_granted += 1
+                granted.update(m.mesh_ids)
+                granted_by_label.setdefault(m.label.value, set()).update(m.mesh_ids)
 
         gold_ids = {i for m in doc.mentions for i in m.mesh_ids}
         pred_ids = {e.canonical_id for e in canon if e.canonical_id is not None}
         counts = concept_counts(gold_ids, pred_ids)
         totals = [totals[j] + counts[j] for j in range(3)]
+        oracle_counts = concept_counts(gold_ids, pred_ids | granted)
+        oracle_totals = [oracle_totals[j] + oracle_counts[j] for j in range(3)]
 
         for label in (EntityLabel.CHEMICAL, EntityLabel.DISEASE):
             g = {i for m in doc.mentions if m.label is label for i in m.mesh_ids}
@@ -129,6 +167,10 @@ def score_end_to_end(
             per = concept_counts(g, p)
             for j in range(3):
                 slot[j] += per[j]
+            o_slot = oracle_label_totals.setdefault(label.value, [0, 0, 0])
+            o_per = concept_counts(g, p | granted_by_label.get(label.value, set()))
+            for j in range(3):
+                o_slot[j] += o_per[j]
 
     return E2EMetrics(
         n_documents=len(documents),
@@ -141,6 +183,14 @@ def score_end_to_end(
         e2e_nil_rate=(n_predicted - n_linked) / n_predicted if n_predicted else 0.0,
         census=census(records),
         exact_link=exact_link_audit(link_records),
+        oracle=OracleCeiling(
+            n_granted=n_granted,
+            concepts=metrics_from_counts(oracle_totals[0], oracle_totals[1], oracle_totals[2]),
+            concepts_by_label={
+                k: metrics_from_counts(v[0], v[1], v[2])
+                for k, v in sorted(oracle_label_totals.items())
+            },
+        ),
         merge_candidates=cand_total,
         merge_candidates_linked=cand_linked,
         merge_candidates_matching_gold=cand_gold,
@@ -189,6 +239,7 @@ def run_e2e_eval(
         "census": asdict(m.census),
         "concepts_by_label": {k: asdict(v) for k, v in m.concepts_by_label.items()},
         "exact_link": asdict(m.exact_link),
+        "oracle_exact_nil": asdict(m.oracle),
         "merge_audit": {
             "candidates": m.merge_candidates,
             "candidates_linked": m.merge_candidates_linked,

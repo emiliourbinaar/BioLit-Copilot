@@ -166,6 +166,83 @@ def test_exact_link_audit_partitions_the_census_exact_cell():
     assert m.exact_link.by_label == {"CHEMICAL": {"LINKED_CORRECT": 1, "NIL": 1}}
 
 
+def test_oracle_ceiling_grants_gold_ids_to_exact_spans_that_went_nil():
+    # "canagliflozin" is spanned exactly but absent from the dictionary -- the addressable
+    # case. The oracle grants it its gold id, converting a concept-level fn into a tp; the
+    # baseline metrics alongside it must be untouched.
+    doc = GoldDocument(
+        pmid="1",
+        text="metformin and canagliflozin",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=9,
+                text="metformin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:D008687",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=14,
+                end=27,
+                text="canagliflozin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:C000589404",),
+            ),
+        ],
+    )
+    preds = [
+        Entity(text="metformin", label=CHEMICAL, start=0, end=9),
+        Entity(text="canagliflozin", label=CHEMICAL, start=14, end=27),
+    ]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=_linker())
+
+    assert (m.concepts.tp, m.concepts.fn) == (1, 1)
+    assert m.oracle.n_granted == 1
+    assert (m.oracle.concepts.tp, m.oracle.concepts.fn) == (2, 0)
+    assert m.oracle.concepts_by_label["CHEMICAL"].tp == 2
+
+
+def test_oracle_grants_nothing_for_wrong_links_or_damaged_spans():
+    # This is what keeps the ceiling a *fallback* bound rather than a general linking bound.
+    # Mention 1: exact span, dictionary answers confidently and wrongly -- a fallback is
+    # never consulted, so no grant. Mention 2: truncated span ("metf" for "metformin") --
+    # not an exact span, so its linking outcome says nothing about dictionary coverage.
+    doc = GoldDocument(
+        pmid="1",
+        text="metformin and metformin",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=9,
+                text="metformin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:D999",),  # dictionary will return MESH:D008687 -> WRONG
+            ),
+            GoldMention(
+                pmid="1",
+                start=14,
+                end=23,
+                text="metformin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:D777",),
+            ),
+        ],
+    )
+    preds = [
+        Entity(text="metformin", label=CHEMICAL, start=0, end=9),
+        Entity(text="metf", label=CHEMICAL, start=14, end=18),
+    ]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=_linker())
+
+    assert m.exact_link.statuses == {"LINKED_WRONG": 1}
+    assert m.census.outcomes == {"EXACT": 1, "TRUNCATED": 1}
+    assert m.oracle.n_granted == 0
+    assert m.oracle.concepts == m.concepts  # ceiling collapses onto the baseline
+
+
 _EXPECTED_KEYS = {
     "timestamp",
     "git_sha",
@@ -185,6 +262,7 @@ _EXPECTED_KEYS = {
     "census",
     "concepts_by_label",
     "exact_link",
+    "oracle_exact_nil",
     "merge_audit",
 }
 

@@ -708,13 +708,70 @@ semantics collapse concepts already found elsewhere in the same document. The sa
 applies here and its magnitude is unknown, so **no claim is made about what fixing these
 1679 mentions would be worth in F1.**
 
-The measurement that would settle it is an **oracle ceiling**, built like the merge
-ablation: re-score the corpus granting every `EXACT`-but-`NIL` mention its gold id — a
-perfect fallback, with perfect precision, on exactly this population — and read off the
-concept F1. That converts "1679 mentions" into "at most +X F1" and is the number the
-fallback-vs-dictionary-expansion decision should actually turn on. It is not built yet.
+### The oracle ceiling: what a perfect fallback would be worth
 
-**Nothing here decides the SapBERT fallback.** It sizes the population and locates it.
+Re-scoring the same predictions while granting each of those 1679 mentions its gold id — a
+fallback with **perfect recall and perfect precision** over exactly that population, and
+nothing else. `LINKED_WRONG` is deliberately **not** granted: a fallback is never consulted
+when the dictionary already answered, so granting those would measure perfect *linking*, not
+a perfect *fallback*. Computed in the same pass as the baseline, so both come from identical
+predictions.
+
+| | P | R | F1 | tp | fp | fn |
+|---|---|---|---|---|---|---|
+| Baseline | 0.8822 | 0.6826 | **0.7697** | 2336 | 312 | 1086 |
+| Oracle (perfect fallback) | 0.8988 | 0.8095 | **0.8518** | 2770 | 312 | 652 |
+| **Delta** | +0.0166 | +0.1269 | **+0.0821** | **+434** | **0** | −434 |
+
+`n_granted` = 1679, exactly the audit's `NIL` count — the two reconcile. **`fp` is
+unchanged**, as the construction requires: granted ids are gold ids, so the ceiling moves
+recall only and cannot manufacture precision.
+
+**+0.0821 F1 — roughly 39× the merge ablation's +0.0021.** It closes **35.7% of the entire
+remaining gap to a perfect score**. For scale, this single population is worth more than
+every other canonicalization mechanism measured in this project combined.
+
+The mention→concept collapse this section warned about is real but mild: **1679 mentions
+convert to 434 concept-level gains (25.8%)**, a 3.9× shrink rather than the merge audit's
+8.3×. So the caution was warranted — quoting 1679 as the opportunity would have overstated
+it fourfold — but unlike the merge case the population survives the conversion at a size
+that still matters.
+
+### The ceiling is overwhelmingly a DISEASE result
+
+| Label | Baseline F1 | Oracle F1 | Delta | tp gained | Baseline R → Oracle R |
+|---|---|---|---|---|---|
+| CHEMICAL | 0.8375 | 0.8652 | **+0.0277** | +67 | 0.8013 → 0.8480 |
+| DISEASE | 0.7133 | 0.8411 | **+0.1278** | **+367** | 0.5971 → 0.7817 |
+
+**DISEASE captures 367 of the 434 concept gains — 84.6% — and its F1 moves 4.6× further
+than CHEMICAL's.** Note this is *more* concentrated than the mention-level split predicted
+(DISEASE was 59.5% of the addressable mentions but 84.6% of the realized concept gains). The
+amplification is consistent with chemical mentions repeating within an abstract, so a
+chemical missed on one mention is more often recovered from another, while disease mentions
+are more varied — but that mechanism is inferred here, not measured.
+
+DISEASE would go from the clearly weaker label (0.7133) to near parity with CHEMICAL
+(0.8411 vs 0.8652), i.e. this population accounts for most of the label gap in the headline
+number.
+
+**One fact narrows the design space considerably:** every one of these 1679 mentions has a
+MeSH concept *by definition* — the gold assigns one. Nothing is missing from MeSH; what is
+missing is the **surface→concept alias** in the CTD-derived table. That is precisely what a
+richer alias source (MeSH's own entry terms, or UMLS) supplies directly, without a model.
+
+### What this does and does not license
+
+- It is a **ceiling**, not a forecast. A real fallback resolves *some* fraction of the 1679
+  and pays a precision cost on the rest; every wrong link adds an `fp` the oracle never
+  incurs. The realized gain will be a fraction of +0.0821 and could be much smaller.
+- It does not compare the two candidate interventions. It bounds the *population* both would
+  target; it says nothing about which reaches more of it, or at what cost.
+- Single corpus, single run. The domain sample was not scored against the oracle.
+
+**Nothing here decides the SapBERT fallback.** It sizes the population, locates it in
+DISEASE, and establishes that the population is large enough for the question to be worth
+asking — which the merge ablation's +0.0021 established was *not* true of merging.
 
 ## What this changes: the 49-sentence probe was wrong on all three counts
 
@@ -865,10 +922,11 @@ caught only by running real data end to end.
    per-label fps summing to 314). Defensible for clustering, which keys on concepts rather
    than types, but it means the headline F1 does not penalize label confusion. The
    per-label rows do.
-9. **The exact-span link audit is sized in mentions, not concepts.** Its 1679 addressable
-   mentions have not been converted to a concept-level F1 ceiling (see the oracle-ceiling
-   note above), and the merge ablation showed that conversion can shrink a count by ~8×.
-   The audit locates and bounds the population; it does not price it.
+9. **The oracle ceiling assumes perfect precision, which no real linker has.** It grants
+   gold ids and therefore adds zero false positives by construction. A fallback that
+   resolves surfaces the dictionary abstained on will link some of them wrongly, costing
+   precision the ceiling never pays. +0.0821 is an upper bound that a real system cannot
+   reach, not an expected gain.
 10. **Alias coverage is not attributed per source file.** The DISEASE-concentration finding
     points at thinner disease-side CTD coverage, but the artifact builder pools all aliases
     and `MeshConcept` records no source, so that explanation is untested — an alternative
