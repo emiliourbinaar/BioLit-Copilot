@@ -72,6 +72,46 @@ def classify_outcome(gold: GoldMention, predictions: list[Entity]) -> OutcomeRec
     return OutcomeRecord(gold.label, Outcome.TRUNCATED, kind, delta)
 
 
+class ExactLinkStatus(StrEnum):
+    """How linking resolved for a gold mention whose span NER got exactly right."""
+
+    LINKED_CORRECT = "LINKED_CORRECT"
+    LINKED_WRONG = "LINKED_WRONG"
+    NIL = "NIL"
+    GOLD_UNLINKABLE = "GOLD_UNLINKABLE"  # gold carries no MeSH id; NIL is the right answer
+
+
+@dataclass(frozen=True)
+class ExactLinkRecord:
+    label: EntityLabel
+    status: ExactLinkStatus
+
+
+def classify_exact_link(gold: GoldMention, canon: list[Entity]) -> ExactLinkRecord | None:
+    """Classify linking for one gold mention, conditioned on NER having nailed the span.
+
+    Returns `None` when no canonicalized entity matches the gold span exactly -- i.e. the
+    mention's census outcome is not `EXACT`, so its linking outcome says nothing about the
+    dictionary. Restricting to exact spans is the point: it isolates "correct span, missing
+    alias" from span damage and from detection failures, which no linker change can fix.
+    """
+    matches = [
+        e for e in canon if e.label is gold.label and e.start == gold.start and e.end == gold.end
+    ]
+    if not matches:
+        return None
+    predicted = matches[0].canonical_id
+    if not gold.mesh_ids:
+        status = ExactLinkStatus.GOLD_UNLINKABLE
+    elif predicted is None:
+        status = ExactLinkStatus.NIL
+    elif predicted in gold.mesh_ids:
+        status = ExactLinkStatus.LINKED_CORRECT
+    else:
+        status = ExactLinkStatus.LINKED_WRONG
+    return ExactLinkRecord(gold.label, status)
+
+
 @dataclass(frozen=True)
 class Census:
     """Categorical breakdown of how NER covered the gold mentions.
@@ -105,4 +145,30 @@ def census(records: list[OutcomeRecord]) -> Census:
         truncation=dict(truncation),
         by_label={k: dict(v) for k, v in by_label.items()},
         truncation_by_label={k: dict(v) for k, v in truncation_by_label.items()},
+    )
+
+
+@dataclass(frozen=True)
+class ExactLinkAudit:
+    """Linking outcomes restricted to gold mentions whose span NER got exactly right.
+
+    `total` equals the census's `EXACT` count by construction, so the two reconcile: this
+    audit partitions that one census cell by what linking then did with it.
+    """
+
+    total: int
+    statuses: dict[str, int]
+    by_label: dict[str, dict[str, int]]
+
+
+def exact_link_audit(records: list[ExactLinkRecord]) -> ExactLinkAudit:
+    statuses: Counter[str] = Counter()
+    by_label: dict[str, Counter[str]] = {}
+    for record in records:
+        statuses[record.status.value] += 1
+        by_label.setdefault(record.label.value, Counter())[record.status.value] += 1
+    return ExactLinkAudit(
+        total=len(records),
+        statuses=dict(statuses),
+        by_label={k: dict(v) for k, v in by_label.items()},
     )

@@ -12,7 +12,16 @@ from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit_evals._meta import git_sha
 from biolit_evals.mesh_gold import GoldDocument
-from biolit_evals.outcome_census import Census, OutcomeRecord, census, classify_outcome
+from biolit_evals.outcome_census import (
+    Census,
+    ExactLinkAudit,
+    ExactLinkRecord,
+    OutcomeRecord,
+    census,
+    classify_exact_link,
+    classify_outcome,
+    exact_link_audit,
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +67,7 @@ class E2EMetrics:
     n_predicted_linked: int
     e2e_nil_rate: float
     census: Census
+    exact_link: ExactLinkAudit
     merge_candidates: int
     merge_candidates_linked: int
     merge_candidates_matching_gold: int
@@ -79,6 +89,7 @@ def score_end_to_end(
     totals = [0, 0, 0]
     label_totals: dict[str, list[int]] = {}
     records: list[OutcomeRecord] = []
+    link_records: list[ExactLinkRecord] = []
     n_predicted = n_linked = 0
     cand_total = cand_linked = cand_gold = merged_constituents = 0
 
@@ -102,6 +113,9 @@ def score_end_to_end(
         n_linked += sum(1 for e in canon if e.canonical_id is not None)
 
         records.extend(classify_outcome(m, preds) for m in doc.mentions)
+        link_records.extend(
+            r for m in doc.mentions if (r := classify_exact_link(m, canon)) is not None
+        )
 
         gold_ids = {i for m in doc.mentions for i in m.mesh_ids}
         pred_ids = {e.canonical_id for e in canon if e.canonical_id is not None}
@@ -126,6 +140,7 @@ def score_end_to_end(
         n_predicted_linked=n_linked,
         e2e_nil_rate=(n_predicted - n_linked) / n_predicted if n_predicted else 0.0,
         census=census(records),
+        exact_link=exact_link_audit(link_records),
         merge_candidates=cand_total,
         merge_candidates_linked=cand_linked,
         merge_candidates_matching_gold=cand_gold,
@@ -173,6 +188,7 @@ def run_e2e_eval(
         "n_predicted_linked": m.n_predicted_linked,
         "census": asdict(m.census),
         "concepts_by_label": {k: asdict(v) for k, v in m.concepts_by_label.items()},
+        "exact_link": asdict(m.exact_link),
         "merge_audit": {
             "candidates": m.merge_candidates,
             "candidates_linked": m.merge_candidates_linked,
@@ -232,6 +248,8 @@ def main(argv: list[str] | None = None) -> None:
     print(f"  census: {m.census.outcomes}")
     print(f"  truncation: {m.census.truncation}")
     print(f"  by label: {m.census.by_label}")
+    print(f"  exact-span linking (n={m.exact_link.total}): {m.exact_link.statuses}")
+    print(f"  exact-span linking by label: {m.exact_link.by_label}")
     print(
         f"  merge audit: candidates={m.merge_candidates} linked={m.merge_candidates_linked} "
         f"matching_gold={m.merge_candidates_matching_gold} "

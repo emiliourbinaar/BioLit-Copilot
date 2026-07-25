@@ -120,6 +120,52 @@ def test_merge_audit_counts_candidates_and_nil_gap_fills():
     assert m.e2e_nil_rate == pytest.approx(0.0)
 
 
+def test_exact_link_audit_partitions_the_census_exact_cell():
+    # Three gold mentions: one exact span the dictionary knows, one exact span it does not
+    # (the fallback-addressable case), one never predicted at all. The audit must cover the
+    # first two and only those -- its total is exactly the census EXACT count.
+    doc = GoldDocument(
+        pmid="1",
+        text="metformin and canagliflozin treat PCOS",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=9,
+                text="metformin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:D008687",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=14,
+                end=27,
+                text="canagliflozin",
+                label=CHEMICAL,
+                mesh_ids=("MESH:C000589404",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=34,
+                end=38,
+                text="PCOS",
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D011085",),
+            ),
+        ],
+    )
+    preds = [
+        Entity(text="metformin", label=CHEMICAL, start=0, end=9),
+        Entity(text="canagliflozin", label=CHEMICAL, start=14, end=27),
+    ]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=_linker())
+
+    assert m.census.outcomes == {"EXACT": 2, "MISSED": 1}
+    assert m.exact_link.total == m.census.outcomes["EXACT"]
+    assert m.exact_link.statuses == {"LINKED_CORRECT": 1, "NIL": 1}
+    assert m.exact_link.by_label == {"CHEMICAL": {"LINKED_CORRECT": 1, "NIL": 1}}
+
+
 _EXPECTED_KEYS = {
     "timestamp",
     "git_sha",
@@ -138,6 +184,7 @@ _EXPECTED_KEYS = {
     "n_predicted_linked",
     "census",
     "concepts_by_label",
+    "exact_link",
     "merge_audit",
 }
 
