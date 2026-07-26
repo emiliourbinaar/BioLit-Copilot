@@ -83,8 +83,20 @@ Returns `dict[str, set[EntityLabel]]` mapping concept id → labels. Reuses the 
 
 Deliberately a **`set`**, not a scalar. A concept appearing in both CTD dumps must be
 recorded as carrying both labels, not silently resolved last-write-wins — that is the
-precise shape of defect this project has repeatedly caught. The count of multi-label
-concepts is reported as a build diagnostic.
+precise shape of defect this project has repeatedly caught.
+
+Two build diagnostics, both printed and both asserted in tests:
+
+- **multi-label concepts** — count present in both dumps.
+- **orphan concepts** — count of the 192,816 concepts in the alias table with **no** entry
+  in the label map. **Expected zero, but verified rather than assumed.** The two artifacts
+  are derived from the same downloaded CTD text in the same run, so any orphan means the
+  derivation is misaligned and the label-constrained arms are silently dropping candidates.
+
+That check exists because this project has twice found derived-artifact misalignment that
+looked safe to assume and was not (the CTD column-position parse, the MeSH-enrichment
+concept overlap). A nonzero orphan count invalidates the constrained arms and must halt
+the run rather than degrade it.
 
 Written by `build_mesh.py` to `data/canon/concept_labels.json.gz` from the same
 downloaded CTD text as the alias table, so the two artifacts cannot drift.
@@ -148,6 +160,29 @@ artifact of where the grid happened to land.
 Reported per arm per threshold: precision, recall, F1, count fired, count correct, count
 wrong — plus the 1136-slice breakdown as a labeled by-product.
 
+### Mention-level counts are logged, not just concept-level aggregates
+
+Concept-level scoring is set-per-document, so several wrong mention links collapsing to
+one duplicate concept inside a document cost a **single** `fp`. The aggregate can
+therefore *understate* what the fallback actually gets wrong.
+
+This is the mirror image of the mention-count overstatement caught twice in this project
+(91→11, 543→4). There, a raw mention count overstated the value of a mechanism; here, a
+collapsed concept count understates its cost. Both get the same treatment: **log the
+underlying count, do not report only the aggregate.**
+
+The sweep therefore emits, per arm per threshold, alongside the concept-level metrics:
+
+- `mentions_fired` — raw NIL mentions the fallback linked
+- `mentions_wrong` — raw mentions linked to an id not in that mention's gold ids
+- `mentions_correct` — raw mentions linked to a gold id
+- `mentions_wrong_unaligned` — of the wrong links, those on the 1530 non-gold-aligned NIL
+  mentions, including any of the 53 `GOLD_UNLINKABLE` where NIL was the correct answer
+
+The ratio `mentions_wrong / fp` is itself reportable: it quantifies exactly how much real
+error the concept-level view is absorbing, and it must be stated wherever the F1 curve is
+cited.
+
 **Two anchors are correctness checks on the harness itself, not results:**
 
 - **threshold = 1.0** — nothing fires; the run MUST reproduce baseline F1 **0.7697** and
@@ -165,8 +200,12 @@ happened to be chosen.
 Follows the existing `biolit.canon` TDD discipline; new code gets tests regardless of size.
 
 - `build_concept_labels`: a known chemical alias and a known disease alias each resolving
-  to the correct label from CTD source text; plus a concept present in both dumps
-  producing a two-element set.
+  to the correct label from CTD source text; a concept present in both dumps producing a
+  two-element set; and an alias-table concept absent from the label map being reported as
+  an orphan (built deliberately, so the diagnostic is proven to fire rather than assumed).
+- Sweep counters: a fixture where two wrong mention links collapse to one concept `fp`,
+  asserting `mentions_wrong == 2` while `fp` increments by 1 — the understatement the
+  mention-level logging exists to expose.
 - Index: max-over-aliases returns the concept whose *best* alias matches, not its
   preferred name, on a hand-built fixture with a stub encoder.
 - Threshold gate: at 1.0 nothing fires; at 0 everything fires.
@@ -184,9 +223,9 @@ Fixtures use real CTD-shaped text. No gold MeSH ids, PMIDs, or abstract text are
   0.7697, the fallback is rejected — and per the standing "no infrastructure without a
   demonstrated consumer" rule, that branch stays unmerged with the finding documented,
   exactly as `phase-3c-mesh-alias-enrichment` was handled.
-- **Concept-level scoring may mask mention-level cost.** Duplicate concepts within a
-  document collapse, so several wrong mention links can cost a single `fp`. Note this
-  where the result is cited.
+- **Concept-level scoring masks mention-level cost.** Not merely a caveat — it is
+  structural, and it biases *against* seeing the fallback's error. Mitigated by logging
+  raw mention counts and the `mentions_wrong / fp` ratio; see the mention-level section.
 
 ## Deliverable
 
