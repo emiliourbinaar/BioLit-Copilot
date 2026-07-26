@@ -576,6 +576,38 @@ Run log: `backend/evals/e2e_runs.jsonl`. Both corpora run on **natural text** (B
 `CDR_Data.zip`, not the space-joined `tner/bc5cdr` tokens), so the Phase 2 tokenization
 confound does not apply here.
 
+---
+
+## ⭐ Headline finding of the canonicalization phase
+
+**The dominant recoverable loss is missing dictionary aliases on spans NER already got
+exactly right — worth up to +0.0821 F1, and it is overwhelmingly a DISEASE problem.**
+
+Of 9809 gold mentions, 8052 were spanned exactly by NER. **1679 of those still linked to
+nothing** because the CTD-derived alias table had no entry for the surface. Granting each
+its gold id — a perfect fallback over exactly that population — moves concept F1
+**0.7697 → 0.8518**, and **DISEASE takes 84.6% of the gain**.
+
+**For scale, against every other canonicalization mechanism this project measured:**
+
+| Mechanism | Concept F1 delta | tp gained |
+|---|---|---|
+| **Alias gap on exact spans** (ceiling) | **+0.0821** | **+434** |
+| Fragment merging (`merge_fragments`, ADR-0008) | +0.0021 | +11 |
+
+**That is a 39× difference.** The alias gap closes **35.7% of the entire remaining gap to a
+perfect score**; merging closes 0.9%. Phase 3A's ADR-0008 work was aimed at the smaller of
+the two by a wide margin — the *measurement* is what revealed which mechanism mattered, and
+neither the gold-surface linking eval nor the span census could have shown it alone.
+
+**This is a ceiling, not a forecast**, and is flagged as such at every citation. It assumes
+perfect precision over the 1679; a real linker pays false positives the oracle never incurs.
+The realized gain is unmeasured and will be smaller — possibly much smaller.
+
+Full derivation, per-label breakdown, and caveats: [The oracle ceiling](#the-oracle-ceiling-what-a-perfect-fallback-would-be-worth).
+
+---
+
 ## Concept-level results
 
 The primary metric is **concept-level P/R/F1**: per document, the set of predicted
@@ -755,10 +787,17 @@ DISEASE would go from the clearly weaker label (0.7133) to near parity with CHEM
 (0.8411 vs 0.8652), i.e. this population accounts for most of the label gap in the headline
 number.
 
-**One fact narrows the design space considerably:** every one of these 1679 mentions has a
+**One fact appears to narrow the design space:** every one of these 1679 mentions has a
 MeSH concept *by definition* — the gold assigns one. Nothing is missing from MeSH; what is
-missing is the **surface→concept alias** in the CTD-derived table. That is precisely what a
-richer alias source (MeSH's own entry terms, or UMLS) supplies directly, without a model.
+missing is the **surface→concept alias** in the CTD-derived table. That looks like something
+a richer alias source (MeSH's own entry terms, or UMLS) supplies directly, without a model.
+
+> ⚠️ **That inference was tested and is wrong.** See
+> [Testing the richer-dictionary hypothesis](#testing-the-richer-dictionary-hypothesis-a-null-result)
+> below: MeSH's own entry terms close **0.1%** of the gap. "The concept exists in MeSH" does
+> **not** imply "a fuller alias list reaches it", because the missing surfaces are
+> abbreviations and paraphrases rather than absent synonyms. The paragraph above is kept as
+> written because it is the reasoning the next measurement overturned.
 
 ### What this does and does not license
 
@@ -772,6 +811,102 @@ richer alias source (MeSH's own entry terms, or UMLS) supplies directly, without
 **Nothing here decides the SapBERT fallback.** It sizes the population, locates it in
 DISEASE, and establishes that the population is large enough for the question to be worth
 asking — which the merge ablation's +0.0021 established was *not* true of merging.
+
+## Testing the richer-dictionary hypothesis: a null result
+
+The section above reasoned that because every addressable mention *has* a MeSH concept, the
+gap must be one of **alias coverage** — fixable by a fuller, still-deterministic dictionary,
+with no model. That reasoning was explicit, it was quoted forward into planning, and
+**measurement contradicts it.**
+
+MeSH's own descriptor and supplemental-record entry terms were ingested directly from the
+2026 dumps (`desc2026` + `supp2026`), filtered to the disease and chemical branches
+(descriptor trees `C*`, `F03*`, `D*`; supplemental classes 1 and 3), and unioned with the
+CTD table. Measured model-free over all 9718 linkable gold mentions — valid because an
+`EXACT` span means the predicted surface *is* the gold surface, so the addressable
+population is a subset of gold surfaces the CTD table fails to link:
+
+| | Count | Share of the gap |
+|---|---|---|
+| CTD-NIL population (the alias gap) | 2514 | 100% |
+| **Rescued correctly by MeSH entry terms** | **3** | **0.1%** |
+| Rescued but linked wrongly | 1 | 0.0% |
+| Still NIL | 2510 | 99.8% |
+
+**A richer MeSH-derived dictionary closes essentially none of the gap.** Previously-correct
+CTD links broken by the union: **0** — so the union is harmless, just useless.
+
+The reason is visible in the alias counts: CTD contributes 551,669 aliases, MeSH 784,332,
+and their union only 819,422 — an overlap of ~517k. **CTD's `MESHSynonyms` column already
+*is* MeSH's entry terms.** Enriching CTD from MeSH re-adds what it already had.
+
+**Validation that this is a real null and not a broken ingest:** the ingest yields 271,668
+distinct concept ids, and for **2448 of the 2510** surfaces that remain NIL, the gold
+concept **is present** in the MeSH table — only the surface is missing. A parsing failure
+would have shown the concepts absent. (62, or 2.5%, are genuinely absent — mostly
+supplemental records and a few descriptors outside the kept trees, e.g. `blood urea
+nitrogen`; a small known cost of the scope filter.)
+
+### What the missing surfaces actually are
+
+Classifying the 2510, with naive punctuation-folding and depluralization as the
+"better normalization" test:
+
+| Category | Count | Share | Tractable by |
+|---|---|---|---|
+| Deterministic normalization (punctuation, plurals) | 50 | 2.0% | trivial code |
+| **Abbreviation-shaped** (`TdP`, `DOX`, `ALF`, `SSc`) | 1024 | 40.8% | **in-document abbreviation expansion** |
+| Paraphrase / other | 1436 | 57.2% | embedding similarity |
+
+Real examples of why a dictionary cannot win: `TdP` → *Torsades de Pointes*, `NO` →
+*Nitric Oxide*, `cognitive deficits` → *Cognition Disorders*, `hepatic injury` →
+*Chemical and Drug Induced Liver Injury*, `idiopathic cardiomyopathy` →
+*Cardiomyopathy, Dilated*. These are not missing synonyms; they are **author abbreviations
+and semantic paraphrases**. No controlled vocabulary enumerates them, which is why adding
+more vocabulary changed nothing.
+
+**The abbreviation share is the actionable surprise.** ~41% (an undercount — lowercase forms
+like `bort`, `dex` fall into the "paraphrase" bucket) are abbreviations that these abstracts
+typically *define on first use* — "torsades de pointes (TdP)". That is addressable by
+in-document abbreviation expansion, a deterministic, well-established technique, **not** by
+an embedding model. It is a third option that neither the earlier framing nor the fallback
+proposal contained.
+
+**Revised reading:** this is **not** a "richer alias source" problem. It splits into a
+sizeable deterministic sub-problem (abbreviations) and a genuine
+"does-a-model-generalize" sub-problem (paraphrase). The earlier inference from "the concept
+exists in MeSH" was wrong, and is corrected rather than quietly dropped.
+
+**Caveat on population:** these shares are measured over the 2514 CTD-NIL *gold-surface*
+mentions, a superset proxy for the 1679 `EXACT`-but-`NIL` mentions. The surfaces are the
+same kind and the direction is not in doubt, but the exact percentages are not the
+end-to-end population's.
+
+**Not run end to end, deliberately:** with 3 of 2514 surfaces rescued, the enriched
+dictionary's concept-level effect is bounded at approximately zero, so a model run was not
+spent to confirm a null. That is a stated decision, not an omission.
+
+### Reproducing this without the module
+
+The ingest is **deliberately not on `master`** (ADR-0011): no infrastructure without a
+demonstrated consumer, and a falsified hypothesis is not one. It is preserved on the
+unmerged branch **`phase-3c-mesh-alias-enrichment`** (`a246703`, `5e2d3d5`). Everything
+needed to rebuild it:
+
+- **Sources:** `https://nlmpubs.nlm.nih.gov/projects/mesh/MESH_FILES/xmlmesh/desc2026.gz`
+  (16 MB) and `.../supp2026.gz` (45 MB). Note the year in the filename — the directory
+  listing is the reliable way to find the current release.
+- **Parse:** stream with `iterparse` (uncompressed dumps are hundreds of MB). Per record
+  take `DescriptorName/String` (or `SupplementalRecordName/String`) as the preferred alias
+  and every `ConceptList/Concept/TermList/Term/String` as a synonym; id is `MESH:` + UI.
+- **Scope filter (load-bearing):** descriptors whose `TreeNumberList` contains a number
+  starting `C<digit>`, `D<digit>`, or `F03`; supplemental records with **`SCRClass`** in
+  {`1` chemical, `3` disease}. The attribute is `SCRClass`, **not**
+  `SupplementalRecordType`. Without this filter the table gains anatomy, organism and
+  technique surfaces that a CHEMICAL/DISEASE span can match wrongly.
+- **Expected figures if reproduced correctly:** 153,539 aliases after descriptors, 784,332
+  after supplementals, 819,422 in union with CTD, 271,668 distinct concept ids, and 3/2514
+  rescued.
 
 ## What this changes: the 49-sentence probe was wrong on all three counts
 
