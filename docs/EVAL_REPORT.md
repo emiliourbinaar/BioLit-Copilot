@@ -886,6 +886,60 @@ end-to-end population's.
 dictionary's concept-level effect is bounded at approximately zero, so a model run was not
 spent to confirm a null. That is a stated decision, not an omission.
 
+### Splitting the ceiling: abbreviations are nearly worthless at concept level
+
+The classification above suggested ~41% of the gap was abbreviations, reachable
+deterministically. That is a **mention-level** share, so it was measured against the metric
+instead — the same oracle-ablation pattern, granting gold ids only to the subset a
+deterministic mechanism would reach.
+
+"Abbreviation-addressable" is defined by whether the mechanism *actually works*: the surface
+is defined in that document as `long form (SHORT)`, **and** expanding it links to the gold
+concept. Not a shape heuristic — that would count abbreviations whose long form the
+dictionary cannot resolve either.
+
+| Slice | Mentions | Share | tp gained | F1 delta |
+|---|---|---|---|---|
+| **All** `EXACT`-but-`NIL` | 1679 | 100% | +434 | **+0.0821** |
+| Abbreviation-addressable | 543 | 32.3% | **+4** | **+0.0008** |
+| Paraphrase / other | 1136 | 67.7% | +431 | **+0.0816** |
+
+**A third of the population is worth 1% of the value.** In-document abbreviation expansion —
+the deterministic mechanism that looked like the cheap win — is worth **+0.0008 F1**.
+Per label it is +0 concepts for CHEMICAL and +4 for DISEASE.
+
+**The mechanism is obvious in hindsight and worth stating, because it generalizes.** An
+abbreviation that is *defined in the document* has its **long form in that same document**
+— that is what "defined" means. The long form is itself a mention, and the dictionary
+usually links it. So the concept is *already in the document's predicted set*, and granting
+the abbreviation mention adds nothing the document did not already have. Document-level set
+semantics absorb the entire slice.
+
+Paraphrase surfaces behave the opposite way: `cognitive deficits` or `hepatic injury` are
+often the *only* way that concept appears in the abstract, so recovering them adds genuinely
+new concepts — which is why 1136 mentions convert to 431 concepts (38%) while 543 convert to
+4 (0.7%).
+
+**This is the third time mention counts have overstated concept-level value in this
+project** — merging 91 → 11, abbreviations 543 → 4, paraphrase 1136 → 431. The pattern is
+now established well enough to treat any mention-count opportunity claim as unpriced until
+ablated. (The two slices sum to +435 against the combined +434: one concept is reachable
+from both slices in the same document.)
+
+**Consequence for scoping.** The deterministic route does not compete with the embedding
+route for this metric — **paraphrase is ~99% of the ceiling (+0.0816 of +0.0821)**, not the
+~57% the mention-level split implied. If an embedding fallback is built, its target is the
+paraphrase slice, and abbreviation expansion should *not* be scoped as a cheaper alternative
+to it.
+
+> **Scope condition on that conclusion.** It holds for **document-level concept-set
+> scoring**, which is what clustering consumes. A consumer needing *mention-level* canonical
+> ids — per-mention evidence attribution, or contradiction detection that ties a claim to
+> the specific mention asserting it — would value the abbreviation slice far higher, since
+> 543 mentions would carry a correct id instead of NIL. This result retires abbreviation
+> expansion for **clustering**, not for the pipeline in general, and Phase 4/5 should revisit
+> it against their own metric rather than inheriting this conclusion.
+
 ### Reproducing this without the module
 
 The ingest is **deliberately not on `master`** (ADR-0011): no infrastructure without a

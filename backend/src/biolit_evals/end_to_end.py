@@ -11,6 +11,7 @@ from biolit.canon.linker import Linker
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit_evals._meta import git_sha
+from biolit_evals.abbreviations import find_abbreviations
 from biolit_evals.mesh_gold import GoldDocument
 from biolit_evals.outcome_census import (
     Census,
@@ -91,10 +92,34 @@ class E2EMetrics:
     census: Census
     exact_link: ExactLinkAudit
     oracle: OracleCeiling
+    # The same ceiling partitioned by whether a DETERMINISTIC in-document abbreviation
+    # expansion would reach the mention. Only `oracle_paraphrase` is embedding territory.
+    oracle_abbrev: OracleCeiling
+    oracle_paraphrase: OracleCeiling
     merge_candidates: int
     merge_candidates_linked: int
     merge_candidates_matching_gold: int
     merged_constituents: int
+
+
+_ORACLE_VARIANTS = ("all", "abbrev", "para")
+
+
+def _ceiling(
+    variant: str,
+    n_granted: int,
+    totals: dict[str, list[int]],
+    label_totals: dict[str, dict[str, list[int]]],
+) -> OracleCeiling:
+    t = totals[variant]
+    return OracleCeiling(
+        n_granted=n_granted,
+        concepts=metrics_from_counts(t[0], t[1], t[2]),
+        concepts_by_label={
+            k: metrics_from_counts(v[0], v[1], v[2])
+            for k, v in sorted(label_totals[variant].items())
+        },
+    )
 
 
 def score_end_to_end(
@@ -111,9 +136,9 @@ def score_end_to_end(
     """
     totals = [0, 0, 0]
     label_totals: dict[str, list[int]] = {}
-    oracle_totals = [0, 0, 0]
-    oracle_label_totals: dict[str, list[int]] = {}
-    n_granted = 0
+    oracle_totals: dict[str, list[int]] = {v: [0, 0, 0] for v in _ORACLE_VARIANTS}
+    oracle_label_totals: dict[str, dict[str, list[int]]] = {v: {} for v in _ORACLE_VARIANTS}
+    n_granted = {"abbrev": 0, "para": 0}
     records: list[OutcomeRecord] = []
     link_records: list[ExactLinkRecord] = []
     n_predicted = n_linked = 0
@@ -140,25 +165,38 @@ def score_end_to_end(
 
         records.extend(classify_outcome(m, preds) for m in doc.mentions)
 
-        # The oracle grant set: gold ids of exact-span mentions the linker abstained on.
-        granted: set[str] = set()
-        granted_by_label: dict[str, set[str]] = {}
+        # The oracle grant sets: gold ids of exact-span mentions the linker abstained on,
+        # partitioned by whether in-document abbreviation expansion would have reached them.
+        abbrevs = find_abbreviations(doc.text)
+        granted: dict[str, set[str]] = {v: set() for v in _ORACLE_VARIANTS}
+        granted_by_label: dict[str, dict[str, set[str]]] = {v: {} for v in _ORACLE_VARIANTS}
         for m in doc.mentions:
             r = classify_exact_link(m, canon)
             if r is None:
                 continue
             link_records.append(r)
-            if r.status is ExactLinkStatus.NIL:
-                n_granted += 1
-                granted.update(m.mesh_ids)
-                granted_by_label.setdefault(m.label.value, set()).update(m.mesh_ids)
+            if r.status is not ExactLinkStatus.NIL:
+                continue
+            # Abbreviation-addressable means the mechanism actually works: the surface is
+            # defined in this document AND expanding it links to the gold concept. A
+            # shape heuristic would count abbreviations whose long form the dictionary
+            # cannot resolve either, overstating the deterministic share.
+            long_form = abbrevs.get(m.text) or abbrevs.get(m.text.strip())
+            expanded = linker.link(long_form).concept if long_form else None
+            variant = "abbrev" if expanded is not None and expanded.id in m.mesh_ids else "para"
+            n_granted[variant] += 1
+            for v in ("all", variant):
+                granted[v].update(m.mesh_ids)
+                granted_by_label[v].setdefault(m.label.value, set()).update(m.mesh_ids)
 
         gold_ids = {i for m in doc.mentions for i in m.mesh_ids}
         pred_ids = {e.canonical_id for e in canon if e.canonical_id is not None}
         counts = concept_counts(gold_ids, pred_ids)
         totals = [totals[j] + counts[j] for j in range(3)]
-        oracle_counts = concept_counts(gold_ids, pred_ids | granted)
-        oracle_totals = [oracle_totals[j] + oracle_counts[j] for j in range(3)]
+        for v in _ORACLE_VARIANTS:
+            oc = concept_counts(gold_ids, pred_ids | granted[v])
+            for j in range(3):
+                oracle_totals[v][j] += oc[j]
 
         for label in (EntityLabel.CHEMICAL, EntityLabel.DISEASE):
             g = {i for m in doc.mentions if m.label is label for i in m.mesh_ids}
@@ -167,10 +205,11 @@ def score_end_to_end(
             per = concept_counts(g, p)
             for j in range(3):
                 slot[j] += per[j]
-            o_slot = oracle_label_totals.setdefault(label.value, [0, 0, 0])
-            o_per = concept_counts(g, p | granted_by_label.get(label.value, set()))
-            for j in range(3):
-                o_slot[j] += o_per[j]
+            for v in _ORACLE_VARIANTS:
+                o_slot = oracle_label_totals[v].setdefault(label.value, [0, 0, 0])
+                o_per = concept_counts(g, p | granted_by_label[v].get(label.value, set()))
+                for j in range(3):
+                    o_slot[j] += o_per[j]
 
     return E2EMetrics(
         n_documents=len(documents),
@@ -183,14 +222,9 @@ def score_end_to_end(
         e2e_nil_rate=(n_predicted - n_linked) / n_predicted if n_predicted else 0.0,
         census=census(records),
         exact_link=exact_link_audit(link_records),
-        oracle=OracleCeiling(
-            n_granted=n_granted,
-            concepts=metrics_from_counts(oracle_totals[0], oracle_totals[1], oracle_totals[2]),
-            concepts_by_label={
-                k: metrics_from_counts(v[0], v[1], v[2])
-                for k, v in sorted(oracle_label_totals.items())
-            },
-        ),
+        oracle=_ceiling("all", sum(n_granted.values()), oracle_totals, oracle_label_totals),
+        oracle_abbrev=_ceiling("abbrev", n_granted["abbrev"], oracle_totals, oracle_label_totals),
+        oracle_paraphrase=_ceiling("para", n_granted["para"], oracle_totals, oracle_label_totals),
         merge_candidates=cand_total,
         merge_candidates_linked=cand_linked,
         merge_candidates_matching_gold=cand_gold,
@@ -240,6 +274,8 @@ def run_e2e_eval(
         "concepts_by_label": {k: asdict(v) for k, v in m.concepts_by_label.items()},
         "exact_link": asdict(m.exact_link),
         "oracle_exact_nil": asdict(m.oracle),
+        "oracle_abbrev": asdict(m.oracle_abbrev),
+        "oracle_paraphrase": asdict(m.oracle_paraphrase),
         "merge_audit": {
             "candidates": m.merge_candidates,
             "candidates_linked": m.merge_candidates_linked,
