@@ -249,23 +249,31 @@ def test_oracle_splits_into_abbreviation_addressable_and_the_rest():
     # by any expansion. The split must attribute one to each.
     tdp = MeshConcept(id="MESH:D016171", name="Torsades de Pointes")
     linker = DictionaryLinker(MeshDictionary({"torsades de pointes": [AliasEntry(tdp, True)]}))
-    text = "Torsades de pointes (TdP) followed. TdP and hepatic injury were seen."
+    # Document-length text, so this exercises the real path rather than the fragment guard.
+    text = (
+        "Torsades de pointes (TdP) is a recognised complication of QT-prolonging therapy. "
+        "We reviewed two hundred and forty consecutive admissions across a four-year period "
+        "at a single tertiary centre and assessed the outcomes. TdP and hepatic injury were "
+        "seen in a minority of patients, and all episodes resolved after withdrawal."
+    )
+    tdp_at = text.index("TdP", text.index("assessed"))
+    inj_at = text.index("hepatic injury")
     doc = GoldDocument(
         pmid="1",
         text=text,
         mentions=[
             GoldMention(
                 pmid="1",
-                start=36,
-                end=39,
+                start=tdp_at,
+                end=tdp_at + 3,
                 text="TdP",
                 label=EntityLabel.DISEASE,
                 mesh_ids=("MESH:D016171",),
             ),
             GoldMention(
                 pmid="1",
-                start=44,
-                end=58,
+                start=inj_at,
+                end=inj_at + 14,
                 text="hepatic injury",
                 label=EntityLabel.DISEASE,
                 mesh_ids=("MESH:D056486",),
@@ -273,8 +281,8 @@ def test_oracle_splits_into_abbreviation_addressable_and_the_rest():
         ],
     )
     preds = [
-        Entity(text="TdP", label=EntityLabel.DISEASE, start=36, end=39),
-        Entity(text="hepatic injury", label=EntityLabel.DISEASE, start=44, end=58),
+        Entity(text="TdP", label=EntityLabel.DISEASE, start=tdp_at, end=tdp_at + 3),
+        Entity(text="hepatic injury", label=EntityLabel.DISEASE, start=inj_at, end=inj_at + 14),
     ]
     m = score_end_to_end([doc], predict=lambda _t: preds, linker=linker)
 
@@ -284,6 +292,36 @@ def test_oracle_splits_into_abbreviation_addressable_and_the_rest():
     # The abbreviation slice recovers the concept its expansion resolves to, and only that.
     assert m.oracle_abbrev.concepts.tp == 1
     assert m.oracle_paraphrase.concepts.tp == 1
+
+
+def test_fragment_documents_skip_abbreviation_expansion_and_are_counted():
+    # A single sentence cannot contain a definition that licenses expansion elsewhere in
+    # the document. Rather than silently finding nothing -- indistinguishable from "no
+    # abbreviations here" -- the run records that it declined to try.
+    tdp = MeshConcept(id="MESH:D016171", name="Torsades de Pointes")
+    linker = DictionaryLinker(MeshDictionary({"torsades de pointes": [AliasEntry(tdp, True)]}))
+    doc = GoldDocument(
+        pmid="1",
+        text="TdP occurred.",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=3,
+                text="TdP",
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D016171",),
+            )
+        ],
+    )
+    preds = [Entity(text="TdP", label=EntityLabel.DISEASE, start=0, end=3)]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=linker)
+
+    assert m.abbrev_context_skipped == 1
+    # The mention is still counted in the ceiling -- it just cannot be credited to the
+    # deterministic slice on evidence this document does not contain.
+    assert m.oracle.n_granted == 1
+    assert m.oracle_abbrev.n_granted == 0
 
 
 _EXPECTED_KEYS = {
@@ -306,6 +344,7 @@ _EXPECTED_KEYS = {
     "concepts_by_label",
     "exact_link",
     "oracle_exact_nil",
+    "abbrev_context_skipped",
     "oracle_abbrev",
     "oracle_paraphrase",
     "merge_audit",

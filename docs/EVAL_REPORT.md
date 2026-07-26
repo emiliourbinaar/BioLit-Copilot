@@ -886,7 +886,15 @@ end-to-end population's.
 dictionary's concept-level effect is bounded at approximately zero, so a model run was not
 spent to confirm a null. That is a stated decision, not an omission.
 
-### Splitting the ceiling: abbreviations are nearly worthless at concept level
+### Splitting the ceiling: abbreviations are nearly worthless at concept level *for clustering*
+
+> **Read the scope before the number.** Everything in this section is measured against
+> **document-level concept-set scoring** — the metric clustering consumes. It establishes
+> that abbreviation expansion is not worth building **for clustering**. It does **not**
+> establish that abbreviation expansion isn't worth building, and must not be cited that
+> way. The entire reason the number is small is a property of the *metric*, not of the
+> mechanism: see [why](#why-the-slice-vanishes) below. Against a **mention-level** metric
+> the same 543 mentions are 543 real corrections.
 
 The classification above suggested ~41% of the gap was abbreviations, reachable
 deterministically. That is a **mention-level** share, so it was measured against the metric
@@ -907,6 +915,8 @@ dictionary cannot resolve either.
 **A third of the population is worth 1% of the value.** In-document abbreviation expansion —
 the deterministic mechanism that looked like the cheap win — is worth **+0.0008 F1**.
 Per label it is +0 concepts for CHEMICAL and +4 for DISEASE.
+
+#### Why the slice vanishes
 
 **The mechanism is obvious in hindsight and worth stating, because it generalizes.** An
 abbreviation that is *defined in the document* has its **long form in that same document**
@@ -932,13 +942,64 @@ route for this metric — **paraphrase is ~99% of the ceiling (+0.0816 of +0.082
 paraphrase slice, and abbreviation expansion should *not* be scoped as a cheaper alternative
 to it.
 
-> **Scope condition on that conclusion.** It holds for **document-level concept-set
-> scoring**, which is what clustering consumes. A consumer needing *mention-level* canonical
-> ids — per-mention evidence attribution, or contradiction detection that ties a claim to
-> the specific mention asserting it — would value the abbreviation slice far higher, since
-> 543 mentions would carry a correct id instead of NIL. This result retires abbreviation
-> expansion for **clustering**, not for the pipeline in general, and Phase 4/5 should revisit
-> it against their own metric rather than inheriting this conclusion.
+#### Scope limitation (restated deliberately — this is half the finding)
+
+**Retired for clustering. Open for the rest of the pipeline.**
+
+The +0.0008 is small *because document-level set semantics hide the correction*, not because
+the correction is wrong. All 543 mentions genuinely go from NIL to a correct concept id; the
+metric simply cannot see it, because the same concept was already recovered from the long
+form elsewhere in the document.
+
+Any consumer that reads canonical ids **per mention** rather than per document therefore
+gets the full value:
+
+- **Phase 4 (extraction / evidence attribution)** — a claim anchored to the mention `TdP`
+  carries no concept id today. Its long form being linked three sentences away does not help
+  a per-mention lookup.
+- **Phase 5 (contradiction detection)** — comparing two papers' claims requires resolving
+  the entity *in the claim*, not somewhere in the abstract.
+
+Both should **re-measure against their own metric**, not inherit this result. `oracle_abbrev`
+and `oracle_paraphrase` are logged on every e2e run precisely so that re-measurement has a
+baseline to compare against.
+
+**The one-line version for anyone citing this:** *abbreviation expansion buys nothing for
+clustering and may still be necessary for mention-level work.*
+
+### The precondition guard (fail closed, not documented-and-hoped)
+
+Abbreviation expansion needs the **whole document** — the defining `long form (SHORT)` is
+usually sentences away from the mentions it licenses. Handed a fragment it finds nothing,
+which is **indistinguishable from "this document had no abbreviations"**. Documentation
+alone was judged insufficient: undetected precondition violations are a recurring failure
+category here (the 512-token truncation crash, the unconditional merge, the CTD column
+schema all shipped green test suites).
+
+`biolit.canon.context.check_document_context(entities, text)` reports two kinds of failure:
+
+- **Provable** — a span out of bounds, or not slicing to its own entity text. The caller
+  passed text that is definitively not the document these entities came from.
+- **Heuristic** — the text is shaped like a fragment. *No provable check can catch this
+  one*: a sentence and the entities extracted from it are perfectly self-consistent, so only
+  the shape of the text betrays it.
+
+The scorer consults it, **skips** expansion, logs the reason, and reports
+`abbrev_context_skipped` in the run log — the skip is recorded rather than inferred from a
+zero.
+
+**Calibration, measured rather than assumed.** Requiring at least one sentence break
+separates the corpora perfectly on its own: **0 of 500** BC5CDR abstracts flagged, **49 of
+49** domain sentences flagged. A character floor contributes nothing at any value up to 200
+and begins producing false positives at 250 (2 real abstracts). The shortest real BC5CDR
+abstract is **204** characters, so an initial 200-char floor sat 4 characters from firing on
+real data; it was lowered to 100 as a pure backstop against degenerate input. **`0` skips on
+BC5CDR also confirms the +0.0008 abbreviation figure above is not an artifact of the guard
+suppressing the mechanism.**
+
+The domain corpus result is the guard doing its job: those 49 "documents" are single
+sentences, so abbreviation expansion is **structurally unmeasurable** there — previously
+that would have silently reported zero.
 
 ### Reproducing this without the module
 

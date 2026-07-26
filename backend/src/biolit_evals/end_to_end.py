@@ -1,11 +1,13 @@
 import argparse
 import json
+import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 from biolit.canon.canonicalize import canonicalize
+from biolit.canon.context import check_document_context
 from biolit.canon.fragments import merge_fragments
 from biolit.canon.linker import Linker
 from biolit.domain.enums import EntityLabel
@@ -94,6 +96,7 @@ class E2EMetrics:
     oracle: OracleCeiling
     # The same ceiling partitioned by whether a DETERMINISTIC in-document abbreviation
     # expansion would reach the mention. Only `oracle_paraphrase` is embedding territory.
+    abbrev_context_skipped: int
     oracle_abbrev: OracleCeiling
     oracle_paraphrase: OracleCeiling
     merge_candidates: int
@@ -101,6 +104,8 @@ class E2EMetrics:
     merge_candidates_matching_gold: int
     merged_constituents: int
 
+
+logger = logging.getLogger(__name__)
 
 _ORACLE_VARIANTS = ("all", "abbrev", "para")
 
@@ -139,6 +144,7 @@ def score_end_to_end(
     oracle_totals: dict[str, list[int]] = {v: [0, 0, 0] for v in _ORACLE_VARIANTS}
     oracle_label_totals: dict[str, dict[str, list[int]]] = {v: {} for v in _ORACLE_VARIANTS}
     n_granted = {"abbrev": 0, "para": 0}
+    abbrev_context_skipped = 0
     records: list[OutcomeRecord] = []
     link_records: list[ExactLinkRecord] = []
     n_predicted = n_linked = 0
@@ -167,7 +173,15 @@ def score_end_to_end(
 
         # The oracle grant sets: gold ids of exact-span mentions the linker abstained on,
         # partitioned by whether in-document abbreviation expansion would have reached them.
-        abbrevs = find_abbreviations(doc.text)
+        # Fail closed: a mechanism that needs the whole document must not quietly return
+        # nothing when handed a fragment. Skipping is recorded, not inferred from a zero.
+        context = check_document_context(preds, doc.text)
+        if context.ok:
+            abbrevs = find_abbreviations(doc.text)
+        else:
+            abbrevs = {}
+            abbrev_context_skipped += 1
+            logger.warning("skipping abbreviation expansion for %s: %s", doc.pmid, context.reason)
         granted: dict[str, set[str]] = {v: set() for v in _ORACLE_VARIANTS}
         granted_by_label: dict[str, dict[str, set[str]]] = {v: {} for v in _ORACLE_VARIANTS}
         for m in doc.mentions:
@@ -223,6 +237,7 @@ def score_end_to_end(
         census=census(records),
         exact_link=exact_link_audit(link_records),
         oracle=_ceiling("all", sum(n_granted.values()), oracle_totals, oracle_label_totals),
+        abbrev_context_skipped=abbrev_context_skipped,
         oracle_abbrev=_ceiling("abbrev", n_granted["abbrev"], oracle_totals, oracle_label_totals),
         oracle_paraphrase=_ceiling("para", n_granted["para"], oracle_totals, oracle_label_totals),
         merge_candidates=cand_total,
@@ -274,6 +289,7 @@ def run_e2e_eval(
         "concepts_by_label": {k: asdict(v) for k, v in m.concepts_by_label.items()},
         "exact_link": asdict(m.exact_link),
         "oracle_exact_nil": asdict(m.oracle),
+        "abbrev_context_skipped": m.abbrev_context_skipped,
         "oracle_abbrev": asdict(m.oracle_abbrev),
         "oracle_paraphrase": asdict(m.oracle_paraphrase),
         "merge_audit": {
