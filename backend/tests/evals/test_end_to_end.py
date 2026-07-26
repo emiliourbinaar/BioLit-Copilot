@@ -243,6 +243,49 @@ def test_oracle_grants_nothing_for_wrong_links_or_damaged_spans():
     assert m.oracle.concepts == m.concepts  # ceiling collapses onto the baseline
 
 
+def test_oracle_splits_into_abbreviation_addressable_and_the_rest():
+    # "TdP" is defined in the document and its long form links, so deterministic in-document
+    # expansion would reach it. "hepatic injury" is a paraphrase the dictionary cannot reach
+    # by any expansion. The split must attribute one to each.
+    tdp = MeshConcept(id="MESH:D016171", name="Torsades de Pointes")
+    linker = DictionaryLinker(MeshDictionary({"torsades de pointes": [AliasEntry(tdp, True)]}))
+    text = "Torsades de pointes (TdP) followed. TdP and hepatic injury were seen."
+    doc = GoldDocument(
+        pmid="1",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=36,
+                end=39,
+                text="TdP",
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D016171",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=44,
+                end=58,
+                text="hepatic injury",
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D056486",),
+            ),
+        ],
+    )
+    preds = [
+        Entity(text="TdP", label=EntityLabel.DISEASE, start=36, end=39),
+        Entity(text="hepatic injury", label=EntityLabel.DISEASE, start=44, end=58),
+    ]
+    m = score_end_to_end([doc], predict=lambda _t: preds, linker=linker)
+
+    assert m.oracle.n_granted == 2
+    assert m.oracle_abbrev.n_granted == 1
+    assert m.oracle_paraphrase.n_granted == 1
+    # The abbreviation slice recovers the concept its expansion resolves to, and only that.
+    assert m.oracle_abbrev.concepts.tp == 1
+    assert m.oracle_paraphrase.concepts.tp == 1
+
+
 _EXPECTED_KEYS = {
     "timestamp",
     "git_sha",
@@ -263,6 +306,8 @@ _EXPECTED_KEYS = {
     "concepts_by_label",
     "exact_link",
     "oracle_exact_nil",
+    "oracle_abbrev",
+    "oracle_paraphrase",
     "merge_audit",
 }
 
