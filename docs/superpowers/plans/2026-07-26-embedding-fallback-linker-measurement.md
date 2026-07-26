@@ -652,6 +652,44 @@ Run: `uv run pytest tests/evals/test_embedding_pilot.py -m heavy -s -v`
 
 **Report the projected full-build time before continuing.** If it projects beyond ~60 minutes, stop and raise it as a scope question rather than absorbing it.
 
+- [ ] **Step 6b: Semantic sanity check on the encoder — REQUIRED, not optional**
+
+A shape assertion passes on a silently broken or misconfigured encoder producing
+correctly-shaped garbage. That matters here more than usual: **a negative result is
+pre-committed to reject the fallback and leave the branch unmerged.** That verdict is
+only trustworthy if a negative means the model genuinely does not help, rather than that
+the encoder was broken. A shape check cannot distinguish those; this can, cheaply.
+
+Add to the same file:
+
+```python
+@pytest.mark.heavy
+def test_a_known_synonym_pair_scores_above_an_unrelated_pair():
+    """Guards the pre-committed negative-result path: proves a null came from the model
+    not helping, not from a degenerate encoder."""
+    s = get_settings()
+    # Metformin/Glucophage is a real CTD synonym pair (MESH:D008687). No ids invented.
+    vecs = encode(
+        ["metformin", "glucophage", "polycystic ovary syndrome"],
+        model_id=s.sapbert_model_id, batch_size=s.sapbert_batch_size,
+        device="cpu", max_length=s.sapbert_max_length,
+    )
+    synonym = float(vecs[0] @ vecs[1])
+    unrelated = float(vecs[0] @ vecs[2])
+    print(f"\nsynonym={synonym:.3f} unrelated={unrelated:.3f}")
+    assert synonym > unrelated, (
+        f"SapBERT scored a known synonym pair ({synonym:.3f}) no higher than an "
+        f"unrelated pair ({unrelated:.3f}) -- the encoder is broken or misconfigured, "
+        "and any null result from the sweep would be uninterpretable."
+    )
+```
+
+Run: `uv run pytest tests/evals/test_embedding_pilot.py -m heavy -s -v`
+
+**If this fails, STOP.** Do not proceed to the index build or the sweep — a null result
+from a broken encoder is worse than no measurement, because it would be recorded as
+evidence against the fallback.
+
 - [ ] **Step 7: Gate and commit**
 
 ```bash
