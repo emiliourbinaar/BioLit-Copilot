@@ -1140,6 +1140,200 @@ Like the CTD schema defect above, this is recorded rather than quietly fixed: bo
 cases where a green test suite coexisted with broken behavior on real input, and both were
 caught only by running real data end to end.
 
+## Phase 3C: pricing the embedding fallback — a real but weak positive
+
+> **Read the scope before the number.** Everything here is measured against
+> **document-level concept-set scoring** — the metric clustering consumes. It establishes
+> that an embedding fallback is not worth **shipping for clustering** at its current
+> quality. It does **not** establish that the paraphrase gap is unreachable, and it does
+> **not** transfer to mention-level consumers. See
+> [Scope limitation](#scope-limitation-this-is-a-clustering-verdict-not-a-pipeline-verdict)
+> below — the same discipline applied to abbreviation expansion applies here, in the
+> opposite direction.
+
+The oracle ceiling priced the `EXACT`-but-`NIL` population at **+0.0821 F1**, and the
+ceiling-splitting analysis showed **paraphrase is ~99% of it (+0.0816)**. But that ceiling
+is **recall-only by construction** — granting gold ids converts `fn`→`tp` and can never add
+a false positive, which is why `fp` stayed pinned at 312 across all four oracle variants.
+Its distance from reality was entirely unmeasured.
+
+This section closes that gap: **what a real fallback linker actually costs in precision**,
+as a curve over its confidence threshold, measured over the **full 3209-mention NIL
+population** rather than the favorable 1136-mention paraphrase slice.
+
+### The three numbers that decide this
+
+The headline ΔF1 is the *least* informative figure here, and citing it alone oversells the
+result. The argument against shipping rests on these three:
+
+| # | Measure | Value | Why it matters |
+|---|---|---|---|
+| 1 | **Mention-level precision at the peak** | **53.9%** (365 correct / 677 fired) | At its own best operating point the fallback is barely better than a coin flip. Every second link it makes is wrong. |
+| 2 | **`mentions_wrong` / Δ`fp`** | **2.89** | 312 wrong mention links cost only 108 *new* false positives. Concept-level scoring absorbs ~2.9 wrong links per error it reports — the apparent value depends on the metric hiding the cost. |
+| 3 | **Realized gain / oracle ceiling** | **24%** (+0.0200 of +0.0821) | A naive top-1 embedding linker recovers a quarter of the theoretical maximum. Three quarters of the ceiling stays out of reach. |
+
+**On #2 specifically — the logged field is the weaker of the two ratios.** The sweep emits
+`mentions_wrong / fp` using **total** `fp` (312/420 = **0.743**), but that denominator
+includes the 312 false positives the dictionary already had. The quantity that answers "how
+much error is the concept view absorbing" is `mentions_wrong / Δfp`. It is consistent across
+all four arms: **2.89 / 2.76 / 2.32 / 2.72**. Cite the delta ratio; the logged field is
+diluted.
+
+### The curve: full 3209 NIL population, argmax-F1 breakpoint
+
+Baseline (dictionary only, no fallback): **P 0.8822 / R 0.6826 / F1 0.7697**, `fp` 312.
+
+| arm | thr | P | R | **F1** | ΔF1 | `fp` | fired | correct | wrong | wrong on non-aligned | mention P | wrong/Δfp |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **SapBERT, label-constrained** | 0.9098 | 0.8565 | 0.7326 | **0.7897** | **+0.0200** | 420 | 677 | 365 | 312 | 219 | **53.9%** | **2.89** |
+| SapBERT, unconstrained | 0.9126 | 0.8540 | 0.7314 | 0.7880 | +0.0183 | 428 | 669 | 349 | 320 | 218 | 52.2% | 2.76 |
+| TF-IDF, label-constrained | 0.8533 | 0.8563 | 0.7086 | 0.7755 | +0.0058 | 407 | 348 | 128 | 220 | 147 | 36.8% | 2.32 |
+| TF-IDF, unconstrained | 0.8852 | 0.8758 | 0.6946 | 0.7748 | +0.0051 | 337 | 132 | 64 | 68 | 47 | 48.5% | 2.72 |
+
+The sweep is computed **by breakpoint, not on a grid**: every distinct top-1 similarity is
+a threshold, yielding 1345–1376 exact points per arm, so the peak is never an artifact of
+where a grid landed. Full curves are in `backend/evals/fallback_sweep.jsonl`.
+
+**Shape:** a clean single peak in every arm. Firing on everything is *worse than not firing*
+— at threshold 0.57 SapBERT unconstrained scores **F1 0.7027**, well below the 0.7697
+baseline. F1 climbs to its peak near 0.91 and returns to baseline at 1.0. **An unthresholded
+embedding fallback actively harms this pipeline.**
+
+**Label-constraining helps slightly and costs nothing:** +0.0017 F1 (0.7880 → 0.7897). The
+concept→label map is built from the same CTD download as the alias table in the same run, so
+the two artifacts cannot drift; the build asserts **0 orphan concepts** (verified, not
+assumed) and reports **79 multi-label concepts** — the empirical justification for the map
+being `dict[str, set[EntityLabel]]` rather than a scalar. A last-write-wins scalar would have
+silently mislabeled all 79.
+
+### This is *not* the MeSH-ingest null. The effect is genuine.
+
+**ADR-0011 rejected dictionary enrichment because the effect did not exist** — 3 rescued
+surfaces out of 2514, a measured zero. **This is a different verdict on different evidence.**
+The effect here is real, statistically unambiguous, and correctly attributed:
+
+**SapBERT beats the character n-gram TF-IDF control by 3.4× (+0.0200 vs +0.0058).**
+
+That control existed precisely so a gain could not be credited to the model until plain
+fuzzy string matching was ruled out as the explanation — the same discipline that produced
+the enrichment null. It was not ruled in. Character n-grams over the identical 552,756 alias
+rows, with identical preprocessing (`normalize_surface`) and the identical sweep, recover
+under a third of the gain. The mechanism doing the work is **semantic generalization, not
+string similarity**, and the two are materially different builds.
+
+So the finding is: **the paraphrase gap is real, it needs a model rather than a better string
+matcher, and the obvious model recovers only a quarter of it at ~54% mention precision.**
+The reason not to ship is **cost and fragility relative to value**, not absence of effect.
+
+### Why the full population, and what the slice would have hidden
+
+The measurement covers all **3209** NIL mentions, not the 1679 gold-aligned ones and not the
+1136 paraphrase slice. A real linker cannot see gold alignment, so it fires on all 3209;
+every confident wrong link among the **1530 non-gold-aligned** NILs (truncated spans,
+spurious NER output, and the 53 `GOLD_UNLINKABLE` mentions where **NIL is the correct
+answer**) is a false positive a 1136-scoped measurement structurally cannot observe.
+
+That was not a hypothetical risk. It is measured, twice over:
+
+- **219 of 312 wrong links (70.2%) land on the 1530 non-gold-aligned mentions** — invisible
+  to a slice-scoped run.
+- The **paraphrase-slice curve reports +0.0254 against the full population's +0.0200 — a 27%
+  relative overstatement**, at a flattering 69.0% mention precision (462/670) instead of
+  53.9%.
+
+**Slice figures, labeled as slice figures wherever cited:**
+
+| arm (paraphrase slice, 1136 mentions — **slice, not full population**) | thr | F1 | ΔF1 |
+|---|---|---|---|
+| SapBERT, label-constrained | 0.8540 | 0.7951 | +0.0254 |
+| SapBERT, unconstrained | 0.8540 | 0.7944 | +0.0247 |
+| TF-IDF, label-constrained | 0.7899 | 0.7822 | +0.0125 |
+| TF-IDF, unconstrained | 0.7899 | 0.7805 | +0.0108 |
+
+**This is the fourth time in this project that a favorably-selected population reported a
+better number than the system would actually pay** (merging 91→11, abbreviations 543→4,
+paraphrase 1136→431, and now slice +0.0254 vs full +0.0200). The pattern is established well
+enough that a subpopulation figure should be treated as unpriced until measured against the
+full population the mechanism would actually run on.
+
+### Scope limitation: this is a clustering verdict, not a pipeline verdict
+
+**Rejected for clustering. Explicitly open — and explicitly *more* concerning — for
+mention-level consumers.**
+
+This mirrors the abbreviation-expansion caveat, in the opposite direction. There, a
+mechanism looked worthless at concept level (+0.0008) while genuinely correcting 543
+mentions, so mention-level consumers were told **not to inherit the rejection**. Here the
+asymmetry runs the other way:
+
+- **For clustering** (document-level concept sets), 53.9% mention precision is survivable,
+  because set semantics absorb ~2.9 wrong links per counted error. That absorption is the
+  only reason the F1 delta is positive at all.
+- **For a mention-level consumer, that same absorption does not happen and the error is
+  fully exposed.** A Phase 4 evidence-attribution claim anchored to a specific mention, or a
+  Phase 5 contradiction comparison resolving the entity *inside* a claim, would be reading a
+  concept id that is **wrong roughly half the time**. That is unusable as ground truth for a
+  specific claim.
+
+**Phase 4 and Phase 5 must not inherit this conclusion in either direction.** "+0.0200 F1,
+documented not shipped" is a statement about clustering's metric. The mention-level statement
+is stronger and more negative: *at 53.9% precision this mechanism is not fit to anchor a
+claim, and would need a substantially higher threshold (trading away most of the recall) or a
+better model before it could be.* Both phases should re-measure against their own metric.
+
+**The one-line version for anyone citing this:** *the embedding fallback is a real effect,
+too weak and too costly to ship for clustering, and too imprecise to anchor mention-level
+claims at all.*
+
+### Reproducing this without the module
+
+The implementation is **deliberately not on `master`** (ADR-0012), preserved on the unmerged
+branch **`phase-3c-fallback-measurement`** (`0f4eac7`..`fbcae08`). The run log
+`backend/evals/fallback_sweep.jsonl` **is** on that branch and carries all four full curves.
+Everything needed to rebuild:
+
+- **Encoder:** `cambridgeltl/SapBERT-from-PubMedBERT-fulltext`, **CLS pooling**, L2-normalized,
+  `max_length=32`, batch 128, CPU. SapBERT is contrastively trained over UMLS synonym pairs —
+  the "same concept, different surface" relation the paraphrase slice *is*.
+- **Index:** all **552,756 (alias, concept) pairs** from 551,669 distinct aliases over 192,816
+  concepts — not the 192,816 preferred names. A concept scores as the **max** over its aliases.
+  fp16 on disk (~849 MB), fp32 for the matmul.
+- **Search:** **exact** brute-force chunked cosine, no ANN. The query side is only 3209
+  mentions, so exact search costs seconds, and approximation would inject error into a
+  measurement whose entire purpose is error attribution.
+- **Control:** `TfidfVectorizer(analyzer="char_wb", ngram_range=(3,3))` over the identical
+  rows with the identical `normalize_surface` preprocessing.
+- **Sweep:** breakpoint-exact (every distinct top-1 score is a threshold).
+- **Command:** `uv run python -m biolit_evals.fallback_sweep --dataset bc5cdr --rebuild-index`
+- **Cost if reproduced:** ~46 min to encode the index (CPU, ~199 aliases/sec after
+  length-sorted batching); NER over the 500 BC5CDR abstracts is only ~46s.
+
+### Harness validation and two anomalies that were chased down
+
+**The anchor gate is a correctness check on the harness, not a result.** At the top threshold
+nothing fires, so all four arms must reproduce the dictionary-only baseline *exactly*. They
+do: **F1 0.7697, `fp` 312, `mentions_fired` 0, `n_nil` 3209**. A mismatch halts the run with
+`SystemExit`; the anchors were never adjusted to match observations.
+
+An additional **pre-flight** ran `collect_nils` over real BC5CDR with real NER and **no
+scorer at all**, checking three quantities the gate does not: it reproduced the
+**1679 / 543 / 1136** gold-aligned / abbreviation-addressable / paraphrase split exactly.
+That is what establishes the slice by-product measures the population it claims to, since
+`abbrev_addressable` is new code and its agreement with `score_end_to_end`'s oracle partition
+was otherwise unverified on real data.
+
+Two anomalies in the output were investigated rather than waved through:
+
+1. **Two mentions scored cosine `1.0000001`.** If the fallback had found an *exact* dictionary
+   alias the dictionary itself left NIL, that would be a harness inconsistency, not a result.
+   Checked directly: **zero NIL surfaces are exact alias keys.** The dictionary and the
+   fallback are consistent. The mechanism is presumed to be a truncation collision but was
+   **not verified** — both links were correct and they move F1 by 0.0002.
+2. **`max_length=32` truncates 39,937 of 551,669 aliases (7.24%)**, the longest being 292
+   tokens (long IUPAC chemical names). This biases **against** SapBERT, so the reported gain
+   is a **lower bound** and the SapBERT-beats-TF-IDF conclusion is strengthened by it rather
+   than threatened. Not re-run at a longer length.
+
 ## Limitations
 
 1. **Concept-level scoring is document-level set matching.** It rewards finding *a*
@@ -1185,3 +1379,17 @@ caught only by running real data end to end.
 11. **Windowing statistics are not recorded in the run log.** "11 of 500 documents exceed
    512 tokens; 32 exceed the 450-token window budget" comes from ad-hoc measurement, not
    from a logged field, so it is not self-verifying on a future run.
+12. **The fallback sweep logs the diluted `mentions_wrong / fp` ratio.** The field in
+    `fallback_sweep.jsonl` divides by *total* `fp`, which includes the 312 baseline false
+    positives the fallback did not cause. The decision-relevant quantity is
+    `mentions_wrong / Δfp` (2.89 rather than 0.743) and it must be derived from the logged
+    `fp` at the point and the baseline `fp` at the anchor — the log does not carry it
+    directly.
+13. **The fallback was measured as top-1 with a single global threshold**, which is the
+    simplest possible policy. Per-label thresholds, margin-based abstention (top-1 vs
+    top-2 gap), and score calibration were all out of scope. The 24%-of-ceiling figure
+    therefore prices *this* policy, not the best achievable embedding fallback, and a
+    stronger policy is the obvious place to look if this is ever revisited.
+14. **`max_length=32` truncates 7.24% of aliases**, so the SapBERT arms are a lower bound.
+    The direction is known and favors the conclusion drawn, but the magnitude of the
+    understatement was not measured.
