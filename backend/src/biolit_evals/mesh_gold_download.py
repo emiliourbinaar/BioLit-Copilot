@@ -7,11 +7,15 @@ from biolit_evals.mesh_gold import (
     GoldDocument,
     GoldMention,
     parse_pubtator,
+    parse_pubtator_cid,
     parse_pubtator_documents,
 )
 
-# PubTator file inside CDR_Data.zip (BioCreative V CDR corpus, test split).
-_TEST_MEMBER = "CDR_Data/CDR.Corpus.v010516/CDR_TestSet.PubTator.txt"
+# PubTator files inside CDR_Data.zip (BioCreative V CDR corpus).
+TRAINING_MEMBER = "CDR_Data/CDR.Corpus.v010516/CDR_TrainingSet.PubTator.txt"
+DEVELOPMENT_MEMBER = "CDR_Data/CDR.Corpus.v010516/CDR_DevelopmentSet.PubTator.txt"
+TEST_MEMBER = "CDR_Data/CDR.Corpus.v010516/CDR_TestSet.PubTator.txt"
+_TEST_MEMBER = TEST_MEMBER  # back-compat for existing default arguments
 
 
 def load_bc5cdr_norm_gold(zip_url: str, member: str = _TEST_MEMBER) -> list[GoldMention]:
@@ -34,3 +38,17 @@ def load_bc5cdr_documents(zip_url: str, member: str = _TEST_MEMBER) -> list[Gold
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
         pubtator = zf.read(member).decode("utf-8")
     return parse_pubtator_documents(pubtator)
+
+
+def load_bc5cdr_cid_relations(
+    zip_url: str, member: str = TEST_MEMBER
+) -> dict[str, set[tuple[str, str]]]:
+    """Download CDR_Data.zip and parse one split's gold chemical-induced-disease relations.
+
+    Same source and member scheme as `load_bc5cdr_documents`. Heavy/manual (network + ~20 MB).
+    """
+    resp = httpx.get(zip_url, follow_redirects=True, timeout=300.0)
+    resp.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        pubtator = zf.read(member).decode("utf-8")
+    return parse_pubtator_cid(pubtator)

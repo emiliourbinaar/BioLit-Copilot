@@ -55,6 +55,27 @@ def parse_pubtator(text: str) -> list[GoldMention]:
     return mentions
 
 
+def parse_pubtator_cid(text: str) -> dict[str, set[tuple[str, str]]]:
+    """Parse PubTator CID relation lines into per-document (chemical, disease) id pairs.
+
+    A CID line is `PMID<tab>CID<tab>chemicalID<tab>diseaseID` -- exactly four fields, so
+    `parse_pubtator` (which requires six) already skips it and the two parsers cannot
+    disagree about what a line is. Ids arrive as bare accessions and go through the same
+    `reconcile_mesh_id` the mention parser uses, so a relation pair and a gold mention id
+    are directly comparable -- which is what makes anchor 1 (key recall == 1.0) meaningful.
+    """
+    relations: dict[str, set[tuple[str, str]]] = {}
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 4 or parts[1] != "CID":
+            continue
+        pmid, _, raw_chemical, raw_disease = parts
+        for chemical in reconcile_mesh_id(raw_chemical):
+            for disease in reconcile_mesh_id(raw_disease):
+                relations.setdefault(pmid, set()).add((chemical, disease))
+    return relations
+
+
 @dataclass(frozen=True)
 class GoldDocument:
     pmid: str

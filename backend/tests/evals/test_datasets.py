@@ -6,6 +6,7 @@ import pytest
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
 from biolit_evals.datasets import bio_tags_to_spans, load_domain_sample
+from biolit_evals.mesh_gold import parse_pubtator, parse_pubtator_cid
 
 CHEMICAL = EntityLabel.CHEMICAL
 DISEASE = EntityLabel.DISEASE
@@ -121,3 +122,31 @@ def test_load_domain_sample_rejects_out_of_bounds_span(tmp_path):
     bad_file.write_text(json.dumps(rec) + "\n", encoding="utf-8")
     with pytest.raises(ValueError):
         load_domain_sample(str(bad_file))
+
+
+def test_cid_lines_parse_into_per_document_chemical_disease_pairs():
+    # Real observed CDR_TestSet lines. Bare ids on the wire; reconcile_mesh_id prefixes
+    # them so a CID pair and a gold mention id are directly comparable.
+    text = "\n".join(
+        [
+            "8701013\tCID\tD015738\tD003693",
+            "22836123\tCID\tD016572\tD057049",
+            "22836123\tCID\tD000305\tD012595",
+        ]
+    )
+    assert parse_pubtator_cid(text) == {
+        "8701013": {("MESH:D015738", "MESH:D003693")},
+        "22836123": {
+            ("MESH:D016572", "MESH:D057049"),
+            ("MESH:D000305", "MESH:D012595"),
+        },
+    }
+
+
+def test_a_mention_line_is_not_read_as_a_relation_and_a_relation_is_not_read_as_a_mention():
+    # The two parsers share a file and must not disagree about what a line is. A CID
+    # parser keyed on ">= 4 fields" would eat mention lines and silently invent relations.
+    mention_line = "8701013\t0\t9\tmetformin\tChemical\tD008687"
+    cid_line = "8701013\tCID\tD015738\tD003693"
+    assert parse_pubtator_cid(mention_line) == {}
+    assert parse_pubtator(cid_line) == []

@@ -4,7 +4,7 @@ import zipfile
 import httpx
 import respx
 
-from biolit_evals.mesh_gold_download import load_bc5cdr_norm_gold
+from biolit_evals.mesh_gold_download import load_bc5cdr_cid_relations, load_bc5cdr_norm_gold
 
 _MEMBER = "CDR_Data/CDR.Corpus.v010516/CDR_TestSet.PubTator.txt"
 
@@ -28,3 +28,18 @@ def test_load_bc5cdr_norm_gold_downloads_and_parses_test_member():
     assert len(gold) == 1
     assert gold[0].pmid == "1"
     assert gold[0].mesh_ids == ("MESH:D008687",)
+
+
+@respx.mock
+def test_load_bc5cdr_cid_relations_downloads_and_parses_test_member():
+    pubtator = "8701013\tCID\tD015738\tD003693\n22836123\tCID\tD016572\tD057049\n"
+    respx.get("https://example.test/CDR_Data.zip").mock(
+        return_value=httpx.Response(200, content=_zip_bytes(pubtator))
+    )
+
+    relations = load_bc5cdr_cid_relations("https://example.test/CDR_Data.zip")
+
+    assert relations == {
+        "8701013": {("MESH:D015738", "MESH:D003693")},
+        "22836123": {("MESH:D016572", "MESH:D057049")},
+    }
