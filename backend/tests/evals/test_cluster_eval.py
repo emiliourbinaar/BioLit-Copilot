@@ -3,6 +3,8 @@ import pytest
 from biolit.domain.records import Cluster
 from biolit_evals.cluster_eval import (
     Workload,
+    assert_gold_cluster_anchor,
+    assert_key_recall_anchor,
     cluster_key_metrics,
     gold_clusters_from_relations,
     key_metrics,
@@ -100,8 +102,6 @@ def test_workload_handles_empty_cluster_list():
 
 
 def test_the_key_recall_anchor_raises_when_cross_product_misses_a_gold_pair():
-    from biolit_evals.cluster_eval import assert_key_recall_anchor
-
     # Cross-product on gold entities cannot miss a gold pair -- both endpoints are
     # annotated. Recall below 1.0 means the harness is wrong (gold parsing, MeSH id
     # prefixing, label assignment), not that the number is interesting.
@@ -110,10 +110,24 @@ def test_the_key_recall_anchor_raises_when_cross_product_misses_a_gold_pair():
         assert_key_recall_anchor(metrics_from_counts(9, 5, 1), arm="A")
 
 
-def test_the_gold_cluster_anchor_checks_the_LOADER_not_clustering_quality():
-    from biolit_evals.cluster_eval import assert_gold_cluster_anchor
+def test_the_key_recall_anchor_catches_even_small_misses():
+    # A small miss (recall 0.9990 from tp=999, fn=1) still violates the anchor.
+    # This discriminates against a loosened tolerance like `round(recall, 2)` or
+    # `abs(recall - 1.0) < 0.05`, which would incorrectly pass a near-miss harness.
+    with pytest.raises(SystemExit, match="key recall"):
+        assert_key_recall_anchor(metrics_from_counts(999, 0, 1), arm="A")
 
+
+def test_the_gold_cluster_anchor_checks_the_LOADER_not_clustering_quality():
     assert_gold_cluster_anchor(500, 80)
     assert_gold_cluster_anchor(1500, 325)
     with pytest.raises(SystemExit, match="gold cluster"):
         assert_gold_cluster_anchor(500, 79)
+
+
+def test_the_gold_cluster_anchor_skips_untabulated_corpus_sizes():
+    # The anchor table only knows about 500 and 1500 documents. For any other size,
+    # the anchor returns silently (does not raise). This discriminates against a mutant
+    # that deletes the `if expected is None: return` guard, which would always raise.
+    assert_gold_cluster_anchor(3, 99)  # Untabulated size, any count is OK
+    assert_gold_cluster_anchor(100, 0)  # Another untabulated size, zero is OK
