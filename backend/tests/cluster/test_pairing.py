@@ -115,3 +115,17 @@ def test_an_entity_without_offsets_fails_closed_and_forms_no_pairs():
         Entity(text="nausea", label=DIS, start=None, end=None, canonical_id="MESH:D009325"),
     ]
     assert SameSentencePairing().pairs(entities, text) == set()
+
+
+def test_an_entity_starting_in_the_gap_between_sentences_forms_no_pairs():
+    # sentence_spans("Aspirin caused ulcers. Metformin caused acidosis.") == [(0, 22), (23, 49)].
+    # Position 22 is the space BETWEEN the two spans -- in no sentence. This pins the
+    # exclusive upper bound in sentence_index's "start <= position < end": an inclusive-end
+    # off-by-one (`<= end`) would place this entity in sentence 0 and invent a pair with
+    # Aspirin, so the odd start=22 offset matters and must not be "fixed" to something tidier.
+    text = "Aspirin caused ulcers. Metformin caused acidosis."
+    entities = [
+        Entity(text="Aspirin", label=CHEM, start=0, end=7, canonical_id="MESH:D001241"),
+        Entity(text="gap", label=DIS, start=22, end=23, canonical_id="MESH:D009325"),
+    ]
+    assert SameSentencePairing().pairs(entities, text) == set()
