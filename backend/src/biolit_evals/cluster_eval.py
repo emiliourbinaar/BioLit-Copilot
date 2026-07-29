@@ -1,4 +1,5 @@
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 from biolit.domain.records import Cluster
 from biolit_evals.end_to_end import ConceptMetrics, concept_counts, metrics_from_counts
@@ -86,3 +87,30 @@ def gold_clusters_from_relations(
         for key, pmids in sorted(by_key.items())
         if len(pmids) >= min_size
     ]
+
+
+@dataclass(frozen=True)
+class Workload:
+    """What clustering hands the Critic. Raw counts, not only aggregates.
+
+    top5_pair_share prices the quadratic risk directly: a cluster of n papers is
+    n*(n-1)/2 comparisons, so a single 25-paper cluster is 300 on its own. An aggregate
+    pair count cannot show how much of the Critic's budget one oversized cluster burns.
+    """
+
+    n_clusters: int
+    n_paper_pairs: int
+    largest_cluster: int
+    top5_pair_share: float
+
+
+def workload(clusters: Sequence[Cluster]) -> Workload:
+    sizes = sorted((len(c.paper_ids) for c in clusters), reverse=True)
+    pairs = [n * (n - 1) // 2 for n in sizes]
+    total = sum(pairs)
+    return Workload(
+        n_clusters=len(clusters),
+        n_paper_pairs=total,
+        largest_cluster=sizes[0] if sizes else 0,
+        top5_pair_share=sum(pairs[:5]) / total if total else 0.0,
+    )

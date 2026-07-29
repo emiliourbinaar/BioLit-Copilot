@@ -72,3 +72,17 @@ def test_key_metrics_covers_pmids_present_on_only_one_side():
 def test_paper_pairs_are_unordered_sorted_2tuples():
     clusters = [Cluster(key="k", paper_ids=["B", "A", "C"])]
     assert paper_pairs(clusters) == {("A", "B"), ("A", "C"), ("B", "C")}
+
+
+def test_top5_share_exposes_one_oversized_cluster_dominating_the_critic_budget():
+    from biolit_evals.cluster_eval import workload
+
+    # One 25-paper cluster is 300 comparisons on its own; five 2-paper clusters are 5.
+    # An aggregate pair count cannot show that concentration; this can.
+    clusters = [Cluster(key=f"k{i}", paper_ids=[f"p{i}_{j}" for j in range(2)]) for i in range(5)]
+    clusters.append(Cluster(key="big", paper_ids=[f"b{j}" for j in range(25)]))
+    w = workload(clusters)
+    assert w.n_clusters == 6
+    assert w.n_paper_pairs == 305
+    assert w.largest_cluster == 25
+    assert round(w.top5_pair_share, 4) == round(304 / 305, 4)
