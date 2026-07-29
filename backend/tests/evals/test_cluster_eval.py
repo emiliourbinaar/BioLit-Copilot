@@ -1,8 +1,10 @@
 from biolit.domain.records import Cluster
 from biolit_evals.cluster_eval import (
     cluster_key_metrics,
+    gold_clusters_from_relations,
     key_metrics,
     paper_pair_metrics,
+    paper_pairs,
 )
 
 
@@ -31,3 +33,42 @@ def test_paper_pair_metrics_are_not_an_alias_of_cluster_key_metrics():
     assert pp.precision == 1.0
     assert pp.recall == 1 / 3
     assert pp.f1 == 0.5
+
+
+def test_gold_clusters_from_relations_aggregates_shared_pairs_and_drops_singletons():
+    # pmids "1" and "2" share one relation pair -> one cluster holding both pmids.
+    # pmid "3" holds a pair no one else has -> exactly one document, dropped at the
+    # >= min_size boundary (a `> min_size` mutant would also drop the shared pair, since
+    # its count is exactly 2).
+    # The key is chemical|disease built from the tuple in order -- a swapped _key would
+    # produce "MESH:D011085|MESH:D008687" instead and fail the exact-equality check below.
+    relations = {
+        "1": {("MESH:D008687", "MESH:D011085")},
+        "2": {("MESH:D008687", "MESH:D011085")},
+        "3": {("MESH:D001241", "MESH:D011085")},
+    }
+    clusters = gold_clusters_from_relations(relations)
+    assert clusters == [Cluster(key="MESH:D008687|MESH:D011085", paper_ids=["1", "2"])]
+
+
+def test_key_metrics_covers_pmids_present_on_only_one_side():
+    # pmid "1" is shared -> tp. pmid "2" is gold-only (pred never produced anything for it,
+    # e.g. NER missed the whole document) -> its pair must land in fn. pmid "3" is pred-only
+    # (pred hallucinated a document gold has no relation for) -> its pair must land in fp.
+    # An `&` mutant on `set(pred) | set(gold)` would iterate only pmid "1", silently dropping
+    # both the gold-only fn and the pred-only fp.
+    gold = {
+        "1": {("MESH:D008687", "MESH:D011085")},
+        "2": {("MESH:D001241", "MESH:D009325")},
+    }
+    pred = {
+        "1": {("MESH:D008687", "MESH:D011085")},
+        "3": {("MESH:D007328", "MESH:D014456")},
+    }
+    m = key_metrics(pred, gold)
+    assert (m.tp, m.fp, m.fn) == (1, 1, 1)
+
+
+def test_paper_pairs_are_unordered_sorted_2tuples():
+    clusters = [Cluster(key="k", paper_ids=["B", "A", "C"])]
+    assert paper_pairs(clusters) == {("A", "B"), ("A", "C"), ("B", "C")}
