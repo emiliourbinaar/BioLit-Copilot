@@ -122,3 +122,41 @@ def workload(clusters: Sequence[Cluster]) -> Workload:
         largest_cluster=sizes[0] if sizes else 0,
         top5_pair_share=sum(pairs[:5]) / total if total else 0.0,
     )
+
+
+_GOLD_CLUSTER_ANCHORS = {500: 80, 1500: 325}
+
+
+def assert_key_recall_anchor(metrics: ConceptMetrics, *, arm: str) -> None:
+    """HARNESS correctness. Cross-product pairing on GOLD entities must recall every gold
+    CID pair, because a gold pair always connects two annotated entities and the
+    cross-product of those entities' ids necessarily contains it.
+
+    A deviation means the harness is wrong -- gold parsing, MeSH id prefixing, or label
+    assignment -- not that the result is interesting. Do NOT relax this to match an
+    observation.
+    """
+    if round(metrics.recall, 4) != 1.0:
+        raise SystemExit(
+            f"{arm}: cross-product key recall is {metrics.recall:.4f}, expected exactly "
+            f"1.0000 (fn={metrics.fn}). A gold CID pair connects two annotated entities, "
+            "so the cross-product cannot miss one. The harness is wrong."
+        )
+
+
+def assert_gold_cluster_anchor(n_documents: int, n_gold_clusters: int) -> None:
+    """LOADER correctness -- NOT a clustering-quality check.
+
+    This validates `load_bc5cdr_cid_relations` against independently established gold
+    statistics. "The loader reproduces known gold counts" says NOTHING about whether the
+    pairing strategy is accurate; do not read a passing anchor as evidence about clustering.
+    """
+    expected = _GOLD_CLUSTER_ANCHORS.get(n_documents)
+    if expected is None:
+        return
+    if n_gold_clusters != expected:
+        raise SystemExit(
+            f"gold cluster anchor: {n_documents} documents yielded {n_gold_clusters} "
+            f"multi-paper gold clusters, expected {expected}. The CID loader is wrong; "
+            "this says nothing about clustering quality either way."
+        )

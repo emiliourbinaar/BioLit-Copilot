@@ -1,3 +1,5 @@
+import pytest
+
 from biolit.domain.records import Cluster
 from biolit_evals.cluster_eval import (
     Workload,
@@ -8,6 +10,7 @@ from biolit_evals.cluster_eval import (
     paper_pairs,
     workload,
 )
+from biolit_evals.end_to_end import metrics_from_counts
 
 
 def test_key_metrics_score_predicted_pairs_per_document_against_gold_cid():
@@ -94,3 +97,23 @@ def test_workload_handles_empty_cluster_list():
     # can return [] when no chemical|disease key is shared by two papers.
     w = workload([])
     assert w == Workload(n_clusters=0, n_paper_pairs=0, largest_cluster=0, top5_pair_share=0.0)
+
+
+def test_the_key_recall_anchor_raises_when_cross_product_misses_a_gold_pair():
+    from biolit_evals.cluster_eval import assert_key_recall_anchor
+
+    # Cross-product on gold entities cannot miss a gold pair -- both endpoints are
+    # annotated. Recall below 1.0 means the harness is wrong (gold parsing, MeSH id
+    # prefixing, label assignment), not that the number is interesting.
+    assert_key_recall_anchor(metrics_from_counts(10, 5, 0), arm="A")  # recall 1.0, fine
+    with pytest.raises(SystemExit, match="key recall"):
+        assert_key_recall_anchor(metrics_from_counts(9, 5, 1), arm="A")
+
+
+def test_the_gold_cluster_anchor_checks_the_LOADER_not_clustering_quality():
+    from biolit_evals.cluster_eval import assert_gold_cluster_anchor
+
+    assert_gold_cluster_anchor(500, 80)
+    assert_gold_cluster_anchor(1500, 325)
+    with pytest.raises(SystemExit, match="gold cluster"):
+        assert_gold_cluster_anchor(500, 79)
