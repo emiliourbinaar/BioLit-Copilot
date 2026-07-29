@@ -7,8 +7,15 @@ from collections.abc import Callable
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
-def _sentence_spans(text: str) -> list[tuple[int, int]]:
-    """Split `text` into (start, end) spans at sentence boundaries, covering it exactly."""
+def sentence_spans(text: str) -> list[tuple[int, int]]:
+    """Split `text` into (start, end) spans at sentence boundaries, covering it exactly.
+
+    Public because it has a second consumer: `biolit.cluster.pairing.SameSentencePairing`.
+    The splitter is deliberately simple and mis-splits abbreviations ("e.g. metformin").
+    In windowing that is harmless (one-sentence overlap absorbs it); in pairing a mis-split
+    can drop a real pair or invent one, which is a measured cost of the heuristic, not a bug
+    to hide -- both strategies are reported side by side precisely so it is visible.
+    """
     spans: list[tuple[int, int]] = []
     cursor = 0
     for match in _SENTENCE_END.finditer(text):
@@ -106,7 +113,7 @@ def plan_windows(
     """
     if not text:
         return []
-    sentences = _sentence_spans(text)
+    sentences = sentence_spans(text)
 
     # Expand any single sentence that cannot fit on its own.
     units: list[tuple[int, int]] = []

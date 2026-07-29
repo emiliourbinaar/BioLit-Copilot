@@ -3,6 +3,7 @@ from typing import Protocol
 
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Entity
+from biolit.ner.windowing import sentence_spans
 
 
 class PairingStrategy(Protocol):
@@ -35,3 +36,50 @@ class CrossProductPairing:
         chemicals = _linked_ids(entities, EntityLabel.CHEMICAL)
         diseases = _linked_ids(entities, EntityLabel.DISEASE)
         return {(c, d) for c in chemicals for d in diseases}
+
+
+def sentence_index(spans: Sequence[tuple[int, int]], position: int) -> int | None:
+    """Index of the sentence span containing `position`, or None if it falls in no span.
+
+    Public because `biolit.cluster.group.pairing_diagnostics` is a second consumer -- same
+    reason `sentence_spans` was promoted, rather than importing a private name across
+    modules and coupling group.py to this module's internals.
+    """
+    for index, (start, end) in enumerate(spans):
+        if start <= position < end:
+            return index
+    return None
+
+
+class SameSentencePairing:
+    """Pair a chemical and a disease only when their spans fall in the same sentence.
+
+    The free deterministic control against CrossProductPairing. Without it, a "CID relation
+    extraction is required" conclusion cannot be told apart from "one line of sentence logic
+    was missing" -- the same attribution discipline as the TF-IDF control in Phase 3C.
+
+    FAILS CLOSED on an entity with no offsets: it cannot be placed in a sentence, so it
+    forms no pairs and `pairing_diagnostics` counts it. Silently treating it as
+    "sentence 0" would put it in the same sentence as the document's opening entities and
+    invent pairs; silently returning nothing would be indistinguishable from "this paper
+    had no pairs", which is the failure mode `check_document_context` exists to prevent.
+    """
+
+    def pairs(self, entities: Sequence[Entity], text: str) -> set[tuple[str, str]]:
+        spans = sentence_spans(text)
+        by_sentence: dict[int, tuple[set[str], set[str]]] = {}
+        for entity in entities:
+            if entity.canonical_id is None or entity.start is None:
+                continue
+            index = sentence_index(spans, entity.start)
+            if index is None:
+                continue
+            chemicals, diseases = by_sentence.setdefault(index, (set(), set()))
+            if entity.label is EntityLabel.CHEMICAL:
+                chemicals.add(entity.canonical_id)
+            elif entity.label is EntityLabel.DISEASE:
+                diseases.add(entity.canonical_id)
+        out: set[tuple[str, str]] = set()
+        for chemicals, diseases in by_sentence.values():
+            out |= {(c, d) for c in chemicals for d in diseases}
+        return out
