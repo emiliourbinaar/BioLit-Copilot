@@ -105,6 +105,14 @@ class Workload:
 
 
 def workload(clusters: Sequence[Cluster]) -> Workload:
+    """Measure clustering's cost to the Critic and concentration risk.
+
+    A cluster of n papers creates n*(n-1)/2 Critic comparisons, a quadratic cost. This
+    function logs both the aggregate pair count and the top-5 concentration ratio, which
+    exposes when a single oversized cluster dominates the budget in a way a total count
+    cannot show. Essential for identifying degenerate pairing arms where one bad key
+    inflates the Critic's workload.
+    """
     sizes = sorted((len(c.paper_ids) for c in clusters), reverse=True)
     pairs = [n * (n - 1) // 2 for n in sizes]
     total = sum(pairs)

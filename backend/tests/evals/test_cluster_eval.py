@@ -1,10 +1,12 @@
 from biolit.domain.records import Cluster
 from biolit_evals.cluster_eval import (
+    Workload,
     cluster_key_metrics,
     gold_clusters_from_relations,
     key_metrics,
     paper_pair_metrics,
     paper_pairs,
+    workload,
 )
 
 
@@ -75,8 +77,6 @@ def test_paper_pairs_are_unordered_sorted_2tuples():
 
 
 def test_top5_share_exposes_one_oversized_cluster_dominating_the_critic_budget():
-    from biolit_evals.cluster_eval import workload
-
     # One 25-paper cluster is 300 comparisons on its own; five 2-paper clusters are 5.
     # An aggregate pair count cannot show that concentration; this can.
     clusters = [Cluster(key=f"k{i}", paper_ids=[f"p{i}_{j}" for j in range(2)]) for i in range(5)]
@@ -86,3 +86,11 @@ def test_top5_share_exposes_one_oversized_cluster_dominating_the_critic_budget()
     assert w.n_paper_pairs == 305
     assert w.largest_cluster == 25
     assert round(w.top5_pair_share, 4) == round(304 / 305, 4)
+
+
+def test_workload_handles_empty_cluster_list():
+    # Both guards exist specifically to handle empty case. Dropping either would raise
+    # IndexError (sizes[0]) or ZeroDivisionError (total) undetected. cluster_papers
+    # can return [] when no chemical|disease key is shared by two papers.
+    w = workload([])
+    assert w == Workload(n_clusters=0, n_paper_pairs=0, largest_cluster=0, top5_pair_share=0.0)
