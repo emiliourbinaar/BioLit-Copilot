@@ -1,5 +1,6 @@
 import pytest
 
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Cluster
 from biolit_evals.cluster_eval import (
     Workload,
@@ -10,9 +11,12 @@ from biolit_evals.cluster_eval import (
     key_metrics,
     paper_pair_metrics,
     paper_pairs,
+    run_cluster_eval,
+    synthesize_records,
     workload,
 )
 from biolit_evals.end_to_end import metrics_from_counts
+from biolit_evals.mesh_gold import GoldDocument, GoldMention
 
 
 def test_key_metrics_score_predicted_pairs_per_document_against_gold_cid():
@@ -131,3 +135,84 @@ def test_the_gold_cluster_anchor_skips_untabulated_corpus_sizes():
     # that deletes the `if expected is None: return` guard, which would always raise.
     assert_gold_cluster_anchor(3, 99)  # Untabulated size, any count is OK
     assert_gold_cluster_anchor(100, 0)  # Another untabulated size, zero is OK
+
+
+def test_a_multi_id_gold_mention_becomes_one_entity_per_id():
+    # INTERFACE DECISION: Entity.canonical_id stays str|None; each (mention, id) is its own
+    # Entity at the same span. Packing ids into one string would collide with "|", the
+    # cluster-key delimiter, and push id-set logic into the pairing code both arms share.
+    doc = GoldDocument(
+        pmid="1",
+        text="Metformin and nausea.",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=9,
+                text="Metformin",
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=("MESH:D008687",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=14,
+                end=20,
+                text="nausea",
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D009325", "MESH:D012640"),
+            ),
+        ],
+    )
+    records, texts = synthesize_records([doc])
+    assert len(records) == 1
+    ids = [(e.label, e.canonical_id, e.start) for e in records[0].entities]
+    assert ids == [
+        (EntityLabel.CHEMICAL, "MESH:D008687", 0),
+        (EntityLabel.DISEASE, "MESH:D009325", 14),
+        (EntityLabel.DISEASE, "MESH:D012640", 14),
+    ]
+    assert texts == {"1": "Metformin and nausea."}
+
+
+def test_run_cluster_eval_scores_both_strategies_and_writes_one_log_line(tmp_path):
+    # Two documents sharing one gold CID pair -> exactly one gold cluster of size 2.
+    docs = [
+        GoldDocument(
+            pmid=p,
+            text="Metformin caused nausea.",
+            mentions=[
+                GoldMention(
+                    pmid=p,
+                    start=0,
+                    end=9,
+                    text="Metformin",
+                    label=EntityLabel.CHEMICAL,
+                    mesh_ids=("MESH:D008687",),
+                ),
+                GoldMention(
+                    pmid=p,
+                    start=17,
+                    end=23,
+                    text="nausea",
+                    label=EntityLabel.DISEASE,
+                    mesh_ids=("MESH:D009325",),
+                ),
+            ],
+        )
+        for p in ("1", "2")
+    ]
+    relations = {p: {("MESH:D008687", "MESH:D009325")} for p in ("1", "2")}
+    log = tmp_path / "cluster_runs.jsonl"
+    result = run_cluster_eval(
+        documents=docs,
+        relations=relations,
+        arm="A",
+        dataset="unit",
+        log_path=str(log),
+        git_sha="deadbee",
+        now="2026-07-28T00:00:00+00:00",
+    )
+    assert result["n_gold_clusters"] == 1
+    for strategy in ("cross_product", "same_sentence"):
+        assert result["strategies"][strategy]["paper_pair"]["f1"] == 1.0
+    assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1
