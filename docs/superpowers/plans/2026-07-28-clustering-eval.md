@@ -402,7 +402,13 @@ Expected: FAIL — `SameSentencePairing` does not exist. Add an empty stub only 
 Append to `src/biolit/cluster/pairing.py` (and add `from biolit.ner.windowing import sentence_spans` to the top import block — **not** mid-file, ruff `E402`):
 
 ```python
-def _sentence_index(spans: Sequence[tuple[int, int]], position: int) -> int | None:
+def sentence_index(spans: Sequence[tuple[int, int]], position: int) -> int | None:
+    """Index of the sentence span containing `position`, or None if it falls in no span.
+
+    Public because `biolit.cluster.group.pairing_diagnostics` is a second consumer -- same
+    reason `sentence_spans` was promoted, rather than importing a private name across
+    modules and coupling group.py to this module's internals.
+    """
     for index, (start, end) in enumerate(spans):
         if start <= position < end:
             return index
@@ -429,7 +435,7 @@ class SameSentencePairing:
         for entity in entities:
             if entity.canonical_id is None or entity.start is None:
                 continue
-            index = _sentence_index(spans, entity.start)
+            index = sentence_index(spans, entity.start)
             if index is None:
                 continue
             chemicals, diseases = by_sentence.setdefault(index, (set(), set()))
@@ -575,7 +581,7 @@ Expected: FAIL — module missing. Stub only if collection is blocked.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from biolit.cluster.pairing import PairingStrategy, _sentence_index
+from biolit.cluster.pairing import PairingStrategy, sentence_index
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Cluster, ExtractedRecord
 from biolit.ner.windowing import sentence_spans
@@ -689,7 +695,7 @@ def pairing_diagnostics(
                 linked_chemical += 1
             elif entity.label is EntityLabel.DISEASE:
                 linked_disease += 1
-            if entity.start is None or _sentence_index(spans, entity.start) is None:
+            if entity.start is None or sentence_index(spans, entity.start) is None:
                 unplaceable += 1
         no_chemical += 1 if linked_chemical == 0 else 0
         no_disease += 1 if linked_disease == 0 else 0
@@ -1290,7 +1296,10 @@ def run_cluster_eval(
     """
     if documents is not None:
         records, texts = synthesize_records(documents)
-    assert records is not None and texts is not None
+    if records is None or texts is None:
+        # Not an assert: asserts vanish under `python -O`, and this is exactly the guard
+        # that must hold when a caller supplies neither arm's inputs.
+        raise ValueError("pass documents= (Arm A) or records= and texts= (Arm B)")
 
     gold = gold_clusters_from_relations(relations)
     assert_gold_cluster_anchor(len(records), len(gold))
@@ -1516,4 +1525,4 @@ Bring the controller: the 4-configuration table at all three metric levels, the 
 
 **Known gaps, deliberate:** the spec's provisional 18.8%/36.9% figures are re-measured in Task 9 rather than asserted in a test — they are results, not invariants. The ARCHITECTURE.md deviation (NIL keys) is documented in the spec and enforced by `_linked_ids`, with its cost measured; no task revises `ARCHITECTURE.md`, which should be updated only once the eval's recommendation is known.
 
-**Type consistency.** `pairs()` returns `set[tuple[str, str]]` in Tasks 2, 3, 5, 8. `Cluster.key` is the `f"{chemical}|{disease}"` string in Tasks 4, 5, 7. `ConceptMetrics` is the return of all three metric functions. `sentence_spans` (public) is used identically in Tasks 3 and 4. `_sentence_index` is defined in Task 3 and imported by Task 4.
+**Type consistency.** `pairs()` returns `set[tuple[str, str]]` in Tasks 2, 3, 5, 8. `Cluster.key` is the `f"{chemical}|{disease}"` string in Tasks 4, 5, 7. `ConceptMetrics` is the return of all three metric functions. `sentence_spans` (public) is used identically in Tasks 3 and 4. `sentence_index` (public, same promotion as `sentence_spans`) is defined in Task 3 and imported by Task 4.
