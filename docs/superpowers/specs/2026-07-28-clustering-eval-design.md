@@ -48,8 +48,9 @@ and it lines up exactly with the domain model that already existed.
 
 ## Provisional figures from exploration
 
-Measured on **gold entities** during design, so these are a **ceiling** and are labeled as
-such wherever cited. They must be **reproduced by the harness** before being quoted anywhere
+Measured on **gold entities** during design, so these are a **recall-only ceiling** and are
+labeled as such wherever cited (see the correction below — they are NOT a precision or F1
+ceiling). They must be **reproduced by the harness** before being quoted anywhere
 else; they are recorded here as the motivation, not as results.
 
 | | keys/doc | key P | key R | multi-paper clusters | gold-real | **cluster P** | cluster R |
@@ -159,7 +160,7 @@ reproducible and diffable.
 
 | arm | corpus | entities from | isolates |
 |---|---|---|---|
-| **A — pairing ceiling** | all 1500 | BC5CDR gold mentions + gold MeSH ids | pairing, from NER *and* linking error |
+| **A — recall-only ceiling** | all 1500 | BC5CDR gold mentions + gold MeSH ids | pairing, from NER *and* linking error |
 | **B — end-to-end** | test 500 | real `extract_entities` → `canonicalize` | nothing; this is the production path |
 
 **Arm A synthesizes its input.** `cluster_papers` consumes `ExtractedRecord`s, so the harness
@@ -177,8 +178,43 @@ full corpus is safe there — and worth having, because multi-document clusters 
 (122 clusters of size ≥3 across 1500, versus 21 in test-500 alone). A precision number this
 consequential should not rest on a thin sample when a safe way to widen it exists.
 
-Arm A is **a ceiling for Arm B**, labeled as such everywhere, on the same rule applied to the
-oracle ceiling. The gap between the arms prices what NER and linking cost clustering.
+**CORRECTED AFTER MEASUREMENT — the original claim here was wrong.** This section previously
+said Arm A is "a ceiling for Arm B" and that the gap between the arms prices what NER and
+linking cost clustering. **Both claims are false**, and the run refutes them directly.
+
+**Arm A is a ceiling for RECALL ONLY** (key recall 1.0000 by construction). It is not a ceiling
+for precision or F1. Measured on the SAME corpus (Arm A restricted to test 500), same-sentence
+pairing scores **P 0.4279 / R 0.9005 / F1 0.5802 on gold entities** versus
+**P 0.5556 / R 0.7346 / F1 0.6327 on the real pipeline** — the real pipeline is *better* on
+precision and F1.
+
+**The principle, stated as a checkable rule for future ceilings:** *any construction that
+improves recall by granting something correct, without touching what the system emits wrongly,
+is a recall-only ceiling.* Granting perfect entities can only ADD candidate pairs, and adding
+candidates against a fixed gold set can only cost precision. This is the identical structure to
+Phase 3C's oracle ceiling being recall-only because granting gold ids can only convert
+`fn`→`tp` while `fp` stayed pinned at 312. Apply the rule before calling anything a ceiling:
+ask what the construction can make *worse*. If the answer is "nothing," it is recall-only.
+
+Also, the two arms run on different corpora (1500 vs 500) and are therefore **not directly
+comparable at all**. Any NER-and-linking cost claim must come from Arm A restricted to test 500,
+not from the headline Arm A row.
+
+**Why the real pipeline wins on precision — and what this does NOT mean.** NER and linking act
+as an unintended filter: they drop entities, and the ones they resolve skew toward canonical,
+frequently-named concepts, which are likelier to be endpoints of an annotated CID relation. Gold
+entities include rare and peripheral mentions that generate candidate pairs BC5CDR never
+annotates as relations.
+
+**This is a property of this corpus and this gold standard, not a general result.** It is
+emphatically NOT an argument that noisier extraction is better, nor that improving NER would
+hurt clustering. The mechanism is a correlation between "entity a dictionary linker resolves"
+and "entity BC5CDR curators annotated in a relation" — both track prominence. A better extractor
+that recovered *more true relation endpoints* would raise recall without the precision penalty,
+because the penalty comes from surfacing pairs that are not gold relations, not from accuracy.
+Anyone citing this must not compress it to "we don't need better NER": the 40.3% of gold pairs
+whose endpoint real extraction loses entirely is the direct measure of what better NER would
+buy.
 
 Same-sentence is a **control against cross-product**, not an alternative: without it a
 "relation extraction is required" conclusion is unattributable between *needs a model* and
@@ -295,8 +331,10 @@ guard is untouched.
   reversed at scale), this licenses the **numbers** and not error-**composition** claims
   about cluster size.
 
-- **Arm A is a ceiling no real system reaches**, for the same reason the oracle ceiling was:
-  entities are granted, perfect, and free of NER and linking error.
+- **Arm A is a RECALL-ONLY ceiling, and a real system can beat it on precision and F1.**
+  Granting perfect entities only adds candidate pairs, so it cannot improve precision and in
+  practice harms it. Measured: the real pipeline beats gold entities on F1 on the same corpus.
+  See the corrected section above for the general rule.
 
 ## Deliverable
 
