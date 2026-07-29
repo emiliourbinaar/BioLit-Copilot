@@ -1,7 +1,8 @@
 import pytest
 
+from biolit.cluster.group import pairing_diagnostics
 from biolit.domain.enums import EntityLabel
-from biolit.domain.records import Cluster
+from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit_evals.cluster_eval import (
     Workload,
     assert_gold_cluster_anchor,
@@ -165,13 +166,54 @@ def test_a_multi_id_gold_mention_becomes_one_entity_per_id():
     )
     records, texts = synthesize_records([doc])
     assert len(records) == 1
-    ids = [(e.label, e.canonical_id, e.start) for e in records[0].entities]
+    ids = [(e.label, e.canonical_id, e.start, e.end, e.text) for e in records[0].entities]
     assert ids == [
-        (EntityLabel.CHEMICAL, "MESH:D008687", 0),
-        (EntityLabel.DISEASE, "MESH:D009325", 14),
-        (EntityLabel.DISEASE, "MESH:D012640", 14),
+        (EntityLabel.CHEMICAL, "MESH:D008687", 0, 9, "Metformin"),
+        (EntityLabel.DISEASE, "MESH:D009325", 14, 20, "nausea"),
+        (EntityLabel.DISEASE, "MESH:D012640", 14, 20, "nausea"),
     ]
     assert texts == {"1": "Metformin and nausea."}
+
+
+def test_a_gold_mention_with_no_mesh_id_becomes_one_NIL_entity_not_dropped():
+    # A mention with mesh_ids=() (BC5CDR's unlinkable/-1 case) must still surface as an
+    # Entity(canonical_id=None), not vanish. The list comprehension iterates mesh_ids per
+    # mention, so an empty tuple naively yields zero Entity objects for that mention --
+    # invisible to pairing_diagnostics, which can only count NIL mentions that exist.
+    doc = GoldDocument(
+        pmid="1",
+        text="Metformin and rash.",
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=0,
+                end=9,
+                text="Metformin",
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=("MESH:D008687",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=14,
+                end=18,
+                text="rash",
+                label=EntityLabel.DISEASE,
+                mesh_ids=(),
+            ),
+        ],
+    )
+    records, texts = synthesize_records([doc])
+    assert len(records[0].entities) == 2
+    nil_entity = records[0].entities[1]
+    assert nil_entity.canonical_id is None
+    assert nil_entity.label is EntityLabel.DISEASE
+    assert nil_entity.text == "rash"
+    assert nil_entity.start == 14
+    assert nil_entity.end == 18
+
+    diag = pairing_diagnostics(records, texts=texts)
+    assert diag.nil_disease_mentions == 1
+    assert diag.nil_chemical_mentions == 0
 
 
 def test_run_cluster_eval_scores_both_strategies_and_writes_one_log_line(tmp_path):
@@ -213,6 +255,62 @@ def test_run_cluster_eval_scores_both_strategies_and_writes_one_log_line(tmp_pat
         now="2026-07-28T00:00:00+00:00",
     )
     assert result["n_gold_clusters"] == 1
+    for strategy in ("cross_product", "same_sentence"):
+        assert result["strategies"][strategy]["paper_pair"]["f1"] == 1.0
+    assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1
+
+
+def test_run_cluster_eval_scores_arm_b_from_records_and_texts_directly(tmp_path):
+    # Arm B never passes documents=; it passes records=+texts= from the real pipeline. This
+    # is the only arm that measures the production path, so its entry must be covered
+    # directly rather than only exercised transitively through documents= (Arm A). It also
+    # pins that the injected impure inputs (now/git_sha/dataset/arm) actually land in the
+    # written line -- a run_cluster_eval that ignored them would still pass a test that
+    # checks only metric shape.
+    records = [
+        ExtractedRecord(
+            paper_id=p,
+            entities=[
+                Entity(
+                    text="Metformin",
+                    label=EntityLabel.CHEMICAL,
+                    start=0,
+                    end=9,
+                    canonical_id="MESH:D008687",
+                ),
+                Entity(
+                    text="nausea",
+                    label=EntityLabel.DISEASE,
+                    start=17,
+                    end=23,
+                    canonical_id="MESH:D009325",
+                ),
+            ],
+        )
+        for p in ("1", "2")
+    ]
+    texts = {p: "Metformin caused nausea." for p in ("1", "2")}
+    relations = {p: {("MESH:D008687", "MESH:D009325")} for p in ("1", "2")}
+    log = tmp_path / "cluster_runs_b.jsonl"
+
+    result = run_cluster_eval(
+        records=records,
+        texts=texts,
+        relations=relations,
+        arm="B",
+        dataset="unit_b",
+        log_path=str(log),
+        git_sha="cafef00d",
+        now="2026-07-29T00:00:00+00:00",
+    )
+
+    assert result["timestamp"] == "2026-07-29T00:00:00+00:00"
+    assert result["git_sha"] == "cafef00d"
+    assert result["dataset"] == "unit_b"
+    assert result["arm"] == "B"
+    assert result["n_documents"] == 2
+    assert result["n_gold_clusters"] == 1
+    assert result["n_gold_paper_pairs"] == 1
     for strategy in ("cross_product", "same_sentence"):
         assert result["strategies"][strategy]["paper_pair"]["f1"] == 1.0
     assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1

@@ -179,6 +179,13 @@ def synthesize_records(
     one delimited string would collide with "|", the cluster-key delimiter, and push id-set
     logic into the PairingStrategy both arms share. Consequence, stated not hidden:
     duplicate spans inflate Arm A's raw entity counts in pairing_diagnostics.
+
+    Zero-id gold mentions (`mesh_ids == ()`, BC5CDR's unlinkable/-1 case) still become
+    exactly one `Entity(canonical_id=None)` -- there is no id to iterate, but the mention
+    itself must not vanish. Dropping it instead would be invisible to
+    `pairing_diagnostics`, which can only count NIL entities that exist, making Arm A's
+    NIL-mention counters structurally 0 regardless of how many gold mentions are actually
+    unlinkable.
     """
     records: list[ExtractedRecord] = []
     texts: dict[str, str] = {}
@@ -192,7 +199,7 @@ def synthesize_records(
                 canonical_id=mesh_id,
             )
             for mention in document.mentions
-            for mesh_id in mention.mesh_ids
+            for mesh_id in (mention.mesh_ids or (None,))
         ]
         records.append(ExtractedRecord(paper_id=document.pmid, entities=entities))
         texts[document.pmid] = document.text
