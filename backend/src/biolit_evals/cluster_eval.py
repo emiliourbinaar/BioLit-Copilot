@@ -244,6 +244,29 @@ def assert_key_recall_anchor(metrics: ConceptMetrics, *, arm: str) -> None:
         )
 
 
+def assert_full_reachability_on_gold_entities(reach: Reachability, *, arm: str) -> None:
+    """HARNESS correctness, Arm A only: gold entities must reach every gold CID relation.
+
+    A gold relation's two endpoints are themselves gold-annotated mentions, so when entities
+    are synthesized FROM that gold the oracle cannot fail to reach one. A nonzero loss means
+    the harness is wrong -- most likely MeSH ids prefixed inconsistently between the relation
+    loader and the mention loader, which would silently deflate the ceiling.
+
+    Same reasoning as the cross-product key-recall anchor, applied to the ceiling instead of
+    the baseline, so the number the build-or-not decision rests on is gated too.
+
+    Arm B is deliberately NOT gated: there the loss IS the result (the 40.3% of relations
+    whose endpoint real extraction drops), and anchoring it would be anchoring a finding.
+    """
+    if reach.n_endpoint_lost != 0:
+        raise SystemExit(
+            f"{arm}: reachability anchor -- {reach.n_endpoint_lost} of {reach.n_gold_pairs} "
+            "gold CID relations were unreachable on GOLD entities. Both endpoints of a gold "
+            "relation are gold-annotated mentions, so this cannot happen unless the harness "
+            "is wrong. Check MeSH id prefixing across the two loaders."
+        )
+
+
 def assert_gold_cluster_anchor(n_documents: int, n_gold_clusters: int) -> None:
     """LOADER correctness -- NOT a clustering-quality check.
 
@@ -359,6 +382,8 @@ def run_cluster_eval(
     # min_size and ordering rules as gold's and the strategies'. Anything else would make
     # the comparison an artefact of two different aggregation paths.
     reach = entity_conditioned_oracle(records, relations)
+    if documents is not None:
+        assert_full_reachability_on_gold_entities(reach, arm=arm)
     oracle_clusters = gold_clusters_from_relations(reach.pairs_by_paper)
     strategies["oracle"] = {
         "key": asdict(key_metrics(reach.pairs_by_paper, relations)),

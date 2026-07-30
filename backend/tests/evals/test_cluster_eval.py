@@ -6,7 +6,9 @@ from biolit.cluster.group import pairing_diagnostics
 from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit_evals.cluster_eval import (
+    Reachability,
     Workload,
+    assert_full_reachability_on_gold_entities,
     assert_gold_cluster_anchor,
     assert_key_recall_anchor,
     cluster_key_metrics,
@@ -153,6 +155,19 @@ def test_workload_handles_empty_cluster_list():
         largest_cluster=0,
         top5_pair_share=0.0,
     )
+
+
+def test_the_reachability_anchor_requires_gold_entities_to_reach_every_gold_relation():
+    # THIRD ANCHOR, and it validates the OTHER new construction. On gold entities every gold
+    # CID relation's endpoints exist by definition (the gold annotates them), so the
+    # entity-conditioned oracle must reach 100% and lose nothing. A nonzero loss on Arm A
+    # means the harness dropped gold or prefixed MeSH ids inconsistently between the relation
+    # loader and the mention loader -- the same failure class the key-recall anchor guards,
+    # on the same reasoning, but it catches it in the ceiling rather than in the baseline.
+    # Arm B is deliberately NOT gated: there the loss is the RESULT (40.3%), not a defect.
+    assert_full_reachability_on_gold_entities(Reachability(10, 10, 0, {}), arm="A")
+    with pytest.raises(SystemExit, match="reachability anchor"):
+        assert_full_reachability_on_gold_entities(Reachability(10, 9, 1, {}), arm="A")
 
 
 def test_the_key_recall_anchor_raises_when_cross_product_misses_a_gold_pair():
