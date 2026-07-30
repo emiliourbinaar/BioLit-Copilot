@@ -1393,3 +1393,374 @@ Two anomalies in the output were investigated rather than waved through:
 14. **`max_length=32` truncates 7.24% of aliases**, so the SapBERT arms are a lower bound.
     The direction is known and favors the conclusion drawn, but the magnitude of the
     understatement was not measured.
+
+---
+
+## Phase 3: pricing the pairing problem — same-sentence co-occurrence, and why CID relation extraction does not get its own phase
+
+> **Read the scope before the number.** Everything here is measured against
+> **paper-pair** scoring — the unit the Critic actually consumes, since
+> `ContradictionFinding` is `(paper_id_a, paper_id_b, label, rationale)`. Cluster-key and
+> key metrics are reported alongside as **diagnostics** and are materially worse; see
+> [the key-vs-cluster gap](#the-key-vs-cluster-gap-the-same-mechanism-looks-worse-the-finer-you-score-it).
+> The verdict here is about **whether to build a relation extractor**, not about how good
+> clustering is in absolute terms.
+
+ADR-0008 defines a cluster as papers about the same chemical–disease relationship. Nothing in
+the pipeline decides *which* chemical goes with *which* disease inside a paper, so the
+cheapest possible answer is the full cross product of every linked chemical against every
+linked disease. That is obviously lossy on precision. The open question was **how lossy, and
+whether closing the gap needs a real CID relation extractor** — a model, a training set, and
+its own project phase.
+
+BC5CDR answers this directly, and this is worth stating because an earlier note in this
+project got it wrong: **`CDR_Data.zip` ships gold CID relations.** The `PMID<tab>CID<tab>chemMeSH<tab>disMeSH`
+lines are 4-field records that the 6-field mention parser already skipped, so they had been
+sitting unread in a corpus this project has used since Phase 2. There is a real gold standard
+for "which papers belong together"; no synthetic clustering target was needed.
+
+### The two arms, and why they run on different corpora
+
+| arm | entities | corpus | why |
+|---|---|---|---|
+| **A** | synthesized from **gold** mentions + gold MeSH ids | all **1500** docs | no model runs, so no contamination risk; maximum sample |
+| **B** | the **real** NER + linking pipeline | **Test-500** only | the NER checkpoint was fine-tuned on BC5CDR *train*; any arm running real NER must be held out |
+
+The Test-500 restriction on Arm B is a **correctness requirement, not a sample-size
+preference.** Arm A is unconstrained because it never invokes the checkpoint.
+
+**The two arms are therefore not directly comparable, and an earlier draft of the spec claimed
+they were.** See [the corrected ceiling claim](#the-arm-a-ceiling-claim-was-false-and-the-rule-that-replaces-it)
+below — that error is kept and labelled rather than edited away, because the rule it produced
+is reusable.
+
+### Headline: same-sentence co-occurrence wins on every arm and every level
+
+Paper-pair (primary), from `evals/cluster_runs.jsonl` at `7430c6e`:
+
+| arm | strategy | P | R | **F1** | tp | fp | fn | clusters | Critic calls | cluster comparisons | largest | top-5 share |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| A — gold / 1500 | `cross_product` | 0.2743 | **1.0000** | 0.4305 | 1938 | 5128 | 0 | 1772 | 7066 | 10064 | 37 | 0.204 |
+| A — gold / 1500 | `same_sentence` | 0.4786 | 0.8818 | **0.6204** | 1709 | 1862 | 229 | 747 | 3571 | 4399 | 28 | 0.268 |
+| B — real / 500 | `cross_product` | 0.4000 | 0.8720 | 0.5484 | 184 | 276 | 27 | 229 | 460 | 648 | 11 | 0.364 |
+| B — real / 500 | `same_sentence` | 0.5556 | 0.7346 | **0.6327** | 155 | 124 | 56 | 96 | 279 | 336 | 11 | 0.503 |
+
+Gold: **325 clusters / 1938 paper-pairs** on all 1500; **80 clusters / 211 paper-pairs** on
+Test-500.
+
+**Two workload columns, not one, and the distinction is not cosmetic.** *Critic calls* is the
+count of **distinct** paper pairs; *cluster comparisons* counts a pair once per cluster it
+appears in. `ContradictionFinding` is `(paper_id_a, paper_id_b, label, rationale)` with **no
+key field**, so a pair co-clustered under two different keys is **one** Critic call whose
+result cannot be reported twice — the call count is the cost figure, and the comparison count
+is the basis for the concentration view (`top5_pair_share` is a share of the latter). An
+earlier version of this harness reported only the comparison count, under a field named
+`n_paper_pairs`, **overstating the Critic's workload by 20–42%**; see
+[limitations](#limitations) and the two superseded log lines at `7430c6e`.
+
+Two things fall out immediately:
+
+1. **A free deterministic heuristic beats the cross product decisively** — +0.1899 F1 on gold
+   entities, +0.0843 on the real pipeline. No model, no training data, one sentence-boundary
+   lookup per entity.
+2. **It roughly halves the Critic's workload** — Critic calls drop 7066 → 3571 on Arm A
+   (**1.98×**) and 460 → 279 on Arm B (**1.65×**). Since every call is an LLM invocation in
+   Phase 5, this is a direct cost result, not just a quality one. On the comparison basis the
+   reduction looks larger (2.29× and 1.93×); the call basis is the honest one to quote.
+
+This reproduces the design-time exploration that motivated the harness (cluster precision
+18.8% → 36.9% on Test-500, vs 18.34% → 33.47% measured on all 1500) — same direction, close
+magnitude, different corpus.
+
+### The key-vs-cluster gap: the same mechanism looks worse the finer you score it
+
+Cite the paper-pair number, but never without this. The identical run scored at three levels:
+
+| arm | strategy | paper-pair F1 (**primary**) | cluster-key F1 | key F1 |
+|---|---|---|---|---|
+| A — gold / 1500 | `cross_product` | 0.4305 | 0.3100 | 0.3243 |
+| A — gold / 1500 | `same_sentence` | **0.6204** | 0.4664 | 0.4392 |
+| B — real / 500 | `cross_product` | 0.5484 | 0.3819 | 0.2905 |
+| B — real / 500 | `same_sentence` | **0.6327** | 0.5341 | 0.3317 |
+
+On Arm B, same-sentence pairing scores **0.6327 at paper-pair level and 0.3317 at key level —
+a 0.3010 gap.** Paper-pair scoring is more forgiving because two papers count as correctly
+co-clustered if they share *any* predicted key; it does not require the key itself to be a
+real relation. That forgiveness is legitimate — it is exactly what the Critic needs, since the
+Critic compares two papers and does not consume the key — but it means **the key-level number
+is the honest measure of how well the system identifies actual chemical–disease relationships,
+and it is roughly half.** Any future consumer that reads the cluster key as a claim about a
+real relation should use the key-level figure, not the headline.
+
+### The `Arm A is a ceiling` claim was false, and the rule that replaces it
+
+The approved spec asserted that Arm A bounds Arm B, and that the gap between them "prices what
+NER and linking cost clustering." **Both claims are wrong, and the data refutes them
+directly.** Made apples-to-apples — Arm A re-run restricted to Test-500 (scratch run,
+deliberately **not** committed to the log, since it is a diagnostic and not a result):
+
+| entities | strategy | P | R | **F1** |
+|---|---|---|---|---|
+| **gold** (Arm A construction, Test-500) | `same_sentence` | 0.4279 | 0.9005 | 0.5802 |
+| **real pipeline** (Arm B) | `same_sentence` | 0.5556 | 0.7346 | **0.6327** |
+
+**The real pipeline scores higher on precision and F1 than the supposed ceiling.** The
+mechanism is structural, not incidental: granting perfect entities can only *add* candidate
+pairs, and adding candidates against a fixed gold pair set can only cost precision. Arm A is a
+ceiling for **recall only** — 1.0000 by construction, which the run log confirms exactly.
+
+This is the same shape as Phase 3C's oracle ceiling being recall-only, so it is stated here as
+a checkable rule rather than a corrected number:
+
+> **The recall-only ceiling rule.** Any construction that improves recall by *granting
+> something correct*, without touching what the system emits *wrongly*, is a ceiling for
+> recall alone — never for precision or F1. Before calling anything a ceiling, ask what it can
+> make **worse**. If the answer is "nothing," it is recall-only, and its F1 is not an upper
+> bound on anything.
+
+**The second-order finding, and its limits.** NER and linking act as an unintended **precision
+filter**: they lose recall, but the entities they *do* resolve are the more canonical ones,
+and canonical entities correlate with the relations BC5CDR annotates. This is a property of
+**this corpus and this gold standard**, not a general result, and it is emphatically **not** an
+argument that noisier extraction is better or that better NER is unnecessary. The direct
+measure of what better NER would buy is in the next section: **40.3% of gold relations lose an
+endpoint outright**, and no pairing mechanism recovers those.
+
+### The entity-conditioned ceiling: the number that actually prices relation extraction
+
+Neither arm above answers "what would a *perfect* pairing mechanism score on the entities real
+extraction actually delivers." That is the only construction directly comparable to
+`same_sentence`, so it is the one that prices whether relation extraction earns a phase. Credit
+a pair only where **both endpoints are present in that paper's real linked entity set** and the
+pair is gold-true. This is `entity_conditioned_oracle`, logged on every run beside the
+strategies — not a scratch script, because the recommendation's second reason rests on it:
+
+```
+gold CID relations (Test-500)        1066
+  reachable on real entities          636   (59.7%)
+  endpoint lost by NER/linking        430   (40.3%)   <- no pairing mechanism recovers these
+```
+
+| construction | P | R | **F1** | clusters | Critic calls | comparisons |
+|---|---|---|---|---|---|---|
+| **ORACLE** — perfect pairing on real entities | **1.0000** | 0.6967 | **0.8212** | 57 | 147 | 157 |
+| `same_sentence` | 0.5556 | **0.7346** | 0.6327 | 96 | 279 | 336 |
+| `cross_product` | 0.4000 | 0.8720 | 0.5484 | 229 | 460 | 648 |
+
+Headroom from `same_sentence` to the oracle is **+0.1886 F1**, and `same_sentence` already
+captures **77.0%** of it.
+
+**Three independent checks validate the construction**, none of them forced by the harness:
+
+1. **On Arm A the oracle is perfect** — 3116 of 3116 gold relations reachable, F1 1.0000 at all
+   three levels. It has to be: a gold relation's endpoints are themselves gold-annotated
+   mentions, so entities synthesized from that gold cannot fail to reach one.
+   `assert_full_reachability_on_gold_entities` now gates exactly this.
+2. **A three-way identity, each side computed by a different code path:** the reachable share
+   (636/1066), the oracle's key-level recall, and `cross_product`'s key-level recall are all
+   **0.5966**. A cross product over real entities recovers exactly the reachable gold keys and
+   no more, which is what "conditioned on real entities" must mean if the code is right.
+3. **The oracle's distinct-call count equals its true positives exactly** (147 = 147) with
+   `fp` 0 — confirming precision 1.0000 is structural, not incidental.
+
+**This oracle is *not* a hard F1 bound, and calling it one would repeat the exact error
+corrected above.** Its precision is 1.0000 **by construction** — it emits only gold-true keys —
+so it is a **precision-perfect, recall-capped** construction. Applying the rule: what can it
+make worse? Nothing. So it bounds recall and nothing else.
+
+**The empirical proof, not just the structural argument:** `same_sentence`'s paper-pair recall
+is **0.7346, which exceeds the oracle's 0.6967.** A mechanism already in the table beats the
+"ceiling" on recall. The mechanism is that paper-pair recall credits a co-clustered pair
+whenever the two papers share *any* predicted key, so a **wrong** key held by both papers can
+accidentally co-cluster a genuinely gold-related pair. The oracle, emitting only gold-true
+keys, forgoes those accidental wins. A mechanism trading precision for recall can therefore
+exceed F1 0.8212.
+
+### Recommendation: do not scope CID relation extraction
+
+Three reasons, in order of weight:
+
+1. **The binding constraint is upstream, not in pairing.** 430 of 1066 gold relations
+   (**40.3%**) have an endpoint the NER + linking pipeline never produced for that paper. No
+   pairing mechanism — heuristic, learned, or perfect — can pair an entity that was never
+   extracted. A relation extractor would compete for the remaining 59.7%.
+2. **The free heuristic already captures 77.0% of a precision-perfect ceiling at zero model
+   cost.** `same_sentence` reaches F1 0.6327 against the oracle's 0.8212. The entire
+   pairing-strategy question is worth at most +0.1886 F1, and three quarters of that is
+   already taken by a sentence-boundary lookup.
+3. **The realistic win is *smaller* than +0.1886.** Part of `same_sentence`'s recall is
+   accidental co-clustering through wrong shared keys — proven by its recall exceeding the
+   oracle's. A precision-oriented relation extractor would give those up, so it starts from a
+   worse recall position than the raw headroom suggests.
+
+**Interpretation caveat on the precision numbers, and what it does *not* license.** Gold CID is
+narrower than co-mention: BC5CDR annotates a chemical–disease pair only where the abstract
+asserts a causal induction relationship, so some pairs scored as false positives are genuine
+co-mentions that simply are not CID relations. That caveat corrects **how the precision number
+should be read** — it is not a clean measure of "wrong pairs" — but it does **not** make the
+precision problem matter less practically. The Critic's actual task is judging whether two
+papers contradict each other about a drug–disease effect, which is itself the narrow,
+causal-relation-shaped task BC5CDR annotates. A pair that is a co-mention but not a CID
+relation is still a wasted Critic call.
+
+### Carried forward, not built: cluster-size capping
+
+`top5_pair_share` on Arm B `same_sentence` is **0.503** — half of all cluster comparisons come
+from five clusters, and the largest single cluster contributes 55 (11 papers). On Arm A the
+largest `same_sentence` cluster is 28 papers, or 378 comparisons from one key. Cluster-size
+capping — sampling or truncating oversized clusters before they reach the Critic — is therefore
+a real design consideration for whenever the Critic gets scoped.
+
+**It is deliberately not built now.** There is no Critic, so there is no consumer, and this
+project's standing rule is no infrastructure without a demonstrated consumer — the same
+standard that left the MeSH ingest and the embedding fallback unmerged. The measurement that
+would motivate a cap now exists and is committed; the cap itself waits for something to
+protect.
+
+### ⭐ Standing project-level finding: upstream entity loss is the dominant bottleneck, twice over
+
+This is bigger than the clustering sub-project, and it is named here rather than left implicit
+across two ADRs.
+
+**Twice now, a phase has gone looking for a downstream mechanism to fix a quality problem, and
+measurement has shown the loss happens upstream, before that mechanism ever runs.**
+
+| phase | the mechanism that looked like the answer | what measurement actually showed |
+|---|---|---|
+| **3C — canonicalization** | fragment merging, then an embedding fallback linker | The dominant loss was **1679 gold mentions whose span NER got exactly right but which linked to nothing** — priced at **+0.0821 concept F1**, **39× the fragment-merge ablation** and the largest recoverable loss measured anywhere in this project. The fallback linker then realized only **24%** of that ceiling, at 53.9% mention precision. |
+| **3 — clustering** | a CID relation extractor with its own phase | **40.3% of gold relations lose an endpoint to NER/linking outright.** The entire pairing question is worth ≤ +0.1886 F1, of which a free heuristic already takes **77%**. |
+
+In both cases the entities that were never extracted or never linked bounded the result, and
+in both cases that loss was **downstream-unrecoverable**: no linker fixes a span NER missed,
+and no pairing strategy pairs an entity that does not exist. The pattern is not two
+coincidences — it is the same finding, and it says where the next investment belongs:
+
+> **Entity recall — NER coverage and linking coverage — is this pipeline's dominant,
+> downstream-unrecoverable constraint. Downstream reasoning components should be priced against
+> an entity-conditioned ceiling, not an oracle-entity one, or they will be scoped against
+> headroom that does not exist.**
+
+The entity-conditioned oracle in this section is the concrete template for doing that.
+
+### Diagnostics: the NIL populations are different populations
+
+| arm | `nil_chemical_mentions` | `nil_disease_mentions` | papers with no linked chemical | papers with no linked disease | unplaceable entities |
+|---|---|---|---|---|---|
+| A — gold / 1500 | 117 | 109 | 0 | 0 | 0 |
+| B — real / 500 | 1276 | 1933 | 7 | 29 | 0 |
+
+Arm B shows the **1.5× DISEASE skew** expected of real linking, consistent with Phase 3A/3C's
+finding that linking failure is overwhelmingly a disease problem. Arm A does not, because there
+"NIL" means the *gold* carries no MeSH id at all (BC5CDR's `-1` annotations) — a different
+population entirely. **Do not conflate them:** Arm B's NILs are mentions a real linker failed
+to resolve; Arm A's 226 are mentions with nothing to resolve *to*.
+
+**An unplanned cross-harness check fell out of this.** Arm B's two counters sum to
+**1276 + 1933 = 3209**, which is *exactly* the full NIL population Phase 3C's fallback sweep
+measured on the same split. Two independently built harnesses — one scoring concept sets for a
+linker sweep, one scoring paper pairs for clustering — partition the same 3209 mentions. That
+is not a designed anchor, but it is the strongest available evidence that both harnesses see
+the same pipeline output, and it retroactively corroborates the Phase 3C denominator.
+
+Arm A's two counters were **structurally always 0** until a harness defect was found and fixed
+during Task 8: `synthesize_records` dropped zero-id gold mentions entirely rather than
+materializing them as `canonical_id=None`, and `pairing_diagnostics` counts NIL on entities
+that *exist* — so the diagnostic was inert for the entire arm, while the unlinkable gold
+mentions were exactly what it existed to expose. Fixed in `7430c6e`. Metric invariance was
+verified rather than assumed: both pairing strategies filter `canonical_id is None`, so a NIL
+entity is provably indistinguishable from an absent one to every scored metric, and only the
+diagnostic moves.
+
+The corrected counters were then **independently confirmed against the corpus** rather than
+trusted from the log: counting gold mentions with an empty `mesh_ids` across all three splits
+gives **117 CHEMICAL / 109 DISEASE of 28,785 gold mentions (226 total, 0.8%)** — exactly the
+committed figures. On Test-500 alone the same count is 30 / 61, consistent with the 53
+`GOLD_UNLINKABLE` mentions Phase 3A reported over its narrower exact-span population.
+
+### Reproducing these numbers
+
+```bash
+cd backend
+# Arm A — gold entities, all three splits (1500 docs), no model loaded
+uv run python -m biolit_evals.cluster_eval --arm A
+# Arm B — real NER + linking, Test-500 only (loads the checkpoint)
+uv run python -m biolit_evals.cluster_eval --arm B
+```
+
+The corpus split is fixed by the arm, not by a flag, precisely so the Test-500 holdout on Arm B
+cannot be widened by a careless command line.
+
+Both write to `evals/cluster_runs.jsonl`. **Three anchors plus one guard gate every run on the
+real path**, not only in tests:
+
+- **`assert_key_recall_anchor`** — `cross_product` key recall must round to exactly **1.0000**
+  on gold entities. The cross product emits every chemical × disease combination by
+  construction, so any gold key it misses means the harness lost gold, not that the strategy
+  underperformed. Tolerance is `round(recall, 4)`, tight enough to catch a harness dropping 1
+  gold pair in 1000.
+- **`assert_gold_cluster_anchor`** — gold cluster counts must match the independently
+  established statistics (**500 → 80**, **1500 → 325**). This is a **loader-correctness check
+  on `load_bc5cdr_cid_relations`, not a clustering-quality check**; it validates that the CID
+  relations were parsed and reconciled correctly before any strategy is scored.
+- **`assert_full_reachability_on_gold_entities`** — on Arm A the oracle must reach **every**
+  gold relation, for the structural reason given above. This gates the ceiling the
+  build-or-not decision rests on. Arm B is deliberately **not** gated: there the 40.3% loss
+  *is* the result, and anchoring a finding is how a harness stops being able to surprise you.
+- **`assert_dataset_size`** — a run whose document count contradicts its `dataset` tag halts
+  before any scoring. Without it, an Arm B run over anything but exactly 500 documents was
+  scored and logged with **no anchor firing at all**, since the gold-cluster anchor returns
+  silently for untabulated sizes and the key-recall anchor is Arm-A-only.
+
+If any of them fires, the harness is wrong: report the mismatch, do not adjust an anchor to
+match the observation, and do not commit the run as a result.
+
+### Limitations
+
+1. **The two superseded log lines at `7430c6e` carry a wrong field.** They report
+   `workload.n_paper_pairs`, which summed n(n-1)/2 per cluster — the *cluster-comparison*
+   count — while being named and cited as the paper-pair count, overstating the Critic's
+   workload by **20–42%**. They are kept rather than edited, per this project's practice of
+   documenting a wrong log line instead of rewriting results; the lines at `ce489c4` and later
+   carry `n_distinct_paper_pairs` and `n_cluster_comparisons` separately. No P/R/F1 at any
+   level was ever affected — all 24 triples recompute exactly from their own `tp/fp/fn`.
+2. **The Arm A @ Test-500 comparison is a recipe, not a logged run.** No flag exposes it,
+   deliberately — a split flag on Arm A is exactly the misuse `assert_dataset_size` exists to
+   prevent. The entity-conditioned oracle, which carries more decision weight, *is* a committed
+   code path. The recipe below was run to produce the figures quoted above, and all four gates
+   pass on it:
+
+   ```python
+   from datetime import UTC, datetime
+   from biolit.config import get_settings
+   from biolit_evals.cluster_eval import run_cluster_eval
+   from biolit_evals.mesh_gold_download import (
+       TEST_MEMBER, load_bc5cdr_cid_relations, load_bc5cdr_documents,
+   )
+   url = get_settings().bc5cdr_cdr_zip_url
+   line = run_cluster_eval(
+       documents=load_bc5cdr_documents(url, TEST_MEMBER),
+       relations=load_bc5cdr_cid_relations(url, TEST_MEMBER),
+       arm="A", dataset="bc5cdr_test500", log_path="/tmp/scratch.jsonl",
+       git_sha="scratch", now=datetime.now(UTC).isoformat(),
+   )
+   ```
+
+   Yields `cross_product` F1 0.4089 and `same_sentence` P 0.4279 / R 0.9005 / **F1 0.5802** —
+   below Arm B's 0.6327 on the identical corpus. Write to a scratch path, not
+   `evals/cluster_runs.jsonl`: this is a diagnostic, not a result.
+3. **`SameSentencePairing` inherits the sentence splitter's known mis-splits** on
+   abbreviations ("e.g. metformin"). In windowing that is harmless because consecutive windows
+   overlap by a sentence; in pairing a mis-split can drop a real pair or invent one. That cost
+   is inside the reported numbers rather than corrected for, which is why both strategies are
+   reported side by side.
+4. **`top5_pair_share` is a share of cluster comparisons, not of Critic calls.** Concentration
+   is a property of cluster sizes, so the comparison basis is the correct one for that
+   diagnostic — but it means the figure is not directly comparable to the call counts beside
+   it.
+5. **Gold CID is narrower than co-mention**, so the precision figures understate how many
+   predicted pairs are defensible co-mentions. This corrects how precision should be *read*,
+   not how much it matters — see the recommendation section for why the Critic's task is
+   itself the narrow, causal-relation-shaped one.
+6. **Alternative pairing heuristics were not swept.** Same-paragraph, N-token windows, and
+   dependency-path variants are all cheap and unmeasured, so the 77.0%-of-ceiling figure
+   prices *same-sentence specifically*, not the best achievable deterministic heuristic.
