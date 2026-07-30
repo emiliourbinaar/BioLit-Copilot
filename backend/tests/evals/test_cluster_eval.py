@@ -63,6 +63,26 @@ def test_gold_clusters_from_relations_aggregates_shared_pairs_and_drops_singleto
     assert clusters == [Cluster(key="MESH:D008687|MESH:D011085", paper_ids=["1", "2"])]
 
 
+def test_gold_cluster_pmids_and_keys_are_both_sorted_deterministically():
+    # gold_clusters_from_relations has the SAME two ordering guarantees as cluster_papers
+    # (sorted keys, sorted pmids) and the same weak-fixture problem: the 2-pmid fixture above
+    # cannot catch a dropped sort reliably. Seven pmids inserted in reverse -> 1/5040.
+    # THREE keys, also inserted in reverse, pin the key ordering that no fixture observed
+    # before: only one key ever cleared min_size, so a broken key sort was unobservable.
+    pmids = ["7", "6", "5", "4", "3", "2", "1"]
+    shared = ("MESH:D008687", "MESH:D011085")
+    relations: dict[str, set[tuple[str, str]]] = {p: {shared} for p in pmids}
+    for p in ("1", "2"):
+        relations[p] |= {("MESH:D001241", "MESH:D014456"), ("MESH:C000657245", "MESH:D003924")}
+    clusters = gold_clusters_from_relations(relations)
+    assert [c.key for c in clusters] == [
+        "MESH:C000657245|MESH:D003924",
+        "MESH:D001241|MESH:D014456",
+        "MESH:D008687|MESH:D011085",
+    ]
+    assert clusters[2].paper_ids == ["1", "2", "3", "4", "5", "6", "7"]
+
+
 def test_key_metrics_covers_pmids_present_on_only_one_side():
     # pmid "1" is shared -> tp. pmid "2" is gold-only (pred never produced anything for it,
     # e.g. NER missed the whole document) -> its pair must land in fn. pmid "3" is pred-only
@@ -93,9 +113,29 @@ def test_top5_share_exposes_one_oversized_cluster_dominating_the_critic_budget()
     clusters.append(Cluster(key="big", paper_ids=[f"b{j}" for j in range(25)]))
     w = workload(clusters)
     assert w.n_clusters == 6
-    assert w.n_paper_pairs == 305
+    assert w.n_cluster_comparisons == 305
+    # Disjoint paper sets, so the two totals coincide here. Asserted deliberately: this
+    # coincidence is why a single field hid the multiplicity bug, and the discriminating
+    # test below is the one that separates them.
+    assert w.n_distinct_paper_pairs == 305
     assert w.largest_cluster == 25
     assert round(w.top5_pair_share, 4) == round(304 / 305, 4)
+
+
+def test_workload_separates_critic_calls_from_cluster_comparisons():
+    # THE DISCRIMINATING TEST for the two quantities. The same paper pair placed under two
+    # keys is TWO cluster comparisons but ONE Critic call: ContradictionFinding is
+    # (paper_id_a, paper_id_b, label, rationale) with no key field, so the pair is the unit
+    # of work and cannot be reported twice. Every other workload fixture in this file uses
+    # disjoint paper sets, where both quantities coincide -- which is exactly how a single
+    # field labelled "n_paper_pairs" carried the multiplicity count undetected.
+    clusters = [
+        Cluster(key="MESH:D000001|MESH:D000002", paper_ids=["P1", "P2"]),
+        Cluster(key="MESH:D000003|MESH:D000004", paper_ids=["P1", "P2"]),
+    ]
+    w = workload(clusters)
+    assert w.n_cluster_comparisons == 2
+    assert w.n_distinct_paper_pairs == 1
 
 
 def test_workload_handles_empty_cluster_list():
@@ -103,7 +143,13 @@ def test_workload_handles_empty_cluster_list():
     # IndexError (sizes[0]) or ZeroDivisionError (total) undetected. cluster_papers
     # can return [] when no chemical|disease key is shared by two papers.
     w = workload([])
-    assert w == Workload(n_clusters=0, n_paper_pairs=0, largest_cluster=0, top5_pair_share=0.0)
+    assert w == Workload(
+        n_clusters=0,
+        n_cluster_comparisons=0,
+        n_distinct_paper_pairs=0,
+        largest_cluster=0,
+        top5_pair_share=0.0,
+    )
 
 
 def test_the_key_recall_anchor_raises_when_cross_product_misses_a_gold_pair():
@@ -258,6 +304,44 @@ def test_run_cluster_eval_scores_both_strategies_and_writes_one_log_line(tmp_pat
     for strategy in ("cross_product", "same_sentence"):
         assert result["strategies"][strategy]["paper_pair"]["f1"] == 1.0
     assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1
+
+
+def test_a_named_corpus_whose_document_count_is_wrong_halts_before_writing(tmp_path):
+    # CLOSES A GAP THE GOLD-CLUSTER ANCHOR LEAVES OPEN. That anchor returns silently for
+    # untabulated document counts (deliberately -- unit fixtures rely on it), so an Arm B run
+    # over anything other than exactly 500 documents was scored and LOGGED with no anchor
+    # firing at all: the key-recall anchor is Arm-A-only by construction, and `dataset` was a
+    # hardcoded string never checked against reality. Here the tag claims 500 and 2 arrived.
+    docs = [
+        GoldDocument(
+            pmid=p,
+            text="Metformin caused nausea.",
+            mentions=[
+                GoldMention(
+                    pmid=p,
+                    start=0,
+                    end=9,
+                    text="Metformin",
+                    label=EntityLabel.CHEMICAL,
+                    mesh_ids=("MESH:D008687",),
+                ),
+            ],
+        )
+        for p in ("1", "2")
+    ]
+    log = tmp_path / "cluster_runs.jsonl"
+    with pytest.raises(SystemExit, match="declares 500 documents"):
+        run_cluster_eval(
+            documents=docs,
+            relations={},
+            arm="B",
+            dataset="bc5cdr_test500",
+            log_path=str(log),
+            git_sha="deadbee",
+            now="2026-07-28T00:00:00+00:00",
+        )
+    # Nothing may be appended: a halted run must not leave a partial result behind.
+    assert not log.exists()
 
 
 def test_run_cluster_eval_scores_arm_b_from_records_and_texts_directly(tmp_path):

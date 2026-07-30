@@ -1515,7 +1515,9 @@ EOF
 
 - [ ] **Step 5: Report back**
 
-Bring the controller: the 4-configuration table at all three metric levels, the Critic workload with top-5 concentration, the NIL-side split, both anchors' status, and a recommendation on whether CID relation extraction earns its own phase. State the key-vs-cluster-level gap explicitly wherever the same-sentence numbers appear, and label Arm A as a ceiling everywhere it is cited.
+Bring the controller: the 4-configuration table at all three metric levels, the Critic workload with top-5 concentration, the NIL-side split, both anchors' status, and a recommendation on whether CID relation extraction earns its own phase. State the key-vs-cluster-level gap explicitly wherever the same-sentence numbers appear.
+
+**CORRECTED AFTER MEASUREMENT — this step originally said "label Arm A as a ceiling everywhere it is cited."** That instruction was wrong and is kept with its refutation rather than deleted, because it was the operative reporting instruction. Arm A is a ceiling for **recall only** (1.0000 by construction); it is not a ceiling for precision or F1, and the measurement inverted it — the real pipeline scores *higher* F1 than the gold-entity arm on the same corpus. The rule: any construction that improves recall by granting something correct, without touching what the system emits wrongly, is recall-only. Before calling anything a ceiling, ask what it can make **worse**. See the spec's corrected sections and `EVAL_REPORT.md`.
 
 ---
 

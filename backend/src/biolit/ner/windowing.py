@@ -8,7 +8,14 @@ _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 def sentence_spans(text: str) -> list[tuple[int, int]]:
-    """Split `text` into (start, end) spans at sentence boundaries, covering it exactly.
+    """Split `text` into (start, end) spans at sentence boundaries.
+
+    The spans do NOT cover `text` exactly: the whitespace separating two sentences belongs
+    to neither span, so `sentence_spans("A b. C d.") == [(0, 4), (5, 9)]` leaves position 4
+    uncovered. That is load-bearing, not incidental -- `SameSentencePairing` and
+    `pairing_diagnostics` both treat an entity starting in a gap as unplaceable, and each
+    has a test pinning it. `test_sentence_spans_leave_the_inter_sentence_separator_uncovered`
+    owns this contract.
 
     Public because it has a second consumer: `biolit.cluster.pairing.SameSentencePairing`.
     The splitter is deliberately simple and mis-splits abbreviations ("e.g. metformin").

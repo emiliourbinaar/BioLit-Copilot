@@ -98,13 +98,27 @@ def gold_clusters_from_relations(
 class Workload:
     """What clustering hands the Critic. Raw counts, not only aggregates.
 
+    TWO DISTINCT COST QUANTITIES, deliberately reported separately. An earlier version
+    carried only the multiplicity count under the name `n_paper_pairs`, which overstated
+    the Critic's call count by 20-42% on the real runs; see EVAL_REPORT.md.
+
+    - n_distinct_paper_pairs -- the Critic's actual CALL COUNT. ContradictionFinding is
+      (paper_id_a, paper_id_b, label, rationale) with NO key field, so a pair co-clustered
+      under two different keys is one comparison whose result cannot be reported twice.
+      This is len(paper_pairs(clusters)) and is the number to cite as "Critic pairs".
+    - n_cluster_comparisons -- sum of n*(n-1)/2 over clusters, counting a pair once per
+      cluster it appears in. This is the basis for the quadratic-concentration view, and
+      it is what top5_pair_share is a share OF, because concentration is a property of
+      cluster sizes rather than of the deduplicated pair set.
+
     top5_pair_share prices the quadratic risk directly: a cluster of n papers is
     n*(n-1)/2 comparisons, so a single 25-paper cluster is 300 on its own. An aggregate
     pair count cannot show how much of the Critic's budget one oversized cluster burns.
     """
 
     n_clusters: int
-    n_paper_pairs: int
+    n_cluster_comparisons: int
+    n_distinct_paper_pairs: int
     largest_cluster: int
     top5_pair_share: float
 
@@ -112,24 +126,51 @@ class Workload:
 def workload(clusters: Sequence[Cluster]) -> Workload:
     """Measure clustering's cost to the Critic and concentration risk.
 
-    A cluster of n papers creates n*(n-1)/2 Critic comparisons, a quadratic cost. This
-    function logs both the aggregate pair count and the top-5 concentration ratio, which
-    exposes when a single oversized cluster dominates the budget in a way a total count
-    cannot show. Essential for identifying degenerate pairing arms where one bad key
-    inflates the Critic's workload.
+    A cluster of n papers creates n*(n-1)/2 comparisons, a quadratic cost. This function
+    logs the deduplicated Critic call count, the cluster-comparison total, and the top-5
+    concentration ratio, which exposes when a single oversized cluster dominates the
+    budget in a way a total count cannot show. Essential for identifying degenerate
+    pairing arms where one bad key inflates the Critic's workload.
+
+    The two totals diverge exactly when a paper pair is co-clustered under more than one
+    key -- see the Workload docstring for which to cite where.
     """
     sizes = sorted((len(c.paper_ids) for c in clusters), reverse=True)
     pairs = [n * (n - 1) // 2 for n in sizes]
     total = sum(pairs)
     return Workload(
         n_clusters=len(clusters),
-        n_paper_pairs=total,
+        n_cluster_comparisons=total,
+        n_distinct_paper_pairs=len(paper_pairs(clusters)),
         largest_cluster=sizes[0] if sizes else 0,
         top5_pair_share=sum(pairs[:5]) / total if total else 0.0,
     )
 
 
 _GOLD_CLUSTER_ANCHORS = {500: 80, 1500: 325}
+_DATASET_SIZES = {"bc5cdr_all1500": 1500, "bc5cdr_test500": 500}
+
+
+def assert_dataset_size(dataset: str, n_documents: int) -> None:
+    """HARNESS correctness: a named corpus must actually be the size its tag claims.
+
+    Without this, the two anchors leave a hole. `assert_gold_cluster_anchor` returns
+    silently for untabulated document counts (deliberately -- unit fixtures depend on it)
+    and `assert_key_recall_anchor` is Arm-A-only by construction, so an Arm B run over
+    anything but exactly 500 documents was scored and logged with NO anchor firing, while
+    `dataset` sat in the log as an unchecked hardcoded string. Arm B is the contaminated one
+    if its holdout ever widens, which makes an unverified corpus tag the worst field in the
+    line to trust.
+
+    Unknown tags pass: unit fixtures use their own tags and must not need a table entry.
+    """
+    expected = _DATASET_SIZES.get(dataset)
+    if expected is not None and n_documents != expected:
+        raise SystemExit(
+            f"dataset tag {dataset!r} declares {expected} documents but {n_documents} were "
+            "loaded. Either the corpus split changed or the tag is wrong; both make every "
+            "number in this run unattributable. Fix the caller, do not relabel the run."
+        )
 
 
 def assert_key_recall_anchor(metrics: ConceptMetrics, *, arm: str) -> None:
@@ -232,6 +273,9 @@ def run_cluster_eval(
         # that must hold when a caller supplies neither arm's inputs.
         raise ValueError("pass documents= (Arm A) or records= and texts= (Arm B)")
 
+    # Before any scoring: a mis-declared corpus makes every number below unattributable.
+    assert_dataset_size(dataset, len(records))
+
     gold = gold_clusters_from_relations(relations)
     assert_gold_cluster_anchor(len(records), len(gold))
 
@@ -308,7 +352,12 @@ def main(argv: list[str] | None = None) -> None:
         documents = [d for m in members for d in load_bc5cdr_documents(url, m)]
         relations: dict[str, set[tuple[str, str]]] = {}
         for member in members:
-            relations.update(load_bc5cdr_cid_relations(url, member))
+            # Union per pmid, not dict.update: BC5CDR's splits are disjoint by pmid today, so
+            # update() happens to be correct -- but it is last-write-wins, and if a pmid ever
+            # appeared in two splits it would silently DISCARD one split's relations and
+            # quietly shrink the gold set. The anchor would catch a large loss, not a small one.
+            for pmid, pairs in load_bc5cdr_cid_relations(url, member).items():
+                relations.setdefault(pmid, set()).update(pairs)
         line = run_cluster_eval(
             documents=documents,
             relations=relations,
@@ -366,7 +415,8 @@ def main(argv: list[str] | None = None) -> None:
             f"  key (diag):           P={k['precision']:.4f} R={k['recall']:.4f} F1={k['f1']:.4f}"
         )
         print(
-            f"  Critic workload: clusters={w['n_clusters']} pairs={w['n_paper_pairs']} "
+            f"  Critic workload: clusters={w['n_clusters']} "
+            f"calls={w['n_distinct_paper_pairs']} comparisons={w['n_cluster_comparisons']} "
             f"largest={w['largest_cluster']} top5_share={w['top5_pair_share']:.3f}"
         )
 

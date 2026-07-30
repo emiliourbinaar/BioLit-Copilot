@@ -30,6 +30,21 @@ def test_a_key_held_by_only_one_paper_is_not_a_cluster():
     assert clusters[0].paper_ids == ["A", "B"]
 
 
+def test_paper_ids_are_sorted_deterministically_not_left_in_set_order():
+    # Determinism is load-bearing: run logs are diffed across commits, and the Critic will
+    # read PipelineState.clusters, where ordering becomes observable.
+    # SEVEN papers, inserted in reverse order, deliberately. The pre-existing 2-paper
+    # fixture pinned this only WEAKLY -- dropping sorted() there passed on 4 of 12
+    # PYTHONHASHSEED values (a 2-element set is accidentally in order half the time), so the
+    # guarantee escaped CI a third of the time. With 7 ids an accidental sort is 1/5040.
+    ids = ["G", "F", "E", "D", "C", "B", "A"]
+    records = [_rec(pid, [("MESH:D008687", "MESH:D011085")]) for pid in ids]
+    clusters = cluster_papers(
+        records, texts={pid: "t" for pid in ids}, pairing=CrossProductPairing()
+    )
+    assert [c.paper_ids for c in clusters] == [["A", "B", "C", "D", "E", "F", "G"]]
+
+
 def test_nil_diagnostics_report_which_side_was_unlinked():
     # DISEASE has NIL'd at roughly double CHEMICAL's rate throughout canonicalization, so
     # the population this exclusion makes unmeasurable is probably not uniform. A single

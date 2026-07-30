@@ -1,9 +1,23 @@
-from biolit.ner.windowing import plan_windows, predict_windowed
+from biolit.ner.windowing import plan_windows, predict_windowed, sentence_spans
 
 
 def _chars(text: str) -> int:
     """Fake token counter: 1 'token' per character, so budgets are easy to reason about."""
     return len(text)
+
+
+def test_sentence_spans_leave_the_inter_sentence_separator_uncovered():
+    # OWNS the gap property. sentence_spans was promoted from private for
+    # biolit.cluster.pairing, and both SameSentencePairing and pairing_diagnostics depend on
+    # separator positions belonging to NO span (an entity starting there is unplaceable, and
+    # each has a test pinning exactly that). The docstring previously claimed the spans cover
+    # the text "exactly", which is false; nothing owned the real contract until this test.
+    text = "Aspirin caused ulcers. Metformin caused acidosis."
+    spans = sentence_spans(text)
+    assert spans == [(0, 22), (23, 49)]
+    covered = {i for start, end in spans for i in range(start, end)}
+    assert [i for i in range(len(text)) if i not in covered] == [22]
+    assert text[22] == " "
 
 
 def test_short_text_is_a_single_window_covering_everything():
