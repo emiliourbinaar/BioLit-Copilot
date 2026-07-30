@@ -4,7 +4,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from biolit.cluster.group import cluster_papers, pairing_diagnostics
-from biolit.cluster.pairing import CrossProductPairing, SameSentencePairing
+from biolit.cluster.pairing import CrossProductPairing, SameSentencePairing, linked_ids
+from biolit.domain.enums import EntityLabel
 from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit_evals.end_to_end import ConceptMetrics, concept_counts, metrics_from_counts
 from biolit_evals.mesh_gold import GoldDocument
@@ -92,6 +93,59 @@ def gold_clusters_from_relations(
         for key, pmids in sorted(by_key.items())
         if len(pmids) >= min_size
     ]
+
+
+@dataclass(frozen=True)
+class Reachability:
+    """How much of gold survived extraction, and the oracle's per-paper gold-true pairs.
+
+    n_endpoint_lost is the population NO pairing mechanism can recover, which is the
+    number that prices whether CID relation extraction earns a phase (see ADR-0013).
+    """
+
+    n_gold_pairs: int
+    n_reachable: int
+    n_endpoint_lost: int
+    pairs_by_paper: dict[str, set[tuple[str, str]]]
+
+
+def entity_conditioned_oracle(
+    records: Sequence[ExtractedRecord],
+    relations: Mapping[str, set[tuple[str, str]]],
+) -> Reachability:
+    """Perfect pairing over the entities REAL extraction delivered. The comparable ceiling.
+
+    Credits a gold pair only where BOTH endpoints are in that paper's linked entity set, so
+    it measures what any pairing mechanism -- heuristic or learned -- could achieve on real
+    pipeline output. Neither arm answers this: Arm A grants gold ENTITIES (a different and
+    strictly easier input) and Arm B measures one specific heuristic.
+
+    READ THE BOUND CORRECTLY. Precision is 1.0 BY CONSTRUCTION, because it emits gold-true
+    keys only, so this is a PRECISION-PERFECT, RECALL-CAPPED construction and NOT a hard F1
+    upper bound. Applying the recall-only ceiling rule -- ask what a construction can make
+    WORSE -- the answer here is nothing, so it bounds one direction only. Empirically
+    `SameSentencePairing` already exceeds this oracle's paper-pair RECALL (0.7346 vs 0.6967),
+    because paper-pair recall credits a co-clustered pair whenever two papers share ANY
+    predicted key, so a WRONG key held by both can accidentally co-cluster a genuinely
+    gold-related pair -- a win the oracle forgoes. A mechanism trading precision for recall
+    can therefore beat its F1.
+    """
+    by_paper: dict[str, set[tuple[str, str]]] = {}
+    n_gold_pairs = n_reachable = 0
+    for record in records:
+        chemicals = linked_ids(record.entities, EntityLabel.CHEMICAL)
+        diseases = linked_ids(record.entities, EntityLabel.DISEASE)
+        for pair in relations.get(record.paper_id, set()):
+            n_gold_pairs += 1
+            if pair[0] in chemicals and pair[1] in diseases:
+                n_reachable += 1
+                by_paper.setdefault(record.paper_id, set()).add(pair)
+    return Reachability(
+        n_gold_pairs=n_gold_pairs,
+        n_reachable=n_reachable,
+        n_endpoint_lost=n_gold_pairs - n_reachable,
+        pairs_by_paper=by_paper,
+    )
 
 
 @dataclass(frozen=True)
@@ -298,6 +352,21 @@ def run_cluster_eval(
             "workload": asdict(workload(clusters)),
         }
 
+    # The comparable ceiling, logged beside the strategies rather than run as a scratch
+    # script -- it is the number the build-or-not recommendation's second reason rests on.
+    # gold_clusters_from_relations is reused rather than reimplemented: it is generic over a
+    # pmid -> pairs mapping, so the oracle's clusters are aggregated by the identical
+    # min_size and ordering rules as gold's and the strategies'. Anything else would make
+    # the comparison an artefact of two different aggregation paths.
+    reach = entity_conditioned_oracle(records, relations)
+    oracle_clusters = gold_clusters_from_relations(reach.pairs_by_paper)
+    strategies["oracle"] = {
+        "key": asdict(key_metrics(reach.pairs_by_paper, relations)),
+        "cluster_key": asdict(cluster_key_metrics(oracle_clusters, gold)),
+        "paper_pair": asdict(paper_pair_metrics(oracle_clusters, gold)),
+        "workload": asdict(workload(oracle_clusters)),
+    }
+
     line = {
         "timestamp": now,
         "git_sha": git_sha,
@@ -306,6 +375,11 @@ def run_cluster_eval(
         "n_documents": len(records),
         "n_gold_clusters": len(gold),
         "n_gold_paper_pairs": len(paper_pairs(gold)),
+        "reachability": {
+            "n_gold_pairs": reach.n_gold_pairs,
+            "n_reachable": reach.n_reachable,
+            "n_endpoint_lost": reach.n_endpoint_lost,
+        },
         "diagnostics": asdict(pairing_diagnostics(records, texts=texts)),
         "strategies": strategies,
     }
@@ -400,6 +474,13 @@ def main(argv: list[str] | None = None) -> None:
         f"gold_clusters={line['n_gold_clusters']} gold_pairs={line['n_gold_paper_pairs']}"
     )
     print(f"  diagnostics: {line['diagnostics']}")
+    r = line["reachability"]
+    lost_share = r["n_endpoint_lost"] / r["n_gold_pairs"] if r["n_gold_pairs"] else 0.0
+    print(
+        f"  reachability: gold_cid_relations={r['n_gold_pairs']} "
+        f"reachable={r['n_reachable']} endpoint_lost={r['n_endpoint_lost']} "
+        f"({lost_share:.1%} unrecoverable by ANY pairing mechanism)"
+    )
     for name, s in line["strategies"].items():
         pp, ck, k, w = s["paper_pair"], s["cluster_key"], s["key"], s["workload"]
         print(f"\n=== {name} ===")

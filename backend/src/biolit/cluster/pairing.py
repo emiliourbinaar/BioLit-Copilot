@@ -16,8 +16,15 @@ class PairingStrategy(Protocol):
     def pairs(self, entities: Sequence[Entity], text: str) -> set[tuple[str, str]]: ...
 
 
-def _linked_ids(entities: Sequence[Entity], label: EntityLabel) -> set[str]:
-    """Canonical ids of one label. NIL entities are excluded: a `nil:<surface>` endpoint
+def linked_ids(entities: Sequence[Entity], label: EntityLabel) -> set[str]:
+    """Canonical ids of one label.
+
+    Public for the same reason `sentence_spans` is: a second consumer needs the IDENTICAL
+    definition of "which entities count". `entity_conditioned_oracle` measures the ceiling
+    for any pairing mechanism, so if it admitted a different entity population than the
+    strategies it is compared against, the comparison would be meaningless.
+
+    NIL entities are excluded: a `nil:<surface>` endpoint
     is unscoreable against gold CID, so admitting one would inject an unmeasurable
     population into a measurement whose whole purpose is precision. The cost of that
     exclusion is reported by `pairing_diagnostics`, not assumed away."""
@@ -33,8 +40,8 @@ class CrossProductPairing:
     """
 
     def pairs(self, entities: Sequence[Entity], text: str) -> set[tuple[str, str]]:
-        chemicals = _linked_ids(entities, EntityLabel.CHEMICAL)
-        diseases = _linked_ids(entities, EntityLabel.DISEASE)
+        chemicals = linked_ids(entities, EntityLabel.CHEMICAL)
+        diseases = linked_ids(entities, EntityLabel.DISEASE)
         return {(c, d) for c in chemicals for d in diseases}
 
 

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from biolit.cluster.group import pairing_diagnostics
@@ -8,6 +10,7 @@ from biolit_evals.cluster_eval import (
     assert_gold_cluster_anchor,
     assert_key_recall_anchor,
     cluster_key_metrics,
+    entity_conditioned_oracle,
     gold_clusters_from_relations,
     key_metrics,
     paper_pair_metrics,
@@ -304,6 +307,72 @@ def test_run_cluster_eval_scores_both_strategies_and_writes_one_log_line(tmp_pat
     for strategy in ("cross_product", "same_sentence"):
         assert result["strategies"][strategy]["paper_pair"]["f1"] == 1.0
     assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1
+
+
+def test_the_oracle_credits_only_gold_pairs_whose_BOTH_endpoints_survived_extraction():
+    # THE CEILING THAT PRICES RELATION EXTRACTION. Conditioned on what real extraction
+    # actually delivered, not on gold entities: a gold pair is reachable only where both
+    # endpoints are in THIS paper's linked entity set. Precision is 1.0 by construction --
+    # it emits gold-true keys only -- which is exactly why it bounds RECALL and nothing else.
+    #
+    # Paper "1" has both endpoints of the gold pair -> reachable.
+    # Paper "2" has the chemical but linking lost the disease -> NOT reachable, and no
+    #   pairing mechanism can recover it. That is the 40.3% population.
+    # Paper "3" holds both endpoints but has NO gold relation -> emits nothing, because the
+    #   oracle must not invent a pair merely because two entities co-occur.
+    chem = Entity(text="c", label=EntityLabel.CHEMICAL, start=0, end=1, canonical_id="MESH:C1")
+    dis = Entity(text="d", label=EntityLabel.DISEASE, start=2, end=3, canonical_id="MESH:D1")
+    records = [
+        ExtractedRecord(paper_id="1", entities=[chem, dis]),
+        ExtractedRecord(paper_id="2", entities=[chem]),
+        ExtractedRecord(paper_id="3", entities=[chem, dis]),
+    ]
+    relations = {
+        "1": {("MESH:C1", "MESH:D1")},
+        "2": {("MESH:C1", "MESH:D1")},
+    }
+    reach = entity_conditioned_oracle(records, relations)
+    assert reach.n_gold_pairs == 2
+    assert reach.n_reachable == 1
+    assert reach.n_endpoint_lost == 1
+    assert reach.pairs_by_paper == {"1": {("MESH:C1", "MESH:D1")}}
+
+
+def test_the_run_logs_the_oracle_ceiling_beside_the_strategies(tmp_path):
+    # The ceiling that prices relation extraction must be IN the log, not a scratch run.
+    # ADR-0011/0012 set the standard that a load-bearing number be reproducible without the
+    # branch code; the recommendation's second reason rests on this one.
+    # Papers 1+2 share a gold pair and both keep both endpoints -> the oracle co-clusters
+    # them. Paper 3 shares the same gold pair but linking lost its disease -> the oracle
+    # cannot reach it, so recall is capped at 1 of 3 gold paper-pairs while precision stays
+    # 1.0 BY CONSTRUCTION. That asymmetry is the whole point of the construction.
+    chem = Entity(text="c", label=EntityLabel.CHEMICAL, start=0, end=1, canonical_id="MESH:C1")
+    dis = Entity(text="d", label=EntityLabel.DISEASE, start=2, end=3, canonical_id="MESH:D1")
+    records = [
+        ExtractedRecord(paper_id="1", entities=[chem, dis]),
+        ExtractedRecord(paper_id="2", entities=[chem, dis]),
+        ExtractedRecord(paper_id="3", entities=[chem]),
+    ]
+    relations = {p: {("MESH:C1", "MESH:D1")} for p in ("1", "2", "3")}
+    log = tmp_path / "cluster_runs.jsonl"
+    result = run_cluster_eval(
+        records=records,
+        texts={p: "c d" for p in ("1", "2", "3")},
+        relations=relations,
+        arm="B",
+        dataset="unit_oracle",
+        log_path=str(log),
+        git_sha="deadbee",
+        now="2026-07-29T00:00:00+00:00",
+    )
+    assert result["reachability"] == {"n_gold_pairs": 3, "n_reachable": 2, "n_endpoint_lost": 1}
+    oracle = result["strategies"]["oracle"]
+    assert oracle["paper_pair"]["precision"] == 1.0
+    assert oracle["paper_pair"]["tp"] == 1
+    assert oracle["paper_pair"]["fn"] == 2
+    # Survives the round trip: a field computed but not written is not reproducible.
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert written["reachability"]["n_endpoint_lost"] == 1
 
 
 def test_a_named_corpus_whose_document_count_is_wrong_halts_before_writing(tmp_path):
