@@ -15,6 +15,30 @@ def test_out_of_range_indices_are_dropped_not_clamped_or_guessed():
     assert text[out[0].start : out[0].end] == out[0].text
 
 
+def test_findings_come_back_ascending_by_sentence_index_with_duplicates_collapsed():
+    # sorted(set(indices)) does two jobs in one call, and neither is pinned by the
+    # out-of-range test above: that test's expected output is unchanged whether the indices
+    # are deduplicated/sorted or passed straight through, since it supplies only one
+    # in-range index. Every downstream arm comparison and run-log line depends on findings
+    # coming back in a stable, ascending order -- and duplicate indices (e.g. a repeated
+    # citation) must collapse to one Finding, not two.
+    #
+    # 32 is out of range for this 7-sentence text (valid indices are 0-6) and is dropped
+    # either way by the range check -- it never appears in the output. It is included solely
+    # to perturb CPython's hash-table slot assignment: a plain `set` of small contiguous
+    # non-negative ints (0..6) iterates in ascending order *by construction*, since
+    # hash(n) == n places each one in its own slot regardless of insertion order. Without a
+    # decoy to force a slot collision, dropping `sorted()` from the implementation would go
+    # undetected by any fixture built only from 0..6, no matter the insertion order or how
+    # many duplicates -- this decoy is what actually makes that mutation observable.
+    text = (
+        "Alpha happened. Beta happened. Gamma happened. Delta happened. "
+        "Epsilon happened. Zeta happened. Eta happened."
+    )
+    out = findings_from_sentence_indices(text, [32, 6, 5, 4, 3, 3, 2, 1, 0])
+    assert [f.sentence_index for f in out] == [0, 1, 2, 3, 4, 5, 6]
+
+
 class _AlwaysFinds:
     def findings(self, paper):
         return [Finding(text="x", start=0, end=1, sentence_index=0)]
