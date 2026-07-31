@@ -1,6 +1,6 @@
 from biolit.domain.enums import LicenseTier, Source, TextType
 from biolit.domain.paper import Paper
-from biolit.domain.records import ExtractedRecord
+from biolit.domain.records import ExtractedRecord, Finding
 from biolit.state.adapters import merge_extractor, project_extractor
 from biolit.state.contracts import ExtractorOutput
 from biolit.state.pipeline import PipelineState
@@ -31,7 +31,15 @@ def test_merge_is_targeted_and_nondestructive():
 
     # First extractor pass touches only p0, p1, p2.
     first = ExtractorOutput(
-        records=[ExtractedRecord(paper_id=f"p{i}", key_findings=[f"finding {i}"]) for i in range(3)]
+        records=[
+            ExtractedRecord(
+                paper_id=f"p{i}",
+                key_findings=[
+                    Finding(text=f"finding {i}", start=0, end=len(f"finding {i}"), sentence_index=0)
+                ],
+            )
+            for i in range(3)
+        ]
     )
     state = merge_extractor(state, first)
     assert set(state.extracted_records) == {"p0", "p1", "p2"}
@@ -41,8 +49,23 @@ def test_merge_is_targeted_and_nondestructive():
     # Second pass touches p2 (overlap, must update) and p3 (new).
     second = ExtractorOutput(
         records=[
-            ExtractedRecord(paper_id="p2", key_findings=["updated finding 2"]),
-            ExtractedRecord(paper_id="p3", key_findings=["finding 3"]),
+            ExtractedRecord(
+                paper_id="p2",
+                key_findings=[
+                    Finding(
+                        text="updated finding 2",
+                        start=0,
+                        end=len("updated finding 2"),
+                        sentence_index=0,
+                    )
+                ],
+            ),
+            ExtractedRecord(
+                paper_id="p3",
+                key_findings=[
+                    Finding(text="finding 3", start=0, end=len("finding 3"), sentence_index=0)
+                ],
+            ),
         ]
     )
     state = merge_extractor(state, second)
@@ -51,8 +74,8 @@ def test_merge_is_targeted_and_nondestructive():
     assert state.extracted_records["p0"] is original_p0
     assert state.extracted_records["p1"] is original_p1
     # Overlapping record is updated; new record is added.
-    assert state.extracted_records["p2"].key_findings == ["updated finding 2"]
-    assert state.extracted_records["p3"].key_findings == ["finding 3"]
+    assert state.extracted_records["p2"].key_findings[0].text == "updated finding 2"
+    assert state.extracted_records["p3"].key_findings[0].text == "finding 3"
     assert set(state.extracted_records) == {"p0", "p1", "p2", "p3"}
     # The 8 candidate papers are all still present and unchanged.
     assert [p.id for p in state.candidate_papers] == [f"p{i}" for i in range(8)]
