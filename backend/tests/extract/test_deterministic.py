@@ -40,6 +40,9 @@ def test_unlinked_and_unplaceable_entities_are_both_excluded():
     # TWO INDEPENDENT GUARDS -- test both, or reducing the condition to one disjunct passes.
     # This is the disjunction gap that recurred five times on the clustering branch.
     # (a) canonical_id None: sentence 2 has both labels but the chemical never linked.
+    # (a-mirror) canonical_id None on the OTHER label: an unlinked entity must not count
+    # toward EITHER side, not just chemicals -- the guard is one unconditional line ahead
+    # of the label dispatch, so this is the same property applied to the other label.
     # (b) start None: sentence 2's disease has no offset.
     unlinked = [
         _ent(EntityLabel.CHEMICAL, 40, None),
@@ -47,8 +50,26 @@ def test_unlinked_and_unplaceable_entities_are_both_excluded():
     ]
     assert SameSentenceAsEntitiesExtractor({"p1": unlinked}).findings(_paper()) == []
 
+    unlinked_disease = [
+        _ent(EntityLabel.CHEMICAL, 40, "MESH:D007328"),
+        _ent(EntityLabel.DISEASE, 48, None),
+    ]
+    assert SameSentenceAsEntitiesExtractor({"p1": unlinked_disease}).findings(_paper()) == []
+
     no_offset = Entity(
         text="x", label=EntityLabel.DISEASE, start=None, end=None, canonical_id="MESH:D000138"
     )
     unplaceable = [_ent(EntityLabel.CHEMICAL, 40, "MESH:D007328"), no_offset]
     assert SameSentenceAsEntitiesExtractor({"p1": unplaceable}).findings(_paper()) == []
+
+
+def test_entity_landing_in_inter_sentence_whitespace_contributes_nothing():
+    # sentence_spans(TEXT) == [(0, 20), (21, 39), (40, 53)] (verified below in the fix
+    # report) -- index 20 is the space between "given." and "Acidosis", covered by no span.
+    # sentence_index returns None there. Sentence 0 already holds a linked disease; if the
+    # gap chemical were (wrongly) folded into sentence 0, this would wrongly select it.
+    entities = [
+        _ent(EntityLabel.DISEASE, 0, "MESH:D000138"),
+        _ent(EntityLabel.CHEMICAL, 20, "MESH:D008687"),
+    ]
+    assert SameSentenceAsEntitiesExtractor({"p1": entities}).findings(_paper()) == []
