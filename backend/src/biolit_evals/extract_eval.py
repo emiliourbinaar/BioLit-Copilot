@@ -9,6 +9,41 @@ from biolit_evals.end_to_end import ConceptMetrics, metrics_from_counts
 from biolit_evals.mesh_gold import GoldDocument
 
 
+def _gold_pairs_by_sentence(
+    document: GoldDocument, pairs: set[tuple[str, str]]
+) -> dict[int, set[tuple[str, str]]]:
+    """Per sentence index, the gold relations whose BOTH endpoints are annotated in it.
+
+    Shared by `gold_finding_sentences` (a sentence is gold iff it has a non-empty entry) and
+    `classify_misses` (a miss is classified against its own entry, never the document's whole
+    relation set). Factored out so the two cannot drift: if classification asked a different
+    question than gold construction answered, buckets would describe misses that are not the
+    misses the gold produced, and no test or anchor would see it.
+
+    Sentences with no qualifying pair are omitted, so the returned keys ARE the gold
+    sentences. Mentions whose start falls in no sentence span are dropped, as are labels
+    outside CHEMICAL/DISEASE and mentions with empty `mesh_ids`.
+    """
+    spans = sentence_spans(document.text)
+    by_label: dict[EntityLabel, dict[int, set[str]]] = {
+        EntityLabel.CHEMICAL: {},
+        EntityLabel.DISEASE: {},
+    }
+    for mention in document.mentions:
+        index = sentence_index(spans, mention.start)
+        if index is None or mention.label not in by_label:
+            continue
+        by_label[mention.label].setdefault(index, set()).update(mention.mesh_ids)
+    chemicals = by_label[EntityLabel.CHEMICAL]
+    diseases = by_label[EntityLabel.DISEASE]
+    qualifying: dict[int, set[tuple[str, str]]] = {}
+    for index in set(chemicals) & set(diseases):
+        matched = {(c, d) for c, d in pairs if c in chemicals[index] and d in diseases[index]}
+        if matched:
+            qualifying[index] = matched
+    return qualifying
+
+
 def gold_finding_sentences(
     documents: Sequence[GoldDocument],
     relations: Mapping[str, set[tuple[str, str]]],
@@ -32,21 +67,9 @@ def gold_finding_sentences(
         pairs = relations.get(document.pmid)
         if not pairs:
             continue
-        spans = sentence_spans(document.text)
-        by_label: dict[EntityLabel, dict[int, set[str]]] = {
-            EntityLabel.CHEMICAL: {},
-            EntityLabel.DISEASE: {},
-        }
-        for mention in document.mentions:
-            index = sentence_index(spans, mention.start)
-            if index is None or mention.label not in by_label:
-                continue
-            by_label[mention.label].setdefault(index, set()).update(mention.mesh_ids)
-        chemicals = by_label[EntityLabel.CHEMICAL]
-        diseases = by_label[EntityLabel.DISEASE]
-        for index in set(chemicals) & set(diseases):
-            if any(c in chemicals[index] and d in diseases[index] for c, d in pairs):
-                gold.setdefault(document.pmid, set()).add(index)
+        qualifying = _gold_pairs_by_sentence(document, pairs)
+        if qualifying:
+            gold[document.pmid] = set(qualifying)
     return gold
 
 
@@ -108,17 +131,34 @@ def assert_gold_sentence_regression_pin(n_documents: int, n_gold_sentences: int)
 class MissBuckets:
     """Why control-real missed each gold sentence. Three buckets, three different fixes.
 
-    endpoint_lost           -- >=1 endpoint has no linked mention anywhere in the paper.
-                               UNRECOVERABLE by any window or pairing mechanism. This is the
-                               40.3% population from ADR-0013, and the subset on which the
-                               LLM arm's recall is the direct proof of bottleneck escape.
-    never_co_sentential     -- both endpoints linked somewhere, no sentence holds both.
-                               Recoverable by a wider window; prices same-paragraph variants.
-    co_sentential_elsewhere -- both linked AND co-sentential, but in a sentence other than
-                               the gold one. Gold-vs-real span disagreement; costs a false
-                               positive as well as this false negative.
+    Every bucket is decided PER MISSED SENTENCE against only the gold relations that made
+    THAT sentence gold -- never against the document's whole relation set. At ~2.13 gold CID
+    relations per Test-500 document, pooling would let one reachable relation anywhere in a
+    paper suppress `endpoint_lost` for a miss it had nothing to do with.
+
+    endpoint_lost           -- no relation qualifying that sentence has both endpoints linked
+                               anywhere in the paper. UNRECOVERABLE by any window or pairing
+                               mechanism, and the sentence-level counterpart of ADR-0013's
+                               PER-RELATION 40.3% (430 of 1066 gold CID relations in Test-500
+                               lose an endpoint). It is the subset on which the LLM arm's
+                               recall is the direct proof of bottleneck escape. Not the same
+                               number as 40.3%: that counts relations, this counts gold
+                               sentences, and one sentence can be made gold by several
+                               relations. Do not quote them as the same statistic.
+    never_co_sentential     -- >=1 qualifying relation is reachable, but no sentence in the
+                               paper holds both endpoints of any reachable qualifying
+                               relation. Recoverable by a wider window; prices same-paragraph
+                               variants.
+    co_sentential_elsewhere -- a reachable qualifying relation IS co-sentential somewhere,
+                               just not at the gold sentence. Gold-vs-real span disagreement;
+                               costs a false positive as well as this false negative.
 
     Evaluated in that order and mutually exclusive, so the three sum to total.
+
+    The direction of any error here is not neutral. Misrouting an unrecoverable miss into
+    either recoverable bucket inflates the headroom a downstream component appears to have,
+    which is exactly what ADR-0013's standing finding says to guard against: price
+    downstream reasoning against an entity-conditioned ceiling, not an oracle-entity one.
     """
 
     endpoint_lost: int
@@ -135,6 +175,25 @@ def classify_misses(
     *,
     entities_by_paper: Mapping[str, Sequence[Entity]],
 ) -> MissBuckets:
+    """Bucket every false negative in `pred` against `gold`. See `MissBuckets` for the rules.
+
+    UNENFORCED PRECONDITION, in two halves. Nothing in the signature checks either, and a
+    caller that violates one gets silently corrupted buckets: no exception is raised, and
+    `assert_bucket_closure` still passes, because closure only checks that the misses were
+    counted, not that each landed in the right bucket.
+
+    1. SAME SELECTOR, SAME ENTITIES. `pred` must have been produced by the same
+       same-sentence co-occurrence rule over the SAME `entities_by_paper` passed here. The
+       name `co_sentential_elsewhere` asserts that the selector saw a co-sentential pair and
+       chose a different sentence. Score a different selector, or the same one over a
+       different entity set, and "elsewhere" describes nothing real.
+    2. SAME TEXT. This function splits `sentence_spans(document.text)`, while
+       `SameSentenceAsEntitiesExtractor` splits `paper.abstract or ""`. For real BC5CDR,
+       `GoldDocument.text` is `title + " " + abstract` (see `parse_pubtator_documents`), so a
+       `main()` that naively builds `Paper(title=..., abstract=...)` desynchronises every
+       sentence index between `pred` and `gold` -- silently, and the more so the longer the
+       title. The caller must feed the extractor the SAME string as `document.text`.
+    """
     lost = never = elsewhere = 0
     for document in documents:
         missed = gold.get(document.pmid, set()) - pred.get(document.pmid, set())
@@ -157,8 +216,10 @@ def classify_misses(
             elif entity.label is EntityLabel.DISEASE:
                 dis.add(entity.canonical_id)
         pairs = relations.get(document.pmid, set())
-        for _index in sorted(missed):
-            reachable = [(c, d) for c, d in pairs if c in chemicals and d in diseases]
+        gold_pairs = _gold_pairs_by_sentence(document, pairs)
+        for index in sorted(missed):
+            pairs_at_index = gold_pairs.get(index, set())
+            reachable = [(c, d) for c, d in pairs_at_index if c in chemicals and d in diseases]
             if not reachable:
                 lost += 1
                 continue
@@ -180,9 +241,24 @@ def classify_misses(
 def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> None:
     """HARNESS correctness: the three buckets must account for every false negative.
 
-    A cheap identity that catches a misclassified bucket, in the spirit of the three-way
-    reachable-share / oracle-recall / cross-product-recall agreement at 0.5966. Nothing in
-    the code forces this to hold, so its holding is evidence.
+    WHAT IT ACTUALLY DETECTS, stated no stronger than the code supports. `classify_misses`
+    computes `total` as `lost + never + elsewhere` in the same pass, and the `continue` after
+    `endpoint_lost` makes the branches mutually exclusive, so on that path the identity holds
+    BY CONSTRUCTION. It is not independent evidence in the way the three-way reachable-share
+    / oracle-recall / cross-product-recall agreement at 0.5966 was. Its real value is as a
+    mutation detector for exactly that exclusivity -- a dropped `continue`, a branch that
+    increments two counters, or a hand-built `MissBuckets` whose `total` is a free field --
+    plus the population check below. Labelled honestly rather than dressed up as an
+    independent invariant, the same way `assert_gold_sentence_regression_pin` is.
+
+    IT ALSO COMPARES TWO POPULATIONS THAT CAN LEGITIMATELY DIFFER. `buckets.total` sums over
+    the `documents` sequence; `n_false_negatives` normally comes from `sentence_metrics`,
+    whose `fn` sums over `set(pred) | set(gold)`. Those diverge when a pmid appears twice in
+    `documents` -- a live shape, since `load_domain_norm_documents` emits one GoldDocument
+    per annotated sentence, so repeated pmids double-count misses here -- or when a gold pmid
+    is absent from `documents`, which drops its misses entirely. Both correctly fire this
+    check, so nothing is unsound, but the message below blames misclassification. Suspect
+    caller shape first when the two sides differ by a whole document's worth of misses.
     """
     if buckets.total != n_false_negatives:
         raise SystemExit(

@@ -466,6 +466,205 @@ def test_each_miss_bucket_is_populated_distinctly():
     assert buckets.total == 6
 
 
+def test_a_miss_is_classified_against_only_the_relations_that_made_its_sentence_gold():
+    # ADR-0013's 40.3% is a PER-RELATION statistic (430 of 1066 gold CID relations in
+    # Test-500 lose an endpoint), and at ~2.13 relations/document a per-document pooling
+    # cannot reproduce it. Two relations here: A (metformin/acidosis) is fully linked,
+    # B (aspirin/fever) has no linked disease anywhere. Sentence 1 is gold ONLY via B, so
+    # its miss is UNRECOVERABLE -- endpoint_lost. Pooling reachability over the document's
+    # whole relation set lets reachable relation A suppress endpoint_lost for a miss it had
+    # nothing to do with, reporting the miss as the recoverable co_sentential_elsewhere and
+    # inflating the LLM arm's apparent headroom -- the exact failure ADR-0013's standing
+    # finding warns against.
+    # sentence_spans(text) == [(0, 26), (27, 48)] -- verified with the real splitter.
+    text = "Metformin caused acidosis. Aspirin caused fever."
+    metformin, acidosis = "MESH:D008687", "MESH:D000138"
+    aspirin, fever = "MESH:D000568", "MESH:D005334"
+    doc = GoldDocument(
+        pmid="pD",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="pD",
+                start=0,
+                end=9,
+                text=text[0:9],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(metformin,),
+            ),
+            GoldMention(
+                pmid="pD",
+                start=17,
+                end=25,
+                text=text[17:25],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(acidosis,),
+            ),
+            GoldMention(
+                pmid="pD",
+                start=27,
+                end=34,
+                text=text[27:34],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(aspirin,),
+            ),
+            GoldMention(
+                pmid="pD",
+                start=42,
+                end=47,
+                text=text[42:47],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(fever,),
+            ),
+        ],
+    )
+    relations = {"pD": {(metformin, acidosis), (aspirin, fever)}}
+    # "fever" is never linked, so relation B's disease endpoint is unreachable anywhere.
+    entities = {
+        "pD": [
+            Entity(
+                text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=metformin
+            ),
+            Entity(
+                text="acidosis", label=EntityLabel.DISEASE, start=17, end=25, canonical_id=acidosis
+            ),
+            Entity(
+                text="Aspirin", label=EntityLabel.CHEMICAL, start=27, end=34, canonical_id=aspirin
+            ),
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pD": {0, 1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pD": {f.sentence_index for f in extractor.findings(_paper("pD", text))}}
+    assert pred == {"pD": {0}}
+
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (1, 0, 0)
+    assert buckets.total == 1
+
+
+def test_a_lost_chemical_endpoint_is_endpoint_lost_just_as_a_lost_disease_one_is():
+    # SIBLING of pA in test_each_miss_bucket_is_populated_distinctly, which kills the DISEASE
+    # endpoint. `reachable` tests `c in chemicals AND d in diseases`, and with only the pA
+    # fixture the `c in chemicals` conjunct could be deleted outright and every test still
+    # passed -- the one-sided-compound-condition defect this project has shipped repeatedly.
+    # Here the DISEASE is linked and the CHEMICAL is not, so it is the other conjunct that
+    # has to fire. Both directions are equally unrecoverable: no window and no pairing
+    # mechanism reaches an endpoint that was never extracted.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pE",
+        text=TEXT,
+        mentions=[
+            _m(0, 9, EntityLabel.CHEMICAL, (chem,)),
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"pE": {(chem, dis)}}
+    # Only the disease is linked; the chemical endpoint is unreachable anywhere in the paper.
+    entities = {
+        "pE": [
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis)
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pE": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pE": {f.sentence_index for f in extractor.findings(_paper("pE", TEXT))}}
+    assert pred == {"pE": set()}
+
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (1, 0, 0)
+    assert buckets.total == 1
+
+
+def test_entities_starting_in_an_inter_sentence_gap_are_dropped_not_pooled_together():
+    # The classify_misses counterpart of test_a_mention_starting_in_the_inter_sentence_gap
+    # _is_dropped, which pins the same guard for gold_finding_sentences. sentence_index
+    # returns None for a position in no span; without the `if index is None: continue` guard
+    # every such entity is pooled under the single pseudo-key None, and two entities that
+    # share no sentence at all look co-sentential. That silently flips never_co_sentential
+    # (recoverable only by a wider window) to co_sentential_elsewhere (a mere span
+    # disagreement) -- a misclassification assert_bucket_closure cannot see, because closure
+    # is blind to WHICH bucket a miss lands in.
+    # sentence_spans(MULTI_TEXT) == [(0, 20), (21, 53), (54, 75)] -- verified with the real
+    # splitter. Positions 20 and 53 are the separators, belonging to neither span.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pF",
+        text=MULTI_TEXT,
+        mentions=[
+            GoldMention(
+                pmid="pF",
+                start=21,
+                end=29,
+                text=MULTI_TEXT[21:29],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pF",
+                start=39,
+                end=48,
+                text=MULTI_TEXT[39:48],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+        ],
+    )
+    relations = {"pF": {(chem, dis)}}
+    entities = {
+        "pF": [
+            Entity(
+                text=MULTI_TEXT[20:21],
+                label=EntityLabel.CHEMICAL,
+                start=20,
+                end=21,
+                canonical_id=chem,
+            ),
+            Entity(
+                text=MULTI_TEXT[53:54],
+                label=EntityLabel.DISEASE,
+                start=53,
+                end=54,
+                canonical_id=dis,
+            ),
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pF": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pF": {f.sentence_index for f in extractor.findings(_paper("pF", MULTI_TEXT))}}
+    assert pred == {"pF": set()}
+
+    # Both endpoints ARE linked, so the miss is reachable -- but no SENTENCE holds both,
+    # because neither unplaceable entity belongs to one.
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (0, 1, 0)
+    assert buckets.total == 1
+
+
 def test_bucket_closure_raises_when_a_miss_is_unaccounted():
     assert_bucket_closure(MissBuckets(1, 2, 3, 6), n_false_negatives=6)
     with pytest.raises(SystemExit, match="bucket closure"):
