@@ -1,7 +1,16 @@
+import pytest
+
 from biolit.cluster.pairing import sentence_index
 from biolit.domain.enums import EntityLabel
 from biolit.ner.windowing import sentence_spans
-from biolit_evals.extract_eval import gold_finding_sentences
+from biolit_evals import extract_eval
+from biolit_evals.end_to_end import metrics_from_counts
+from biolit_evals.extract_eval import (
+    assert_gold_sentence_recall_anchor,
+    assert_gold_sentence_regression_pin,
+    gold_finding_sentences,
+    sentence_metrics,
+)
 from biolit_evals.mesh_gold import GoldDocument, GoldMention
 
 TEXT = "Metformin was given. Acidosis followed metformin use."
@@ -203,3 +212,43 @@ def test_realized_pairs_trace_to_real_gold_relations_and_never_outnumber_them():
 
     assert realized <= relations["1"]
     assert len(realized) <= len(relations["1"])
+
+
+def test_sentence_metrics_cover_papers_present_on_only_one_side():
+    # pmid "1" shared -> tp. pmid "2" gold-only (the arm produced nothing for it, e.g. NER
+    # found no entities) -> fn. pmid "3" pred-only (selected a sentence in a paper with no
+    # gold relation) -> fp. An `&` mutant on `set(pred) | set(gold)` iterates only "1" and
+    # silently drops BOTH the whole-document miss and the whole-document hallucination.
+    gold = {"1": {0, 1}, "2": {4}}
+    pred = {"1": {1, 2}, "3": {0}}
+    m = sentence_metrics(pred, gold)
+    assert (m.tp, m.fp, m.fn) == (1, 2, 2)
+
+
+def test_the_recall_anchor_catches_even_a_one_in_a_thousand_miss():
+    # control-gold recall is 1.0000 BY CONSTRUCTION: every gold sentence holds both gold
+    # endpoints, so a co-occurrence selector on gold mentions cannot miss one.
+    # The near-miss case (999 tp, 1 fn -> 0.9990) is what discriminates against a loosened
+    # tolerance: round(.,4) raises, round(.,2) would not.
+    assert_gold_sentence_recall_anchor(metrics_from_counts(10, 5, 0), arm="control-gold")
+    with pytest.raises(SystemExit, match="gold-sentence recall"):
+        assert_gold_sentence_recall_anchor(metrics_from_counts(999, 0, 1), arm="control-gold")
+
+
+def test_the_regression_pin_passes_untabulated_sizes_and_catches_a_changed_count():
+    # A pin, not a validation: it catches a CHANGE in gold construction, not an ERROR in it.
+    # Untabulated sizes must pass so unit fixtures need no entry.
+    assert_gold_sentence_regression_pin(3, 99)
+    assert_gold_sentence_regression_pin(0, 0)
+
+
+def test_the_regression_pin_raises_on_a_changed_count_for_a_tabulated_size(monkeypatch):
+    # The happy-path test above never populates a pin entry, so the `!=` comparison and the
+    # entire SystemExit branch of assert_gold_sentence_regression_pin have zero coverage
+    # there: `==` instead of `!=`, or the `raise` deleted outright, would still pass it.
+    # Populate ONE entry locally (never touch the shipped `_GOLD_SENTENCE_PINS`, which stays
+    # `{}` until Task 8) and exercise both the raising and non-raising paths.
+    monkeypatch.setitem(extract_eval._GOLD_SENTENCE_PINS, 500, 1234)
+    assert_gold_sentence_regression_pin(500, 1234)
+    with pytest.raises(SystemExit, match="gold-sentence pin"):
+        assert_gold_sentence_regression_pin(500, 1235)
