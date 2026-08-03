@@ -1,7 +1,9 @@
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
-from biolit.cluster.pairing import sentence_index
+from biolit.cluster.pairing import linked_ids, sentence_index
 from biolit.domain.enums import EntityLabel
+from biolit.domain.records import Entity
 from biolit.ner.windowing import sentence_spans
 from biolit_evals.end_to_end import ConceptMetrics, metrics_from_counts
 from biolit_evals.mesh_gold import GoldDocument
@@ -99,4 +101,103 @@ def assert_gold_sentence_regression_pin(n_documents: int, n_gold_sentences: int)
             f"gold-sentence pin: {n_documents} documents yielded {n_gold_sentences} gold "
             f"sentences, pinned at {expected}. Gold construction changed. If the change was "
             "deliberate, update the pin IN THE SAME COMMIT as the change and say why."
+        )
+
+
+@dataclass(frozen=True)
+class MissBuckets:
+    """Why control-real missed each gold sentence. Three buckets, three different fixes.
+
+    endpoint_lost           -- >=1 endpoint has no linked mention anywhere in the paper.
+                               UNRECOVERABLE by any window or pairing mechanism. This is the
+                               40.3% population from ADR-0013, and the subset on which the
+                               LLM arm's recall is the direct proof of bottleneck escape.
+    never_co_sentential     -- both endpoints linked somewhere, no sentence holds both.
+                               Recoverable by a wider window; prices same-paragraph variants.
+    co_sentential_elsewhere -- both linked AND co-sentential, but in a sentence other than
+                               the gold one. Gold-vs-real span disagreement; costs a false
+                               positive as well as this false negative.
+
+    Evaluated in that order and mutually exclusive, so the three sum to total.
+    """
+
+    endpoint_lost: int
+    never_co_sentential: int
+    co_sentential_elsewhere: int
+    total: int
+
+
+def classify_misses(
+    documents: Sequence[GoldDocument],
+    relations: Mapping[str, set[tuple[str, str]]],
+    gold: Mapping[str, set[int]],
+    pred: Mapping[str, set[int]],
+    *,
+    entities_by_paper: Mapping[str, Sequence[Entity]],
+) -> MissBuckets:
+    lost = never = elsewhere = 0
+    for document in documents:
+        missed = gold.get(document.pmid, set()) - pred.get(document.pmid, set())
+        if not missed:
+            continue
+        entities = entities_by_paper.get(document.pmid, ())
+        chemicals = linked_ids(entities, EntityLabel.CHEMICAL)
+        diseases = linked_ids(entities, EntityLabel.DISEASE)
+        spans = sentence_spans(document.text)
+        per_sentence: dict[int, tuple[set[str], set[str]]] = {}
+        for entity in entities:
+            if entity.canonical_id is None or entity.start is None:
+                continue
+            index = sentence_index(spans, entity.start)
+            if index is None:
+                continue
+            chem, dis = per_sentence.setdefault(index, (set(), set()))
+            if entity.label is EntityLabel.CHEMICAL:
+                chem.add(entity.canonical_id)
+            elif entity.label is EntityLabel.DISEASE:
+                dis.add(entity.canonical_id)
+        pairs = relations.get(document.pmid, set())
+        for _index in sorted(missed):
+            reachable = [(c, d) for c, d in pairs if c in chemicals and d in diseases]
+            if not reachable:
+                lost += 1
+                continue
+            co_sentential = any(
+                c in chem and d in dis for chem, dis in per_sentence.values() for c, d in reachable
+            )
+            if not co_sentential:
+                never += 1
+            else:
+                elsewhere += 1
+    return MissBuckets(
+        endpoint_lost=lost,
+        never_co_sentential=never,
+        co_sentential_elsewhere=elsewhere,
+        total=lost + never + elsewhere,
+    )
+
+
+def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> None:
+    """HARNESS correctness: the three buckets must account for every false negative.
+
+    A cheap identity that catches a misclassified bucket, in the spirit of the three-way
+    reachable-share / oracle-recall / cross-product-recall agreement at 0.5966. Nothing in
+    the code forces this to hold, so its holding is evidence.
+    """
+    if buckets.total != n_false_negatives:
+        raise SystemExit(
+            f"bucket closure: {buckets.total} classified misses "
+            f"({buckets.endpoint_lost} lost + {buckets.never_co_sentential} never "
+            f"co-sentential + {buckets.co_sentential_elsewhere} elsewhere) != "
+            f"{n_false_negatives} false negatives. A miss was misclassified or double-counted."
+        )
+    bucket_sum = (
+        buckets.endpoint_lost + buckets.never_co_sentential + buckets.co_sentential_elsewhere
+    )
+    if bucket_sum != buckets.total:
+        raise SystemExit(
+            f"bucket sum: {buckets.endpoint_lost} lost + {buckets.never_co_sentential} never "
+            f"co-sentential + {buckets.co_sentential_elsewhere} elsewhere = {bucket_sum}, but "
+            f"total is {buckets.total}. MissBuckets is internally inconsistent -- `total` is a "
+            "free field, not a computed sum, and this construction violated the identity."
         )
