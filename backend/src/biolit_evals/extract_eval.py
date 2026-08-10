@@ -44,11 +44,45 @@ def _gold_pairs_by_sentence(
     return qualifying
 
 
+def _reject_repeated_pmids(documents: Sequence[GoldDocument], *, caller: str) -> None:
+    """CHECKED CONTRACT: at most one `GoldDocument` per pmid, for the whole module.
+
+    Every mapping this module produces or consumes is keyed `pmid -> set[sentence index]`,
+    and a sentence index is only meaningful relative to ONE `document.text`. Two documents
+    sharing a pmid therefore denote DIFFERENT sentences under the same key, and every way of
+    reconciling them is silently wrong: unioning the index sets conflates two unrelated
+    sentences, while assigning drops all but the last, order-dependently. `classify_misses`
+    is affected the same way -- it looks up one `gold[pmid]` per document, so a repeated pmid
+    re-classifies the same misses once per duplicate.
+
+    So this raises instead of choosing. `ValueError`, not the `SystemExit` the anchors and
+    pins use: those report a RESULT that fails an eval invariant and must halt a run, whereas
+    this is an argument-shape violation detected before anything is measured -- the same
+    category as `mesh_gold`'s own `ValueError`s for out-of-bounds spans and mismatched span
+    text, and catchable by an ordinary `except Exception`.
+    """
+    seen: set[str] = set()
+    for document in documents:
+        if document.pmid in seen:
+            raise ValueError(
+                f"{caller}: repeated pmid {document.pmid!r} in `documents`. A sentence index "
+                "is only meaningful relative to a single document text, so two documents "
+                "sharing a pmid denote different sentences under one key -- unioning them "
+                "conflates unrelated sentences and assigning silently drops all but one. "
+                "`parse_pubtator_documents` yields one document per pmid; "
+                "`load_domain_norm_documents` yields one per annotated record and so CAN "
+                "repeat a pmid. Merge those records into one document per pmid first."
+            )
+        seen.add(document.pmid)
+
+
 def gold_finding_sentences(
     documents: Sequence[GoldDocument],
     relations: Mapping[str, set[tuple[str, str]]],
 ) -> dict[str, set[int]]:
     """Sentences where BOTH endpoints of at least one gold CID relation are gold-annotated.
+
+    Raises `ValueError` if two documents share a pmid -- see `_reject_repeated_pmids`.
 
     PROXY, NOT GROUND TRUTH. BC5CDR annotates CID relations at DOCUMENT level; sentence-level
     co-occurrence is this project's inference about where the relation is asserted. Some
@@ -62,6 +96,7 @@ def gold_finding_sentences(
     of relations with >=1 gold sentence is <= 1066 (BC5CDR Test-500's published gold CID
     relation count) -- every gold sentence traces back to a real relation, never invented.
     """
+    _reject_repeated_pmids(documents, caller="gold_finding_sentences")
     gold: dict[str, set[int]] = {}
     for document in documents:
         pairs = relations.get(document.pmid)
@@ -177,7 +212,11 @@ def classify_misses(
 ) -> MissBuckets:
     """Bucket every false negative in `pred` against `gold`. See `MissBuckets` for the rules.
 
-    UNENFORCED PRECONDITION, in two halves. Nothing in the signature checks either, and a
+    ONE CHECKED PRECONDITION: `documents` must hold at most one entry per pmid, or this
+    raises `ValueError` -- see `_reject_repeated_pmids`. A duplicate would re-classify the
+    same `gold[pmid]` misses once per copy.
+
+    TWO UNENFORCED ONES, below. Nothing in the signature checks either, and a
     caller that violates one gets silently corrupted buckets: no exception is raised, and
     `assert_bucket_closure` still passes, because closure only checks that the misses were
     counted, not that each landed in the right bucket.
@@ -194,6 +233,7 @@ def classify_misses(
        sentence index between `pred` and `gold` -- silently, and the more so the longer the
        title. The caller must feed the extractor the SAME string as `document.text`.
     """
+    _reject_repeated_pmids(documents, caller="classify_misses")
     lost = never = elsewhere = 0
     for document in documents:
         missed = gold.get(document.pmid, set()) - pred.get(document.pmid, set())
@@ -251,14 +291,19 @@ def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> No
     plus the population check below. Labelled honestly rather than dressed up as an
     independent invariant, the same way `assert_gold_sentence_regression_pin` is.
 
-    IT ALSO COMPARES TWO POPULATIONS THAT CAN LEGITIMATELY DIFFER. `buckets.total` sums over
-    the `documents` sequence; `n_false_negatives` normally comes from `sentence_metrics`,
-    whose `fn` sums over `set(pred) | set(gold)`. Those diverge when a pmid appears twice in
-    `documents` -- a live shape, since `load_domain_norm_documents` emits one GoldDocument
-    per annotated sentence, so repeated pmids double-count misses here -- or when a gold pmid
-    is absent from `documents`, which drops its misses entirely. Both correctly fire this
-    check, so nothing is unsound, but the message below blames misclassification. Suspect
-    caller shape first when the two sides differ by a whole document's worth of misses.
+    IT ALSO COMPARES TWO POPULATIONS THAT CAN DIFFER. `buckets.total` sums over the
+    `documents` sequence; `n_false_negatives` normally comes from `sentence_metrics`, whose
+    `fn` sums over `set(pred) | set(gold)`. One way they diverge remains live: a gold pmid
+    absent from `documents` contributes its misses to `fn` but has none classified here.
+    Suspect that caller shape first when the two sides differ by a whole document's worth of
+    misses, rather than hunting for the misclassification the message below blames.
+
+    The OTHER divergence an earlier version of this docstring described -- a pmid repeated in
+    `documents`, double-counting its misses here -- can no longer reach this check. Both
+    `gold_finding_sentences` and `classify_misses` now raise `ValueError` on a repeated pmid
+    (see `_reject_repeated_pmids`), because a sentence index is only meaningful relative to
+    one document text. Do not re-add "duplicate pmids are benign caller shape" guidance: that
+    shape is now rejected at the source, not tolerated and diagnosed here.
     """
     if buckets.total != n_false_negatives:
         raise SystemExit(

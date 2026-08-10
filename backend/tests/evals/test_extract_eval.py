@@ -115,6 +115,11 @@ def test_a_mention_starting_in_the_inter_sentence_gap_is_dropped():
     # A mention starting there cannot be placed in a sentence and is silently dropped: it
     # contributes no endpoint, same as any other absent mention, rather than raising or
     # being attributed to a neighboring sentence.
+    # THIS FIXTURE DOES NOT PIN THE `index is None` GUARD, and never did: without it the
+    # chemical lands under key None and the disease under key 1, the intersection is still
+    # empty, and {} comes back either way. It documents the intended behaviour; the guard
+    # itself is pinned by test_both_endpoints_in_inter_sentence_gaps_do_not_pool_into_one
+    # _pseudo_sentence below.
     doc = GoldDocument(
         pmid="1",
         text=TEXT,
@@ -128,6 +133,43 @@ def test_a_mention_starting_in_the_inter_sentence_gap_is_dropped():
                 mesh_ids=("MESH:D008687",),
             ),
             _m(21, 29, EntityLabel.DISEASE, ("MESH:D000138",)),
+        ],
+    )
+    relations = {"1": {("MESH:D008687", "MESH:D000138")}}
+    assert gold_finding_sentences([doc], relations) == {}
+
+
+def test_both_endpoints_in_inter_sentence_gaps_do_not_pool_into_one_pseudo_sentence():
+    # THIS is the fixture that actually pins `if index is None` in _gold_pairs_by_sentence.
+    # The test above cannot: its chemical lands under key None and its disease under key 1,
+    # so `set(chemicals) & set(diseases)` is empty with OR without the guard and it returns
+    # {} either way -- verified by replaying it against a guard-deleted copy of the helper.
+    # Here BOTH endpoints of the gold pair start in gaps (positions 20 and 53 of MULTI_TEXT,
+    # the separators between the three spans [(0, 20), (21, 53), (54, 75)], verified with the
+    # real splitter). Without the guard they pool under the single pseudo-key None, the
+    # intersection is {None}, the pair matches, and gold_finding_sentences returns
+    # {"1": {None}} -- None entering a set typed set[int], and a "gold sentence" that is not
+    # a sentence. With the guard, neither mention is placeable and nothing is gold.
+    doc = GoldDocument(
+        pmid="1",
+        text=MULTI_TEXT,
+        mentions=[
+            GoldMention(
+                pmid="1",
+                start=20,
+                end=21,
+                text=MULTI_TEXT[20:21],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=("MESH:D008687",),
+            ),
+            GoldMention(
+                pmid="1",
+                start=53,
+                end=54,
+                text=MULTI_TEXT[53:54],
+                label=EntityLabel.DISEASE,
+                mesh_ids=("MESH:D000138",),
+            ),
         ],
     )
     relations = {"1": {("MESH:D008687", "MESH:D000138")}}
@@ -218,6 +260,87 @@ def test_realized_pairs_trace_to_real_gold_relations_and_never_outnumber_them():
 
     assert realized <= relations["1"]
     assert len(realized) <= len(relations["1"])
+
+
+def test_two_documents_sharing_a_pmid_are_rejected_not_merged_and_not_dropped():
+    # A sentence index is only meaningful relative to ONE document text. These two documents
+    # share pmid "p" but carry DIFFERENT texts, so index 0 in `first` ("Metformin caused
+    # acidosis.") and index 1 in `second` ("Acidosis followed metformin use.") are different
+    # sentences that would collide under one key.
+    # Two wrong answers are both silently wrong, in opposite directions, and this repository
+    # really produces the shape: domain_normalization_sample.jsonl holds 49 records over 3
+    # pmids and load_domain_norm_documents emits one GoldDocument per record.
+    #   union    -> {"p": {0, 1}}: lossless but conflates two unrelated sentences.
+    #   assign   -> {"p": {1}} or {"p": {0}} depending on ARGUMENT ORDER: silent data loss.
+    # Both orders are asserted so an assign-style regression cannot hide behind whichever
+    # order happens to survive.
+    # sentence_spans(first_text) == [(0, 26), (27, 48)] and sentence_spans(TEXT) ==
+    # [(0, 20), (21, 53)] -- both verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    first_text = "Metformin caused acidosis. Aspirin caused fever."
+    first = GoldDocument(
+        pmid="p",
+        text=first_text,
+        mentions=[
+            GoldMention(
+                pmid="p",
+                start=0,
+                end=9,
+                text=first_text[0:9],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="p",
+                start=17,
+                end=25,
+                text=first_text[17:25],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+        ],
+    )
+    second = GoldDocument(
+        pmid="p",
+        text=TEXT,
+        mentions=[
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"p": {(chem, dis)}}
+
+    # Each document ALONE is gold at a different index -- so the collision is real, not an
+    # artefact of one of them being empty.
+    assert gold_finding_sentences([first], relations) == {"p": {0}}
+    assert gold_finding_sentences([second], relations) == {"p": {1}}
+
+    with pytest.raises(ValueError, match="repeated pmid"):
+        gold_finding_sentences([first, second], relations)
+    with pytest.raises(ValueError, match="repeated pmid"):
+        gold_finding_sentences([second, first], relations)
+
+
+def test_a_repeated_pmid_is_rejected_even_when_it_carries_no_gold_relations():
+    # The contract is on the SHAPE of `documents`, not on which documents happen to survive
+    # the `if not pairs: continue` filter. Both functions therefore screen the whole sequence
+    # BEFORE any per-document work. Fold the screen into the loop body instead -- so it only
+    # sees documents that have relations -- and a malformed input is silently half-accepted:
+    # this call returns {} with no complaint even though it was handed two documents under
+    # one pmid, and the very next run, with a relation added for "p", starts silently losing
+    # or conflating sentences. `relations` is empty here, so nothing is gold either way and
+    # the raise is the ONLY observable difference.
+    doc = GoldDocument(
+        pmid="p",
+        text=TEXT,
+        mentions=[_m(21, 29, EntityLabel.DISEASE, ("MESH:D000138",))],
+    )
+    relations: dict[str, set[tuple[str, str]]] = {}
+    assert gold_finding_sentences([doc], relations) == {}
+    with pytest.raises(ValueError, match="repeated pmid"):
+        gold_finding_sentences([doc, doc], relations)
+    with pytest.raises(ValueError, match="repeated pmid"):
+        classify_misses([doc, doc], relations, {}, {}, entities_by_paper={})
 
 
 def test_sentence_metrics_cover_papers_present_on_only_one_side():
@@ -594,8 +717,11 @@ def test_a_lost_chemical_endpoint_is_endpoint_lost_just_as_a_lost_disease_one_is
 
 
 def test_entities_starting_in_an_inter_sentence_gap_are_dropped_not_pooled_together():
-    # The classify_misses counterpart of test_a_mention_starting_in_the_inter_sentence_gap
-    # _is_dropped, which pins the same guard for gold_finding_sentences. sentence_index
+    # The classify_misses counterpart of test_both_endpoints_in_inter_sentence_gaps_do_not
+    # _pool_into_one_pseudo_sentence, which pins the same guard for gold_finding_sentences.
+    # (NOT of test_a_mention_starting_in_the_inter_sentence_gap_is_dropped, which an earlier
+    # version of this comment named: that fixture returns {} with the guard deleted too, so
+    # it never pinned anything.) sentence_index
     # returns None for a position in no span; without the `if index is None: continue` guard
     # every such entity is pooled under the single pseudo-key None, and two entities that
     # share no sentence at all look co-sentential. That silently flips never_co_sentential
@@ -663,6 +789,47 @@ def test_entities_starting_in_an_inter_sentence_gap_are_dropped_not_pooled_toget
         buckets.co_sentential_elsewhere,
     ) == (0, 1, 0)
     assert buckets.total == 1
+
+
+def test_classify_misses_rejects_a_repeated_pmid_rather_than_double_counting_its_misses():
+    # classify_misses looks up ONE gold[pmid] per document, so a pmid appearing twice in
+    # `documents` re-classifies the very same misses once per duplicate: the single miss
+    # below would be counted as 2, inflating every bucket and the `total` that
+    # assert_bucket_closure compares against sentence_metrics' fn (which counts each
+    # (pmid, index) pair once). The exact-duplicate case is used deliberately -- it is the
+    # most benign repetition imaginable, and it is still wrong, so the contract is on the
+    # pmid, not on whether the texts happen to differ.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pG",
+        text=TEXT,
+        mentions=[
+            _m(0, 9, EntityLabel.CHEMICAL, (chem,)),
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"pG": {(chem, dis)}}
+    # Only the disease is linked, so the one miss at sentence 1 is endpoint_lost.
+    entities = {
+        "pG": [
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis)
+        ]
+    }
+    gold = {"pG": {1}}
+    pred: dict[str, set[int]] = {"pG": set()}
+
+    single = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        single.endpoint_lost,
+        single.never_co_sentential,
+        single.co_sentential_elsewhere,
+    ) == (1, 0, 0)
+    assert single.total == 1
+
+    with pytest.raises(ValueError, match="repeated pmid"):
+        classify_misses([doc, doc], relations, gold, pred, entities_by_paper=entities)
 
 
 def test_bucket_closure_raises_when_a_miss_is_unaccounted():
