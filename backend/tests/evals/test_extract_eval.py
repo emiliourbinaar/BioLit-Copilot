@@ -836,16 +836,26 @@ def test_classify_misses_rejects_a_repeated_pmid_rather_than_double_counting_its
 
 
 def test_a_gold_sentence_no_relation_qualifies_is_rejected_not_bucketed_as_endpoint_lost():
-    # THIRD precondition: `gold` must come from gold_finding_sentences over the SAME
-    # `documents` and `relations`. Unenforced, the violation is silent and lands in the worst
-    # possible bucket. Here sentence 1 holds both endpoints and BOTH are linked, so the real
-    # gold is {"pH": {1}} and the miss is co_sentential_elsewhere -- reachable, recoverable.
-    # Hand classify_misses a gold of {"pH": {0}} instead and the missed index 0 is absent from
-    # _gold_pairs_by_sentence, so `pairs_at_index` is empty, `reachable` is empty, and the miss
-    # is reported as endpoint_lost -- the UNRECOVERABLE bucket -- with assert_bucket_closure
-    # passing, because closure only checks that misses were counted, never WHERE they landed.
-    # Reporting a recoverable miss as unrecoverable inflates the LLM arm's apparent headroom,
-    # the exact failure ADR-0013's standing finding warns against.
+    # Precondition B: `gold` must come from gold_finding_sentences over the SAME `documents`
+    # and `relations`. Unenforced, the violation is silent and lands in the worst possible
+    # bucket. Here sentence 1 holds both endpoints and BOTH are linked, so the real gold is
+    # {"pH": {1}}. Hand classify_misses a gold of {"pH": {0}} instead and the missed index 0 is
+    # absent from _gold_pairs_by_sentence, so `pairs_at_index` is empty, `reachable` is empty,
+    # and the miss is reported as endpoint_lost -- the UNRECOVERABLE bucket -- with
+    # assert_bucket_closure passing, because closure only checks that misses were counted,
+    # never WHERE they landed. Reporting a recoverable miss as unrecoverable inflates the LLM
+    # arm's apparent headroom, the exact failure ADR-0013's standing finding warns against.
+    # `pred` BELOW IS A HAND-BUILT STAND-IN THAT VIOLATES UNENFORCED PRECONDITION 1, and the
+    # `consistent` assertion must be read accordingly. The real SameSentenceAsEntitiesExtractor
+    # over these entities and this text returns {1} -- verified by running it -- i.e. no miss
+    # at all, so a selector-consistent `pred` would leave this fixture with nothing to bucket.
+    # `set()` is used so that a miss exists at the gold sentence. Its bucket is therefore the
+    # MECHANICAL consequence of the stand-in and NOT an illustration of a real
+    # co_sentential_elsewhere: nothing is genuinely "elsewhere" here, because the sentence the
+    # selector would have chosen IS the gold one. The genuine co_sentential_elsewhere fixture
+    # is pC in test_each_miss_bucket_is_populated_distinctly, whose `pred` comes from the real
+    # selector. None of this weakens the pin below: the raise depends on `gold`, `documents`
+    # and `relations` alone, never on how `pred` was produced.
     # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
     chem, dis = "MESH:D008687", "MESH:D000138"
     doc = GoldDocument(
@@ -883,6 +893,304 @@ def test_a_gold_sentence_no_relation_qualifies_is_rejected_not_bucketed_as_endpo
     message = str(excinfo.value)
     assert "gold_finding_sentences" in message
     assert "endpoint_lost" in message
+
+
+def test_a_gold_entry_that_omits_a_genuine_gold_sentence_is_rejected_not_silently_shrunk():
+    # The OTHER direction of the same precondition: `gold` must not merely avoid inventing
+    # sentences, it must not DROP them either. An omitted gold sentence never becomes a miss,
+    # so it silently shrinks `endpoint_lost` -- the UNRECOVERABLE population that is this
+    # eval's deliverable -- while assert_bucket_closure keeps passing, because the false
+    # negative count it compares against is computed from the SAME wrong `gold` and deflates
+    # in lockstep. Measured on this exact fixture against the pre-fix code: gold {"pI": {1}}
+    # gave endpoint_lost 1 instead of 2, a 50% under-report, with closure silent; gold {}
+    # gave (0, 0, 0, 0) and never even reached the consistency check, because `missed` was
+    # empty and the loop skipped the document before gold pairs were computed.
+    # sentence_spans(text) == [(0, 20), (21, 53), (54, 74), (75, 107)] -- verified with the
+    # real splitter. Sentences 1 and 3 each hold both endpoints, so gold is {1, 3}.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    text = (
+        "Metformin was given. Acidosis followed metformin use. "
+        "Nausea was reported. Metformin caused acidosis again."
+    )
+    doc = GoldDocument(
+        pmid="pI",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="pI",
+                start=21,
+                end=29,
+                text=text[21:29],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pI",
+                start=39,
+                end=48,
+                text=text[39:48],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pI",
+                start=75,
+                end=84,
+                text=text[75:84],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pI",
+                start=92,
+                end=100,
+                text=text[92:100],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+        ],
+    )
+    relations = {"pI": {(chem, dis)}}
+    # No disease is linked anywhere, so both gold misses are endpoint_lost -- the bucket the
+    # omission deflates.
+    entities = {
+        "pI": [
+            Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=chem)
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pI": {1, 3}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pI": {f.sentence_index for f in extractor.findings(_paper("pI", text))}}
+    assert pred == {"pI": set()}
+
+    # Anti-vacuity: with the correct gold the call succeeds and reports BOTH misses.
+    correct = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        correct.endpoint_lost,
+        correct.never_co_sentential,
+        correct.co_sentential_elsewhere,
+    ) == (2, 0, 0)
+    assert correct.total == 2
+
+    # Partial omission: sentence 3 dropped.
+    with pytest.raises(ValueError, match="classify_misses: sentence 3 of pmid 'pI'") as partial:
+        classify_misses([doc], relations, {"pI": {1}}, pred, entities_by_paper=entities)
+    assert "gold_finding_sentences" in str(partial.value)
+    assert "endpoint_lost" in str(partial.value)
+
+    # Complete omission: the pmid's entry is absent entirely. This one leaves `missed` empty,
+    # so the check MUST NOT be reachable only from a document that already has misses.
+    with pytest.raises(ValueError, match="classify_misses: sentence 1 of pmid 'pI'") as complete:
+        classify_misses([doc], relations, {}, pred, entities_by_paper=entities)
+    assert "gold_finding_sentences" in str(complete.value)
+    assert "endpoint_lost" in str(complete.value)
+
+
+def test_the_gold_provenance_check_covers_documents_that_have_no_gold_sentence_at_all():
+    # DOMAIN of the provenance check, not its operands. The single-document fixtures above
+    # all have a non-empty gold, so every one of them survives a conjunction that quietly
+    # restricts the check to documents that already have gold -- `if invented and gold_pairs:`
+    # or `if invented and pairs:` -- while such a conjunction disables it on the DOMINANT real
+    # shape: a `gold` built over a different `relations`, or over a superset of documents,
+    # names sentences in papers that have no gold sentence at all.
+    # "pK" is second in `documents` and carries the bogus entry, so restricting the loop to
+    # the first document is caught here too.
+    # Two variants, because the two conjunctions key on different values: with `relations`
+    # holding a pair for "pK" that qualifies nothing, `pairs` is truthy while `gold_pairs` is
+    # empty; with "pK" absent from `relations`, both are empty.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
+    chem, dis, unannotated = "MESH:D008687", "MESH:D000138", "MESH:D005334"
+    doc_good = GoldDocument(
+        pmid="pJ",
+        text=TEXT,
+        mentions=[
+            GoldMention(
+                pmid="pJ",
+                start=0,
+                end=9,
+                text=TEXT[0:9],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pJ",
+                start=21,
+                end=29,
+                text=TEXT[21:29],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pJ",
+                start=39,
+                end=48,
+                text=TEXT[39:48],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+        ],
+    )
+    # "pK" annotates a chemical only, so no sentence of it can ever hold both endpoints.
+    doc_bare = GoldDocument(
+        pmid="pK",
+        text=TEXT,
+        mentions=[
+            GoldMention(
+                pmid="pK",
+                start=0,
+                end=9,
+                text=TEXT[0:9],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+        ],
+    )
+    docs = [doc_good, doc_bare]
+    entities = {
+        "pJ": [
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis)
+        ]
+    }
+    pred: dict[str, set[int]] = {"pJ": set(), "pK": set()}
+
+    # Variant 1: "pK" HAS a relation, and it qualifies nothing (its disease is never
+    # annotated), so `relations["pK"]` is truthy while its gold-pair mapping is empty.
+    qualifying_nothing = {"pJ": {(chem, dis)}, "pK": {(chem, unannotated)}}
+    assert gold_finding_sentences(docs, qualifying_nothing) == {"pJ": {1}}
+
+    # Anti-vacuity: the consistent gold classifies a real miss rather than raising.
+    buckets = classify_misses(
+        docs, qualifying_nothing, {"pJ": {1}}, pred, entities_by_paper=entities
+    )
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (1, 0, 0)
+    assert buckets.total == 1
+
+    with pytest.raises(ValueError, match="classify_misses: sentence 0 of pmid 'pK'"):
+        classify_misses(
+            docs, qualifying_nothing, {"pJ": {1}, "pK": {0}}, pred, entities_by_paper=entities
+        )
+
+    # Variant 2: "pK" is absent from `relations` entirely, so `relations.get(...)` is empty
+    # too and a conjunction on either value would go silent.
+    absent = {"pJ": {(chem, dis)}}
+    assert gold_finding_sentences(docs, absent) == {"pJ": {1}}
+    with pytest.raises(ValueError, match="classify_misses: sentence 0 of pmid 'pK'"):
+        classify_misses(docs, absent, {"pJ": {1}, "pK": {0}}, pred, entities_by_paper=entities)
+
+
+def test_the_gold_provenance_check_covers_every_declared_index_not_just_the_smallest():
+    # Second DOMAIN axis: which INDICES of a document the check examines. The single-index
+    # fixtures above cannot tell "every declared index" from "the smallest one", so a check
+    # narrowed to `min(...)` passes them all. Here the smallest declared index IS genuinely
+    # gold and the larger one is not, so only a check that looks past the first index fires.
+    # Index 2 is deliberately IN RANGE (MULTI_TEXT has three sentences) -- an out-of-range
+    # index is a different, easier shape, pinned by the test below.
+    # sentence_spans(MULTI_TEXT) == [(0, 20), (21, 53), (54, 75)] -- verified with the real
+    # splitter. Only sentence 1 holds both endpoints; sentence 2 holds no gold mention.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pL",
+        text=MULTI_TEXT,
+        mentions=[
+            GoldMention(
+                pmid="pL",
+                start=0,
+                end=9,
+                text=MULTI_TEXT[0:9],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pL",
+                start=21,
+                end=29,
+                text=MULTI_TEXT[21:29],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pL",
+                start=39,
+                end=48,
+                text=MULTI_TEXT[39:48],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+        ],
+    )
+    relations = {"pL": {(chem, dis)}}
+    # Only the disease is linked, so the genuine miss at sentence 1 is endpoint_lost and the
+    # real selector produces nothing.
+    entities = {
+        "pL": [
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis)
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pL": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pL": {f.sentence_index for f in extractor.findings(_paper("pL", MULTI_TEXT))}}
+    assert pred == {"pL": set()}
+
+    # Anti-vacuity: the consistent gold classifies the real miss rather than raising.
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (1, 0, 0)
+    assert buckets.total == 1
+
+    # min({1, 2}) == 1, which IS gold -- so a first-index-only check stays silent here.
+    with pytest.raises(ValueError, match="classify_misses: sentence 2 of pmid 'pL'"):
+        classify_misses([doc], relations, {"pL": {1, 2}}, pred, entities_by_paper=entities)
+
+
+def test_a_gold_index_past_the_end_of_the_document_is_rejected_too():
+    # Third DOMAIN axis: the check must not be restricted to indices that name a real
+    # sentence. Narrow it to `i < len(sentence_spans(document.text))` -- a plausible-looking
+    # "only consider real sentences" filter -- and every in-range fixture above still passes
+    # while an out-of-range gold index sails through and is bucketed as endpoint_lost. This is
+    # the shape a `gold` built over a DIFFERENT text produces: `GoldDocument.text` is
+    # `title + " " + abstract` while `SameSentenceAsEntitiesExtractor` splits the abstract
+    # alone, so indices computed against the longer string overrun the shorter one.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter, so 99
+    # names no sentence at all.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pM",
+        text=TEXT,
+        mentions=[
+            _m(0, 9, EntityLabel.CHEMICAL, (chem,)),
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"pM": {(chem, dis)}}
+    entities = {
+        "pM": [
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis)
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pM": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pM": {f.sentence_index for f in extractor.findings(_paper("pM", TEXT))}}
+    assert pred == {"pM": set()}
+
+    with pytest.raises(ValueError, match="classify_misses: sentence 99 of pmid 'pM'"):
+        classify_misses([doc], relations, {"pM": {1, 99}}, pred, entities_by_paper=entities)
 
 
 def test_bucket_closure_raises_when_a_miss_is_unaccounted():

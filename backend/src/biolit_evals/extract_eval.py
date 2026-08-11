@@ -217,18 +217,34 @@ def classify_misses(
     A. AT MOST ONE DOCUMENT PER PMID in `documents` -- see `_reject_repeated_pmids`. A
        duplicate would re-classify the same `gold[pmid]` misses once per copy.
     B. `gold` CAME FROM `gold_finding_sentences(documents, relations)` OVER THESE SAME
-       ARGUMENTS. Checked as `missed <= set(_gold_pairs_by_sentence(document, pairs))` -- a
-       free invariant, since that mapping is already computed here to bucket the misses
-       against. A missed index it does not consider gold gets no qualifying pairs, hence
-       nothing reachable, and would be bucketed `endpoint_lost` -- the UNRECOVERABLE bucket,
-       inflating apparent downstream headroom -- with `assert_bucket_closure` still passing.
-       Necessary, not sufficient, and claimed no stronger: it covers exactly the population
-       this function buckets. A gold index `pred` also selected is not a miss, so it is never
-       bucketed and cannot be misbucketed; and a `gold` that OMITS a genuine gold sentence
-       stays invisible here, because an omitted sentence never becomes a miss. An equality
-       check against `set(_gold_pairs_by_sentence(...))` would catch the omission too, but it
-       would also raise on divergences that corrupt no bucket, so this raises only where a
-       number would actually go wrong.
+       ARGUMENTS. Checked, for EVERY document in `documents` and before any of it is used, as
+       the full equality `gold.get(pmid, set()) == set(_gold_pairs_by_sentence(document,
+       relations.get(pmid, set())))`. That is exactly the predicate `gold_finding_sentences`
+       computes, so over the pmids in `documents` the check is NECESSARY AND SUFFICIENT for
+       the precondition, not merely necessary. Both directions of divergence corrupt a
+       reported number, which is why neither is tolerated:
+         - an index in `gold` that NO gold relation qualifies has no qualifying pairs, hence
+           nothing reachable. Missed by `pred`, it is bucketed `endpoint_lost` -- the
+           UNRECOVERABLE bucket, inflating apparent downstream headroom. Selected by `pred`,
+           it is never bucketed at all, yet still scores as a true positive in
+           `sentence_metrics`, whose precision then describes a gold that does not exist.
+         - a genuine gold sentence MISSING from `gold` never becomes a miss, so it shrinks
+           `endpoint_lost` by however many it omits -- a 2-of-2 population reported as 1 in
+           the fixture that pins this. `assert_bucket_closure` cannot see either direction:
+           it compares against a false-negative count computed from the same wrong `gold`,
+           which deflates in lockstep.
+       WHAT IT STILL DOES NOT COVER, stated no stronger than the code supports: a pmid in
+       `gold` but ABSENT from `documents` is never visited, so its entry is unchecked. That
+       is the same population `assert_bucket_closure` warns about, where `sentence_metrics`
+       counts misses this function never classifies.
+       COST. The gold-pair mapping is now built for every document, including those with no
+       misses, instead of only inside the has-misses branch. Measured on a synthetic
+       500-document corpus shaped like Test-500 (9 sentences, 20 mentions, 2 relations per
+       document): 26.7 ms -> 31.8 ms with half the gold sentences missed, and 0.2 ms ->
+       19.5 ms in the degenerate case where NOTHING is missed and the old placement skipped
+       every document. This is an offline harness that runs once per arm behind NER over the
+       same 500 abstracts; tens of milliseconds buy an exact check, and the trade is not
+       close.
 
     TWO UNENFORCED ONES, below. Both are properties of how `pred` was PRODUCED, and neither
     `pred` nor this signature carries any record of that, so nothing here can check them: a
@@ -251,7 +267,38 @@ def classify_misses(
     _reject_repeated_pmids(documents, caller="classify_misses")
     lost = never = elsewhere = 0
     for document in documents:
-        missed = gold.get(document.pmid, set()) - pred.get(document.pmid, set())
+        pairs = relations.get(document.pmid, set())
+        gold_pairs = _gold_pairs_by_sentence(document, pairs)
+        declared = gold.get(document.pmid, set())
+        invented = sorted(declared - set(gold_pairs))
+        if invented:
+            raise ValueError(
+                f"classify_misses: sentence {invented[0]} of pmid {document.pmid!r} is in "
+                "`gold` but no gold relation qualifies it, so it is not a gold finding "
+                "sentence for these `documents` and `relations`. `gold` must be the output of "
+                "`gold_finding_sentences(documents, relations)` over the SAME arguments. A "
+                "miss at a sentence this function does not consider gold has no qualifying "
+                "pairs, hence nothing reachable, and is silently bucketed as `endpoint_lost` "
+                "-- the UNRECOVERABLE bucket, so the error inflates apparent downstream "
+                "headroom -- while `assert_bucket_closure` still passes, because closure "
+                "checks only that misses were counted, never WHICH bucket each landed in. An "
+                "invented index `pred` also selected is never bucketed at all, but still "
+                "scores as a true positive in `sentence_metrics`."
+            )
+        omitted = sorted(set(gold_pairs) - declared)
+        if omitted:
+            raise ValueError(
+                f"classify_misses: sentence {omitted[0]} of pmid {document.pmid!r} is a gold "
+                "finding sentence for these `documents` and `relations` but is absent from "
+                "`gold`. `gold` must be the output of "
+                "`gold_finding_sentences(documents, relations)` over the SAME arguments. An "
+                "omitted gold sentence can never become a miss, so it silently shrinks every "
+                "bucket -- including `endpoint_lost`, the UNRECOVERABLE population this eval "
+                "reports -- while `assert_bucket_closure` still passes, because the false "
+                "negative count it compares against is computed from the same `gold` and "
+                "deflates in lockstep."
+            )
+        missed = declared - pred.get(document.pmid, set())
         if not missed:
             continue
         entities = entities_by_paper.get(document.pmid, ())
@@ -270,21 +317,6 @@ def classify_misses(
                 chem.add(entity.canonical_id)
             elif entity.label is EntityLabel.DISEASE:
                 dis.add(entity.canonical_id)
-        pairs = relations.get(document.pmid, set())
-        gold_pairs = _gold_pairs_by_sentence(document, pairs)
-        ungold = sorted(missed - set(gold_pairs))
-        if ungold:
-            raise ValueError(
-                f"classify_misses: sentence {ungold[0]} of pmid {document.pmid!r} is in `gold` "
-                "but no gold relation qualifies it, so it is not a gold finding sentence for "
-                "these `documents` and `relations`. `gold` must be the output of "
-                "`gold_finding_sentences(documents, relations)` over the SAME arguments. A miss "
-                "at a sentence this function does not consider gold has no qualifying pairs, "
-                "hence nothing reachable, and is silently bucketed as `endpoint_lost` -- the "
-                "UNRECOVERABLE bucket, so the error inflates apparent downstream headroom -- "
-                "while `assert_bucket_closure` still passes, because closure checks only that "
-                "misses were counted, never WHICH bucket each landed in."
-            )
         for index in sorted(missed):
             pairs_at_index = gold_pairs.get(index, set())
             reachable = [(c, d) for c, d in pairs_at_index if c in chemicals and d in diseases]
