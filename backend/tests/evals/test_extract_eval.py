@@ -315,9 +315,12 @@ def test_two_documents_sharing_a_pmid_are_rejected_not_merged_and_not_dropped():
     assert gold_finding_sentences([first], relations) == {"p": {0}}
     assert gold_finding_sentences([second], relations) == {"p": {1}}
 
-    with pytest.raises(ValueError, match="repeated pmid"):
+    # The `caller` prefix is pinned, not just "repeated pmid": `caller` exists solely to make
+    # the message name the function that actually rejected the input, and a pattern matching
+    # only the shared tail lets either call site report itself under the other's name.
+    with pytest.raises(ValueError, match="gold_finding_sentences: repeated pmid"):
         gold_finding_sentences([first, second], relations)
-    with pytest.raises(ValueError, match="repeated pmid"):
+    with pytest.raises(ValueError, match="gold_finding_sentences: repeated pmid"):
         gold_finding_sentences([second, first], relations)
 
 
@@ -337,9 +340,9 @@ def test_a_repeated_pmid_is_rejected_even_when_it_carries_no_gold_relations():
     )
     relations: dict[str, set[tuple[str, str]]] = {}
     assert gold_finding_sentences([doc], relations) == {}
-    with pytest.raises(ValueError, match="repeated pmid"):
+    with pytest.raises(ValueError, match="gold_finding_sentences: repeated pmid"):
         gold_finding_sentences([doc, doc], relations)
-    with pytest.raises(ValueError, match="repeated pmid"):
+    with pytest.raises(ValueError, match="classify_misses: repeated pmid"):
         classify_misses([doc, doc], relations, {}, {}, entities_by_paper={})
 
 
@@ -828,8 +831,58 @@ def test_classify_misses_rejects_a_repeated_pmid_rather_than_double_counting_its
     ) == (1, 0, 0)
     assert single.total == 1
 
-    with pytest.raises(ValueError, match="repeated pmid"):
+    with pytest.raises(ValueError, match="classify_misses: repeated pmid"):
         classify_misses([doc, doc], relations, gold, pred, entities_by_paper=entities)
+
+
+def test_a_gold_sentence_no_relation_qualifies_is_rejected_not_bucketed_as_endpoint_lost():
+    # THIRD precondition: `gold` must come from gold_finding_sentences over the SAME
+    # `documents` and `relations`. Unenforced, the violation is silent and lands in the worst
+    # possible bucket. Here sentence 1 holds both endpoints and BOTH are linked, so the real
+    # gold is {"pH": {1}} and the miss is co_sentential_elsewhere -- reachable, recoverable.
+    # Hand classify_misses a gold of {"pH": {0}} instead and the missed index 0 is absent from
+    # _gold_pairs_by_sentence, so `pairs_at_index` is empty, `reachable` is empty, and the miss
+    # is reported as endpoint_lost -- the UNRECOVERABLE bucket -- with assert_bucket_closure
+    # passing, because closure only checks that misses were counted, never WHERE they landed.
+    # Reporting a recoverable miss as unrecoverable inflates the LLM arm's apparent headroom,
+    # the exact failure ADR-0013's standing finding warns against.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pH",
+        text=TEXT,
+        mentions=[
+            _m(0, 9, EntityLabel.CHEMICAL, (chem,)),
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"pH": {(chem, dis)}}
+    # Both endpoints linked, and together in sentence 1 -- nothing is lost or unreachable.
+    entities = {
+        "pH": [
+            Entity(
+                text="metformin", label=EntityLabel.CHEMICAL, start=39, end=48, canonical_id=chem
+            ),
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis),
+        ]
+    }
+    pred: dict[str, set[int]] = {"pH": set()}
+
+    assert gold_finding_sentences([doc], relations) == {"pH": {1}}
+
+    consistent = classify_misses([doc], relations, {"pH": {1}}, pred, entities_by_paper=entities)
+    assert (
+        consistent.endpoint_lost,
+        consistent.never_co_sentential,
+        consistent.co_sentential_elsewhere,
+    ) == (0, 0, 1)
+
+    with pytest.raises(ValueError, match="classify_misses: sentence 0 of pmid 'pH'") as excinfo:
+        classify_misses([doc], relations, {"pH": {0}}, pred, entities_by_paper=entities)
+    message = str(excinfo.value)
+    assert "gold_finding_sentences" in message
+    assert "endpoint_lost" in message
 
 
 def test_bucket_closure_raises_when_a_miss_is_unaccounted():
