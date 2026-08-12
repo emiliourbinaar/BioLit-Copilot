@@ -1323,7 +1323,7 @@ Add `run_extract_eval` to `extract_eval.py`. It must, in order:
 5. Score all three arms with `sentence_metrics`, recording per-arm `mean_sentences_per_paper`.
 6. `assert_gold_sentence_recall_anchor(control_gold_metrics, arm="control-gold")`.
 7. `classify_misses(...)` for `control-real`, then `assert_bucket_closure(buckets, n_false_negatives=control_real_metrics.fn)`.
-8. Compute the LLM arm's `recall_on_endpoint_lost`: restrict gold to sentences classified into bucket (a) and score LLM predictions against that restriction only. **This is the bottleneck-escape proof, so it must be its own field, not inferred.**
+8. Compute the LLM arm's `recall_on_endpoint_lost`: restrict gold to sentences classified into bucket (a) and score LLM predictions against that restriction only. **This is the bottleneck-escape proof, so it must be its own field, not inferred.** Use `buckets.endpoint_lost_sentences` — a `Mapping[str, frozenset[int]]` — directly as the restricted gold; do NOT re-derive the classification, which would duplicate the bucketing logic. (Task 6b, `9b5ffbf`, added membership for exactly this: before it, `MissBuckets` carried only counts and this step was not implementable.) **`sentence_metrics` is annotated `set[int]` while membership is `frozenset[int]`** — either convert at the call site or widen the annotation to `AbstractSet[int]`, which is safe but was out of Task 6b's scope. Note there are now FOUR buckets: `endpoint_unlocatable` (a') is separate from (a) and equally unrecoverable, so a report that quotes only (a) as the unrecoverable population understates it.
 9. Emit diagnostics per arm (`refusals`, `out_of_range`, `licence_skipped` for the LLM arm; `0` for controls).
 10. Write one JSON line and return it.
 
