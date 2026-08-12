@@ -162,9 +162,30 @@ def assert_gold_sentence_regression_pin(n_documents: int, n_gold_sentences: int)
         )
 
 
+def _freeze(sentences: Mapping[str, set[int]]) -> dict[str, frozenset[int]]:
+    """Make a bucket's accumulated membership immutable, matching the frozen dataclass."""
+    return {pmid: frozenset(indices) for pmid, indices in sentences.items()}
+
+
+def _n_sentences(sentences: Mapping[str, frozenset[int]]) -> int:
+    """Total (pmid, sentence index) pairs in a bucket's membership mapping."""
+    return sum(len(indices) for indices in sentences.values())
+
+
 @dataclass(frozen=True)
 class MissBuckets:
-    """Why control-real missed each gold sentence. Three buckets, three different fixes.
+    """Why control-real missed each gold sentence. Four buckets, four different fixes.
+
+    CARRIES IDENTITY, NOT ONLY COUNTS. Each bucket is stored as its membership -- a
+    `pmid -> frozenset[sentence index]` mapping -- and every count, `total` included, is a
+    PROPERTY derived from it. There is no separate counter to disagree with the membership,
+    so count/membership drift is impossible by construction rather than merely tested
+    against. Task 8's `recall_on_endpoint_lost` restricts gold to bucket (a) and scores the
+    LLM arm against that restriction alone; a count cannot express which sentences those are,
+    which is why membership is stored rather than reconstructed. Membership is exposed for
+    ALL FOUR buckets, not just (a): a reader given (a) alone cannot check that the buckets
+    partition the misses rather than overlap. A pmid with no miss in a bucket contributes no
+    key at all, so a restricted gold names exactly the papers that bucket touches.
 
     Every bucket is decided PER MISSED SENTENCE against only the gold relations that made
     THAT sentence gold -- never against the document's whole relation set. At ~2.13 gold CID
@@ -180,15 +201,33 @@ class MissBuckets:
                                number as 40.3%: that counts relations, this counts gold
                                sentences, and one sentence can be made gold by several
                                relations. Do not quote them as the same statistic.
-    never_co_sentential     -- >=1 qualifying relation is reachable, but no sentence in the
-                               paper holds both endpoints of any reachable qualifying
-                               relation. Recoverable by a wider window; prices same-paragraph
-                               variants.
-    co_sentential_elsewhere -- a reachable qualifying relation IS co-sentential somewhere,
-                               just not at the gold sentence. Gold-vs-real span disagreement;
-                               costs a false positive as well as this false negative.
+    endpoint_unlocatable    -- >=1 qualifying relation has both endpoints LINKED, but every
+                               such relation has >=1 endpoint whose only linked entities
+                               carry no offset (`Entity.start is None`). ALSO UNRECOVERABLE,
+                               and for a stronger reason than (a): the endpoint's position is
+                               undefined, not merely distant, so no window variant and no
+                               pairing rule can place it. Kept SEPARATE from (a) rather than
+                               folded into it, because (a) is defined as "no qualifying
+                               relation has both endpoints linked anywhere" and these
+                               endpoints ARE linked -- folding would make (a)'s own
+                               definition false. See `classify_misses` for why this is a
+                               bucket rather than a rejected precondition.
+    never_co_sentential     -- >=1 qualifying relation is reachable AND both its endpoints
+                               are locatable, but no sentence in the paper holds both.
+                               Recoverable by a wider window; prices same-paragraph variants.
+                               An endpoint whose integer offset falls in the inter-sentence
+                               gap `sentence_spans` leaves uncovered belongs HERE, not in
+                               (a'): its position is known, so a different splitter or a
+                               paragraph window reaches it.
+    co_sentential_elsewhere -- a reachable, locatable qualifying relation IS co-sentential
+                               somewhere, just not at the gold sentence. Gold-vs-real span
+                               disagreement; costs a false positive as well as this false
+                               negative.
 
-    Evaluated in that order and mutually exclusive, so the three sum to total.
+    Evaluated in that order and mutually exclusive, so the four sum to total. (a') sits
+    immediately after (a) for the same reason (a) precedes (b): unrecoverable-by-any-
+    mechanism outranks fixable-by-windowing, and a miss must be priced by its most
+    fundamental obstacle.
 
     The direction of any error here is not neutral. Misrouting an unrecoverable miss into
     either recoverable bucket inflates the headroom a downstream component appears to have,
@@ -196,10 +235,35 @@ class MissBuckets:
     downstream reasoning against an entity-conditioned ceiling, not an oracle-entity one.
     """
 
-    endpoint_lost: int
-    never_co_sentential: int
-    co_sentential_elsewhere: int
-    total: int
+    endpoint_lost_sentences: Mapping[str, frozenset[int]]
+    endpoint_unlocatable_sentences: Mapping[str, frozenset[int]]
+    never_co_sentential_sentences: Mapping[str, frozenset[int]]
+    co_sentential_elsewhere_sentences: Mapping[str, frozenset[int]]
+
+    @property
+    def endpoint_lost(self) -> int:
+        return _n_sentences(self.endpoint_lost_sentences)
+
+    @property
+    def endpoint_unlocatable(self) -> int:
+        return _n_sentences(self.endpoint_unlocatable_sentences)
+
+    @property
+    def never_co_sentential(self) -> int:
+        return _n_sentences(self.never_co_sentential_sentences)
+
+    @property
+    def co_sentential_elsewhere(self) -> int:
+        return _n_sentences(self.co_sentential_elsewhere_sentences)
+
+    @property
+    def total(self) -> int:
+        return (
+            self.endpoint_lost
+            + self.endpoint_unlocatable
+            + self.never_co_sentential
+            + self.co_sentential_elsewhere
+        )
 
 
 def classify_misses(
@@ -267,6 +331,53 @@ def classify_misses(
        name `co_sentential_elsewhere` asserts that the selector saw a co-sentential pair and
        chose a different sentence. Score a different selector, or the same one over a
        different entity set, and "elsewhere" describes nothing real.
+    THE LINKED-BUT-UNLOCATABLE POPULATION, and why it is a BUCKET and not a REJECTION.
+    `linked_ids` filters on `canonical_id is not None` alone and ignores `start`, so an
+    entity with `canonical_id is not None and start is None` makes `reachable` non-empty --
+    escaping `endpoint_lost` -- while being unable to appear in `per_sentence` at all. Before
+    this was separated out, such a miss landed in `never_co_sentential`: a bucket meaning
+    "the endpoints exist and are placed, they merely never share a sentence", which is quoted
+    as headroom a windowing change could recover. No window variant recovers an endpoint with
+    no offset, so that inflated the recoverable population -- ADR-0013's standing finding in
+    miniature.
+
+    IS THE POPULATION REACHABLE? Established from source, not assumed, because the answer
+    decides between a fourth bucket and a rejected precondition.
+      - NOT on the gold-mention-derived path. `GoldMention.start` is a required `int` (parsed
+        `int(start)` in `parse_pubtator`), and the gold-entity construction passes
+        `start=mention.start` straight through (`cluster_eval.synthesize_records`, the shape
+        the runner reuses for `control-gold`). Every gold-derived entity therefore has an
+        integer offset, and a linked one is always locatable.
+      - YES on the real NER + linking path, which is the one that feeds this function's
+        `entities_by_paper` for `control-real`. `extract_entities` assigns
+        `start = span.get("start")` and branches on `start is not None`, falling back to the
+        pipeline's `word` field for the surface -- it KEEPS such a span rather than dropping
+        it, and sorts with an explicit `e.start if e.start is not None else 0`.
+        `predict_windowed` likewise propagates a `None` offset rather than discarding the
+        span, and `_is_contained` returns False for it so it survives de-duplication.
+        `canonicalize` then links on `entity.text` alone and writes back through
+        `model_copy(update={"canonical_id": ..., "canonical_name": ...})`, which never
+        touches `start`. So a span the model returns without offsets, whose surface links,
+        arrives here linked and unlocatable.
+      - The repository already treats this population as ROUTINE rather than malformed:
+        `pairing_diagnostics` counts it in a dedicated `unplaceable_entities` field,
+        `SameSentencePairing` documents that it "FAILS CLOSED" on it, and
+        `SameSentenceAsEntitiesExtractor` -- the very selector that produces `pred` -- skips
+        it with the identical guard. All three have fixtures constructing it directly.
+
+    REJECTED ALTERNATIVE: raise `ValueError` on it as an argument-shape violation, the way
+    `_reject_repeated_pmids` does. Rejected because the population is reachable on the
+    production path, so this would halt a real 500-document run over an occurrence the
+    selector standing beside it handles as a matter of course, and would make this function
+    stricter about its entities than the arm being measured. A repeated pmid has no correct
+    interpretation; an unlocatable endpoint has one, and it is bucket (a').
+
+    ALSO REJECTED: folding it into `endpoint_lost`. That bucket is defined as "no relation
+    qualifying that sentence has both endpoints linked anywhere in the paper", and a
+    linked-but-unlocatable endpoint IS linked, so folding would make (a)'s own definition
+    false while hiding a distinct diagnosis (linking succeeded, offsets did not) inside one
+    that blames linking.
+
     2. SAME TEXT. This function splits `sentence_spans(document.text)`, while
        `SameSentenceAsEntitiesExtractor` splits `paper.abstract or ""`. For real BC5CDR,
        `GoldDocument.text` is `title + " " + abstract` (see `parse_pubtator_documents`), so a
@@ -275,7 +386,10 @@ def classify_misses(
        title. The caller must feed the extractor the SAME string as `document.text`.
     """
     _reject_repeated_pmids(documents, caller="classify_misses")
-    lost = never = elsewhere = 0
+    lost: dict[str, set[int]] = {}
+    unlocatable: dict[str, set[int]] = {}
+    never: dict[str, set[int]] = {}
+    elsewhere: dict[str, set[int]] = {}
     for document in documents:
         pairs = relations.get(document.pmid, set())
         gold_pairs = _gold_pairs_by_sentence(document, pairs)
@@ -314,6 +428,17 @@ def classify_misses(
         entities = entities_by_paper.get(document.pmid, ())
         chemicals = linked_ids(entities, EntityLabel.CHEMICAL)
         diseases = linked_ids(entities, EntityLabel.DISEASE)
+        # `linked_ids` filters on `canonical_id is not None` and IGNORES `start`, so the two
+        # sets above admit an entity that is linked but carries no offset. Re-running the SAME
+        # definition over the located entities alone gives the ids an offset-based mechanism
+        # can actually reach. Restricting on `start is not None` and NOT on
+        # `sentence_index(...) is not None` is deliberate: an entity whose integer offset
+        # lands in the inter-sentence gap `sentence_spans` leaves uncovered has a KNOWN
+        # position that a different splitter or a wider window recovers, so it belongs in
+        # `never_co_sentential`; an entity with no offset at all does not.
+        located = [entity for entity in entities if entity.start is not None]
+        locatable_chemicals = linked_ids(located, EntityLabel.CHEMICAL)
+        locatable_diseases = linked_ids(located, EntityLabel.DISEASE)
         spans = sentence_spans(document.text)
         per_sentence: dict[int, tuple[set[str], set[str]]] = {}
         for entity in entities:
@@ -331,35 +456,57 @@ def classify_misses(
             pairs_at_index = gold_pairs.get(index, set())
             reachable = [(c, d) for c, d in pairs_at_index if c in chemicals and d in diseases]
             if not reachable:
-                lost += 1
+                lost.setdefault(document.pmid, set()).add(index)
+                continue
+            locatable = [
+                (c, d) for c, d in reachable if c in locatable_chemicals and d in locatable_diseases
+            ]
+            if not locatable:
+                unlocatable.setdefault(document.pmid, set()).add(index)
                 continue
             co_sentential = any(
-                c in chem and d in dis for chem, dis in per_sentence.values() for c, d in reachable
+                c in chem and d in dis for chem, dis in per_sentence.values() for c, d in locatable
             )
             if not co_sentential:
-                never += 1
+                never.setdefault(document.pmid, set()).add(index)
             else:
-                elsewhere += 1
+                elsewhere.setdefault(document.pmid, set()).add(index)
     return MissBuckets(
-        endpoint_lost=lost,
-        never_co_sentential=never,
-        co_sentential_elsewhere=elsewhere,
-        total=lost + never + elsewhere,
+        endpoint_lost_sentences=_freeze(lost),
+        endpoint_unlocatable_sentences=_freeze(unlocatable),
+        never_co_sentential_sentences=_freeze(never),
+        co_sentential_elsewhere_sentences=_freeze(elsewhere),
     )
 
 
 def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> None:
-    """HARNESS correctness: the three buckets must account for every false negative.
+    """HARNESS correctness: the four buckets must account for every false negative, once each.
 
-    WHAT IT ACTUALLY DETECTS, stated no stronger than the code supports. `classify_misses`
-    computes `total` as `lost + never + elsewhere` in the same pass, and the `continue` after
-    `endpoint_lost` makes the branches mutually exclusive, so on that path the identity holds
-    BY CONSTRUCTION. It is not independent evidence in the way the three-way reachable-share
-    / oracle-recall / cross-product-recall agreement at 0.5966 was. Its real value is as a
-    mutation detector for exactly that exclusivity -- a dropped `continue`, a branch that
-    increments two counters, or a hand-built `MissBuckets` whose `total` is a free field --
-    plus the population check below. Labelled honestly rather than dressed up as an
-    independent invariant, the same way `assert_gold_sentence_regression_pin` is.
+    WHAT IT ACTUALLY DETECTS, stated no stronger than the code supports, and REVISED because
+    `MissBuckets` changed underneath it. It used to claim, among its detections, "a hand-built
+    `MissBuckets` whose `total` is a free field". THAT FAILURE MODE NO LONGER EXISTS: `total`
+    and every bucket count are now properties derived from the membership mappings, there is
+    no count to set independently of the sentences it counts, and the sum check that guarded
+    it became provably unfireable and has been deleted rather than kept as a check that cannot
+    fail. Do not re-add it, and do not let this docstring keep claiming a detection the code
+    no longer performs -- being labelled honestly, the same way
+    `assert_gold_sentence_regression_pin` is, is this function's entire stated virtue.
+
+    WHAT MEMBERSHIP MADE CHECKABLE FOR THE FIRST TIME is mutual exclusivity. Previously the
+    `continue` after each bucket made the branches exclusive BY CONSTRUCTION, with nothing
+    observable to compare, so the claim rested on reading `classify_misses`. The buckets now
+    carry which (pmid, sentence index) pairs they hold, so exclusivity is CHECKED DIRECTLY
+    below, over every unordered pair of the four buckets: a dropped `continue` or a branch
+    that records into two mappings is caught by evidence, not by inspection.
+
+    WHAT REMAINS BY CONSTRUCTION, and is therefore still not evidence: that each miss landed
+    in the RIGHT bucket. Closure and disjointness together prove the misses were partitioned,
+    never that the partition is the one the bucket definitions describe -- a swapped pair of
+    branches passes both checks. That is why the misclassification failures this module cares
+    about (a `gold` that did not come from `gold_finding_sentences`, an unlocatable endpoint
+    routed to `never_co_sentential`) are guarded by their own raises and fixtures rather than
+    here. It is not independent evidence in the way the three-way reachable-share /
+    oracle-recall / cross-product-recall agreement at 0.5966 was.
 
     IT ALSO COMPARES TWO POPULATIONS THAT CAN DIFFER. `buckets.total` sums over the
     `documents` sequence; `n_false_negatives` normally comes from `sentence_metrics`, whose
@@ -375,20 +522,36 @@ def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> No
     one document text. Do not re-add "duplicate pmids are benign caller shape" guidance: that
     shape is now rejected at the source, not tolerated and diagnosed here.
     """
+    named = (
+        ("endpoint_lost", buckets.endpoint_lost_sentences),
+        ("endpoint_unlocatable", buckets.endpoint_unlocatable_sentences),
+        ("never_co_sentential", buckets.never_co_sentential_sentences),
+        ("co_sentential_elsewhere", buckets.co_sentential_elsewhere_sentences),
+    )
+    # Disjointness FIRST: an overlap also inflates `total`, so checking closure first would
+    # report the derived symptom ("a miss was misclassified or double-counted") and bury the
+    # exact pair of buckets and the exact sentence that caused it.
+    for position, (name, sentences) in enumerate(named):
+        for other_name, other in named[position + 1 :]:
+            shared = {
+                (pmid, index)
+                for pmid in set(sentences) & set(other)
+                for index in sentences[pmid] & other[pmid]
+            }
+            if shared:
+                pmid, index = sorted(shared)[0]
+                raise SystemExit(
+                    f"bucket overlap: sentence {index} of pmid {pmid!r} is in BOTH {name} and "
+                    f"{other_name} ({len(shared)} such sentence(s)). The buckets must partition "
+                    "the misses -- each is a different fix, and a miss counted twice inflates "
+                    "`total` past the false-negative count as well as pricing one obstacle as "
+                    "two. Suspect a missing `continue` in `classify_misses`."
+                )
     if buckets.total != n_false_negatives:
         raise SystemExit(
             f"bucket closure: {buckets.total} classified misses "
-            f"({buckets.endpoint_lost} lost + {buckets.never_co_sentential} never "
-            f"co-sentential + {buckets.co_sentential_elsewhere} elsewhere) != "
+            f"({buckets.endpoint_lost} lost + {buckets.endpoint_unlocatable} unlocatable + "
+            f"{buckets.never_co_sentential} never co-sentential + "
+            f"{buckets.co_sentential_elsewhere} elsewhere) != "
             f"{n_false_negatives} false negatives. A miss was misclassified or double-counted."
-        )
-    bucket_sum = (
-        buckets.endpoint_lost + buckets.never_co_sentential + buckets.co_sentential_elsewhere
-    )
-    if bucket_sum != buckets.total:
-        raise SystemExit(
-            f"bucket sum: {buckets.endpoint_lost} lost + {buckets.never_co_sentential} never "
-            f"co-sentential + {buckets.co_sentential_elsewhere} elsewhere = {bucket_sum}, but "
-            f"total is {buckets.total}. MissBuckets is internally inconsistent -- `total` is a "
-            "free field, not a computed sum, and this construction violated the identity."
         )

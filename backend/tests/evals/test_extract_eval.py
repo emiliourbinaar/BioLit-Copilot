@@ -1380,18 +1380,372 @@ def test_an_omitted_gold_sentence_that_pred_selected_is_rejected_too():
     assert_bucket_closure(buckets, n_false_negatives=corrupted.fn)
 
 
+def test_a_linked_endpoint_with_no_offset_is_its_own_bucket_not_never_co_sentential():
+    # THE `linked_ids` / `per_sentence` SEAM. `linked_ids` filters on `canonical_id is not
+    # None` and IGNORES `start`, while the `per_sentence` loop skips `canonical_id is None or
+    # start is None`. An entity that is LINKED BUT UNLOCATABLE therefore makes `reachable`
+    # non-empty -- escaping endpoint_lost -- while being unable to appear in any sentence, so
+    # before this commit the miss landed in `never_co_sentential`.
+    # That is wrong in the direction this project is most alert to. `never_co_sentential`
+    # means "the endpoints exist and are placed, they merely never share a sentence", a
+    # population a wider window could plausibly recover, and it is quoted as recoverable
+    # headroom. An endpoint with no offset is recoverable by NO window variant: its position
+    # is undefined, not merely distant. Counting it as (b) prices downstream work against
+    # headroom that does not exist -- ADR-0013's standing finding in miniature.
+    # NOT FOLDED INTO endpoint_lost, which is defined as "no qualifying relation has both
+    # endpoints linked anywhere in the paper": this disease IS linked, so folding would make
+    # bucket (a)'s own definition false. Hence a fourth bucket, placed immediately after (a)
+    # because unrecoverable-by-any-mechanism outranks fixable-by-windowing.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pQ",
+        text=TEXT,
+        mentions=[
+            _m(0, 9, EntityLabel.CHEMICAL, (chem,)),
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"pQ": {(chem, dis)}}
+    # The chemical is linked AND located in the gold sentence; the disease is linked but
+    # carries no offset -- the population `Entity.start: int | None` admits and the real NER
+    # path produces (extract_entities keeps a span whose `start` the pipeline omitted, and
+    # canonicalize links on surface text alone and never restores an offset).
+    entities = {
+        "pQ": [
+            Entity(
+                text="metformin", label=EntityLabel.CHEMICAL, start=39, end=48, canonical_id=chem
+            ),
+            Entity(
+                text="Acidosis", label=EntityLabel.DISEASE, start=None, end=None, canonical_id=dis
+            ),
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pQ": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pQ": {f.sentence_index for f in extractor.findings(_paper("pQ", TEXT))}}
+    # The real selector applies the SAME `start is None` guard, so it selects nothing and the
+    # gold sentence is a genuine miss -- not one manufactured by a hand-built `pred`.
+    assert pred == {"pQ": set()}
+
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.endpoint_unlocatable,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (0, 1, 0, 0)
+    assert buckets.total == 1
+    assert buckets.endpoint_unlocatable_sentences == {"pQ": frozenset({1})}
+
+
+def test_an_unlocatable_chemical_endpoint_is_unlocatable_just_as_a_disease_one_is():
+    # SIBLING of the test above, on the same principle as
+    # test_a_lost_chemical_endpoint_is_endpoint_lost_just_as_a_lost_disease_one_is. The new
+    # bucket's condition is `c in locatable_chemicals AND d in locatable_diseases`, and with
+    # only the disease-side fixture the `c in locatable_chemicals` conjunct could be deleted
+    # outright and every test still passed -- the one-sided-compound-condition defect this
+    # project has shipped repeatedly. Here the DISEASE is located and the CHEMICAL has no
+    # offset, so it is the other conjunct that has to fire.
+    # sentence_spans(TEXT) == [(0, 20), (21, 53)] -- verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    doc = GoldDocument(
+        pmid="pR",
+        text=TEXT,
+        mentions=[
+            _m(0, 9, EntityLabel.CHEMICAL, (chem,)),
+            _m(21, 29, EntityLabel.DISEASE, (dis,)),
+            _m(39, 48, EntityLabel.CHEMICAL, (chem,)),
+        ],
+    )
+    relations = {"pR": {(chem, dis)}}
+    entities = {
+        "pR": [
+            Entity(
+                text="metformin",
+                label=EntityLabel.CHEMICAL,
+                start=None,
+                end=None,
+                canonical_id=chem,
+            ),
+            Entity(text="Acidosis", label=EntityLabel.DISEASE, start=21, end=29, canonical_id=dis),
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pR": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pR": {f.sentence_index for f in extractor.findings(_paper("pR", TEXT))}}
+    assert pred == {"pR": set()}
+
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.endpoint_unlocatable,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (0, 1, 0, 0)
+    assert buckets.total == 1
+
+
+def test_an_unlocatable_endpoint_does_not_hide_a_relation_whose_endpoints_are_both_placed():
+    # THE OTHER DIRECTION of the new bucket, and the one that keeps it from swallowing
+    # recoverable misses. The bucket's condition is on the WHOLE reachable set for that
+    # sentence -- every reachable qualifying relation must have an unlocatable endpoint --
+    # not on whether SOME endpoint anywhere lacks an offset. Implement it as "any endpoint of
+    # any qualifying relation is unlocatable" and this fixture flips from
+    # co_sentential_elsewhere to endpoint_unlocatable, moving a miss that a span fix would
+    # recover into the bucket the eval reports as unrecoverable. That is the same
+    # headroom-inflating direction the bucket exists to prevent, so it must be pinned from
+    # both sides.
+    # Sentence 0 is gold via TWO relations: (metformin, acidosis), whose endpoints are both
+    # linked AND located, and (aspirin, fever), whose endpoints are linked but have no
+    # offsets. The located pair co-occurs in sentence 1, so the miss at sentence 0 is a
+    # genuine co_sentential_elsewhere.
+    # sentence_spans(text) == [(0, 48), (49, 81)] -- verified with the real splitter.
+    metformin, acidosis = "MESH:D008687", "MESH:D000138"
+    aspirin, fever = "MESH:D000568", "MESH:D005334"
+    text = "Metformin and aspirin caused acidosis and fever. Metformin caused acidosis again."
+    doc = GoldDocument(
+        pmid="pS",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="pS",
+                start=0,
+                end=9,
+                text=text[0:9],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(metformin,),
+            ),
+            GoldMention(
+                pmid="pS",
+                start=14,
+                end=21,
+                text=text[14:21],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(aspirin,),
+            ),
+            GoldMention(
+                pmid="pS",
+                start=29,
+                end=37,
+                text=text[29:37],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(acidosis,),
+            ),
+            GoldMention(
+                pmid="pS",
+                start=42,
+                end=47,
+                text=text[42:47],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(fever,),
+            ),
+        ],
+    )
+    relations = {"pS": {(metformin, acidosis), (aspirin, fever)}}
+    entities = {
+        "pS": [
+            Entity(
+                text="Metformin",
+                label=EntityLabel.CHEMICAL,
+                start=49,
+                end=58,
+                canonical_id=metformin,
+            ),
+            Entity(
+                text="acidosis", label=EntityLabel.DISEASE, start=66, end=74, canonical_id=acidosis
+            ),
+            Entity(
+                text="aspirin",
+                label=EntityLabel.CHEMICAL,
+                start=None,
+                end=None,
+                canonical_id=aspirin,
+            ),
+            Entity(
+                text="fever", label=EntityLabel.DISEASE, start=None, end=None, canonical_id=fever
+            ),
+        ]
+    }
+
+    # Only sentence 0 carries gold mentions, so only it is gold.
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pS": {0}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pS": {f.sentence_index for f in extractor.findings(_paper("pS", text))}}
+    # The real selector places both located endpoints in sentence 1 and picks it -- the one
+    # sentence that is NOT gold.
+    assert pred == {"pS": {1}}
+
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.endpoint_unlocatable,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (0, 0, 0, 1)
+    assert buckets.total == 1
+
+
+def test_the_buckets_name_which_sentences_they_hold_not_only_how_many():
+    # THE TASK 8 BLOCKER. `recall_on_endpoint_lost` restricts gold to the sentences classified
+    # into bucket (a) and scores the LLM arm against that restriction alone -- the eval's
+    # bottleneck-escape proof. A COUNT CANNOT EXPRESS IT: the restriction needs the identity of
+    # every (pmid, sentence index) pair in the bucket, not how many there are.
+    # The fixture is pI's shape -- ONE pmid whose TWO gold sentences are both endpoint_lost --
+    # chosen so a membership mapping keyed by pmid (1 key) and a sentence count (2) differ. A
+    # count derived as `len(mapping)` would report 1 and still look plausible.
+    # sentence_spans(text) == [(0, 20), (21, 53), (54, 74), (75, 107)] -- verified with the real
+    # splitter. Sentences 1 and 3 each hold both endpoints, so gold is {1, 3}.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    text = (
+        "Metformin was given. Acidosis followed metformin use. "
+        "Nausea was reported. Metformin caused acidosis again."
+    )
+    doc = GoldDocument(
+        pmid="pP",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="pP",
+                start=21,
+                end=29,
+                text=text[21:29],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pP",
+                start=39,
+                end=48,
+                text=text[39:48],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pP",
+                start=75,
+                end=84,
+                text=text[75:84],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pP",
+                start=92,
+                end=100,
+                text=text[92:100],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+        ],
+    )
+    relations = {"pP": {(chem, dis)}}
+    # No disease is linked anywhere, so both gold misses are endpoint_lost.
+    entities = {
+        "pP": [
+            Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=chem)
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pP": {1, 3}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pP": {f.sentence_index for f in extractor.findings(_paper("pP", text))}}
+    assert pred == {"pP": set()}
+
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert buckets.endpoint_lost_sentences == {"pP": frozenset({1, 3})}
+
+
+def _mb(
+    *,
+    lost: dict[str, set[int]] | None = None,
+    unlocatable: dict[str, set[int]] | None = None,
+    never: dict[str, set[int]] | None = None,
+    elsewhere: dict[str, set[int]] | None = None,
+) -> MissBuckets:
+    """Build a MissBuckets from plain `pmid -> indices` dicts, for the closure tests.
+
+    `MissBuckets` no longer takes counts: every count is derived from membership, so a
+    hand-built instance must supply the sentences it claims.
+    """
+
+    def freeze(sentences: dict[str, set[int]] | None) -> dict[str, frozenset[int]]:
+        return {pmid: frozenset(indices) for pmid, indices in (sentences or {}).items()}
+
+    return MissBuckets(
+        endpoint_lost_sentences=freeze(lost),
+        endpoint_unlocatable_sentences=freeze(unlocatable),
+        never_co_sentential_sentences=freeze(never),
+        co_sentential_elsewhere_sentences=freeze(elsewhere),
+    )
+
+
 def test_bucket_closure_raises_when_a_miss_is_unaccounted():
-    assert_bucket_closure(MissBuckets(1, 2, 3, 6), n_false_negatives=6)
+    # Same 1 + 2 + 3 = 6 shape the count-valued constructor expressed as MissBuckets(1,2,3,6),
+    # now spelled as the sentences those counts stand for. `total` is asserted as well, which
+    # the old form could not: it WAS the constructor argument, so asserting it restated the
+    # input; derived from membership, it is now a claim about the class.
+    buckets = _mb(lost={"a": {0}}, never={"b": {0, 1}}, elsewhere={"c": {0, 1, 2}})
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (1, 2, 3)
+    assert buckets.total == 6
+    assert_bucket_closure(buckets, n_false_negatives=6)
     with pytest.raises(SystemExit, match="bucket closure"):
-        assert_bucket_closure(MissBuckets(1, 2, 3, 6), n_false_negatives=7)
+        assert_bucket_closure(buckets, n_false_negatives=7)
 
 
-def test_bucket_closure_raises_when_the_buckets_do_not_sum_to_total():
-    # `total` is a plain field, freely settable independent of the three buckets --
-    # MissBuckets(1, 2, 3, 99) is constructible. Here total(99) == n_false_negatives(99), so
-    # the closure check above alone would NOT catch this: the buckets summing to 6 while
-    # total claims 99 needs its own check, with a message distinct from "bucket closure" so
-    # the two failures are distinguishable.
-    assert_bucket_closure(MissBuckets(1, 2, 3, 6), n_false_negatives=6)
-    with pytest.raises(SystemExit, match="bucket sum"):
-        assert_bucket_closure(MissBuckets(1, 2, 3, 99), n_false_negatives=99)
+def test_bucket_closure_rejects_a_sentence_that_two_buckets_both_claim():
+    # REPLACES test_bucket_closure_raises_when_the_buckets_do_not_sum_to_total. That test
+    # pinned a failure mode this commit DELETED: `total` was a free constructor field, so
+    # MissBuckets(1, 2, 3, 99) was constructible and needed its own check. `total` is now
+    # derived from membership and cannot be set at all, so the check it pinned became
+    # provably unfireable -- a test that cannot fail.
+    # What membership makes checkable for the FIRST time is mutual exclusivity, which was
+    # previously true only BY CONSTRUCTION via the `continue` after each bucket and so had no
+    # observable form to assert. Every unordered pair of buckets is exercised, because a check
+    # written over adjacent pairs only -- or over the first two -- passes any single-pair
+    # fixture while leaving four pairs unguarded.
+    # `n_false_negatives` is set to 2 throughout, which is what `total` double-counts to, so
+    # the closure comparison PASSES and the overlap check is the only thing that can raise.
+    one: dict[str, set[int]] = {"a": {0}}
+    every_pair = [
+        _mb(lost=one, unlocatable=one),
+        _mb(lost=one, never=one),
+        _mb(lost=one, elsewhere=one),
+        _mb(unlocatable=one, never=one),
+        _mb(unlocatable=one, elsewhere=one),
+        _mb(never=one, elsewhere=one),
+    ]
+    for overlapping in every_pair:
+        assert overlapping.total == 2
+        with pytest.raises(SystemExit, match="bucket overlap"):
+            assert_bucket_closure(overlapping, n_false_negatives=2)
+
+    # Anti-vacuity, and the discriminating shape: the SAME pmid in two buckets is fine as long
+    # as the sentences differ, so the check must compare index sets and not merely pmid keys.
+    disjoint = _mb(lost={"a": {0}}, never={"a": {1}})
+    assert disjoint.total == 2
+    assert_bucket_closure(disjoint, n_false_negatives=2)
+
+    # ORDER OF THE TWO CHECKS, which the loop above deliberately cannot see because it feeds a
+    # matching `n_false_negatives`. In the REAL failure an overlap also inflates `total`, so
+    # BOTH checks are eligible and only the earlier one reports. Swap them and every case above
+    # still passes while the live failure reports "a miss was misclassified or double-counted"
+    # -- the derived symptom -- instead of naming the two buckets and the sentence.
+    # `n_false_negatives=1` is the truth here: one real miss, double-counted to a `total` of 2.
+    with pytest.raises(SystemExit, match="bucket overlap"):
+        assert_bucket_closure(_mb(lost={"a": {0}}, elsewhere={"a": {0}}), n_false_negatives=1)
