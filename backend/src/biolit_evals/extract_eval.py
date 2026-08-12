@@ -229,10 +229,20 @@ def classify_misses(
            it is never bucketed at all, yet still scores as a true positive in
            `sentence_metrics`, whose precision then describes a gold that does not exist.
          - a genuine gold sentence MISSING from `gold` never becomes a miss, so it shrinks
-           `endpoint_lost` by however many it omits -- a 2-of-2 population reported as 1 in
-           the fixture that pins this. `assert_bucket_closure` cannot see either direction:
-           it compares against a false-negative count computed from the same wrong `gold`,
-           which deflates in lockstep.
+           WHICHEVER bucket that miss would have landed in. `endpoint_lost` is the
+           plurality, not the rule: measured over the omission population it took 54% of it
+           in one sample and 41% in another, differently shaped one, with
+           `never_co_sentential` and `co_sentential_elsewhere` splitting the remainder.
+           Quote neither figure as fixed -- the split tracks the arm's linking rate -- and
+           note that the fixture pinning this direction happens to be a pure
+           `endpoint_lost` case, a 2-of-2 population reported as 1. A further quarter to a
+           third of omissions shrink NO bucket at all, because `pred` had selected the
+           omitted sentence, which was therefore never a miss; those still corrupt a
+           number, just not one of these three -- in `sentence_metrics` the sentence scores
+           as a false positive instead of the true positive it is.
+           `assert_bucket_closure` sees none of it, in either direction: it compares
+           against a false-negative count computed from the same wrong `gold`, which
+           deflates in lockstep.
        WHAT IT STILL DOES NOT COVER, stated no stronger than the code supports: a pmid in
        `gold` but ABSENT from `documents` is never visited, so its entry is unchecked. That
        is the same population `assert_bucket_closure` warns about, where `sentence_metrics`

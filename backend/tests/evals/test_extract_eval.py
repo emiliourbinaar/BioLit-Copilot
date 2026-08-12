@@ -1193,6 +1193,193 @@ def test_a_gold_index_past_the_end_of_the_document_is_rejected_too():
         classify_misses([doc], relations, {"pM": {1, 99}}, pred, entities_by_paper=entities)
 
 
+def test_an_invented_gold_index_that_pred_also_selected_is_rejected_too():
+    # FOURTH DOMAIN axis, and the first about the check's OPERANDS rather than its reach.
+    # Every fixture above that exercises this branch (pH, pJ/pK, pL, pM) sets `pred` to
+    # `set()` for the pmid carrying the bad entry, so a check computed over `gold - pred`
+    # instead of over `gold` passes every one of them. That is not hypothetical: it is
+    # literally the predicate that shipped at 0cf680d --
+    #     invented = sorted((declared - pred.get(document.pmid, set())) - set(gold_pairs))
+    # -- and it passes the whole suite without this test. (`declared - set(gold_pairs) -
+    # pred.get(...)` is the SAME set expression, since difference by two sets is difference
+    # by their union, so that is one mutant and not two.) Here the invented index 0 IS in
+    # `pred`, so `gold - pred` no longer contains it and only a check over `gold` fires.
+    # WHAT GOES WRONG IS NOT THE BUCKETS, and this test does not pretend otherwise: an
+    # invented index that `pred` selected is not a miss, so it is never bucketed either way
+    # and `assert_bucket_closure` stays silent. `sentence_metrics` is what gets corrupted --
+    # exactly the harm the raise message names -- and that is asserted below, not described.
+    # sentence_spans(text) == [(0, 26), (27, 59)] -- verified with the real splitter.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    text = "Metformin caused acidosis. Acidosis followed metformin use."
+    # Gold annotates ONLY sentence 1, so sentence 0 is not a gold finding sentence.
+    doc = GoldDocument(
+        pmid="pN",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="pN",
+                start=27,
+                end=35,
+                text=text[27:35],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pN",
+                start=45,
+                end=54,
+                text=text[45:54],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+        ],
+    )
+    relations = {"pN": {(chem, dis)}}
+    # Both endpoints linked, together in sentence 0 -- so the real selector picks 0, the one
+    # sentence that is NOT gold. This is a genuine co_sentential_elsewhere shape.
+    entities = {
+        "pN": [
+            Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=chem),
+            Entity(text="acidosis", label=EntityLabel.DISEASE, start=17, end=25, canonical_id=dis),
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pN": {1}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pN": {f.sentence_index for f in extractor.findings(_paper("pN", text))}}
+    # The invented index below is one the REAL selector chose, not one picked to suit.
+    assert pred == {"pN": {0}}
+
+    # Anti-vacuity: the consistent gold classifies the real miss rather than raising.
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (0, 0, 1)
+    assert buckets.total == 1
+
+    invented = {"pN": {0, 1}}
+    with pytest.raises(ValueError, match="classify_misses: sentence 0 of pmid 'pN'"):
+        classify_misses([doc], relations, invented, pred, entities_by_paper=entities)
+
+    # THE NUMBER THE RAISE PROTECTS. Sentence 0 is not gold, so the arm's one selection is a
+    # false positive and precision is 0.0. Believe the invented gold and the same selection
+    # scores as a true positive at precision 1.0 -- a perfect score for a sentence that no
+    # gold relation qualifies. Closure is blind to it: `total` is 1 against fn 1 either way.
+    honest = sentence_metrics(pred, gold)
+    assert (honest.tp, honest.fp, honest.fn) == (0, 1, 1)
+    corrupted = sentence_metrics(pred, invented)
+    assert (corrupted.tp, corrupted.fp, corrupted.fn) == (1, 0, 1)
+    assert_bucket_closure(buckets, n_false_negatives=honest.fn)
+    assert_bucket_closure(buckets, n_false_negatives=corrupted.fn)
+
+
+def test_an_omitted_gold_sentence_that_pred_selected_is_rejected_too():
+    # The omission-branch sibling of the test above, on the same OPERAND axis: pI, the only
+    # fixture that exercises this branch, sets `pred` to `set()` for its pmid, so
+    #     omitted = sorted(set(gold_pairs) - declared - pred.get(document.pmid, set()))
+    # passes it and the rest of the suite. Here the omitted gold sentence 3 IS in `pred`.
+    # STATED NO STRONGER THAN IT IS: this omission is provably invisible in the buckets, not
+    # merely unobserved. The `- pred` mutant suppresses the raise only when every omitted
+    # index is in `pred`, and then `missed = declared - pred` equals `gold_pairs - pred`,
+    # which is exactly what the correct gold yields -- so all three buckets are IDENTICAL
+    # with and without the omission, and `assert_bucket_closure` compares 1 against 1 either
+    # way. The check is what makes the docstring's NECESSARY AND SUFFICIENT claim true; the
+    # number that goes wrong is in `sentence_metrics`, where a true positive at the omitted
+    # sentence is rewritten into a false positive. Both facts are asserted below.
+    # sentence_spans(text) == [(0, 20), (21, 53), (54, 74), (75, 107)] -- verified with the
+    # real splitter. Sentences 1 and 3 each hold both endpoints, so gold is {1, 3}.
+    chem, dis = "MESH:D008687", "MESH:D000138"
+    text = (
+        "Metformin was given. Acidosis followed metformin use. "
+        "Nausea was reported. Metformin caused acidosis again."
+    )
+    doc = GoldDocument(
+        pmid="pO",
+        text=text,
+        mentions=[
+            GoldMention(
+                pmid="pO",
+                start=21,
+                end=29,
+                text=text[21:29],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+            GoldMention(
+                pmid="pO",
+                start=39,
+                end=48,
+                text=text[39:48],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pO",
+                start=75,
+                end=84,
+                text=text[75:84],
+                label=EntityLabel.CHEMICAL,
+                mesh_ids=(chem,),
+            ),
+            GoldMention(
+                pmid="pO",
+                start=92,
+                end=100,
+                text=text[92:100],
+                label=EntityLabel.DISEASE,
+                mesh_ids=(dis,),
+            ),
+        ],
+    )
+    relations = {"pO": {(chem, dis)}}
+    # Both endpoints linked, together in sentence 3 -- so the real selector picks 3, which is
+    # a genuine gold sentence, and the miss at sentence 1 is co_sentential_elsewhere.
+    entities = {
+        "pO": [
+            Entity(
+                text="Metformin", label=EntityLabel.CHEMICAL, start=75, end=84, canonical_id=chem
+            ),
+            Entity(text="acidosis", label=EntityLabel.DISEASE, start=92, end=100, canonical_id=dis),
+        ]
+    }
+
+    gold = gold_finding_sentences([doc], relations)
+    assert gold == {"pO": {1, 3}}
+
+    extractor = SameSentenceAsEntitiesExtractor(entities)
+    pred = {"pO": {f.sentence_index for f in extractor.findings(_paper("pO", text))}}
+    # The omitted index below is one the REAL selector chose, not one picked to suit.
+    assert pred == {"pO": {3}}
+
+    # Anti-vacuity: the consistent gold classifies the real miss rather than raising.
+    buckets = classify_misses([doc], relations, gold, pred, entities_by_paper=entities)
+    assert (
+        buckets.endpoint_lost,
+        buckets.never_co_sentential,
+        buckets.co_sentential_elsewhere,
+    ) == (0, 0, 1)
+    assert buckets.total == 1
+
+    truncated = {"pO": {1}}
+    with pytest.raises(ValueError, match="classify_misses: sentence 3 of pmid 'pO'"):
+        classify_misses([doc], relations, truncated, pred, entities_by_paper=entities)
+
+    # THE NUMBER THE RAISE PROTECTS, and the two that it does not. Sentence 3 IS gold and the
+    # arm selected it, so precision is 1.0; drop it from `gold` and the same selection scores
+    # as a false positive at precision 0.0. The buckets and closure, by contrast, are the
+    # same on both golds -- which is why the raise, and not a bucket assertion, is the pin.
+    honest = sentence_metrics(pred, gold)
+    assert (honest.tp, honest.fp, honest.fn) == (1, 0, 1)
+    corrupted = sentence_metrics(pred, truncated)
+    assert (corrupted.tp, corrupted.fp, corrupted.fn) == (0, 1, 1)
+    assert_bucket_closure(buckets, n_false_negatives=honest.fn)
+    assert_bucket_closure(buckets, n_false_negatives=corrupted.fn)
+
+
 def test_bucket_closure_raises_when_a_miss_is_unaccounted():
     assert_bucket_closure(MissBuckets(1, 2, 3, 6), n_false_negatives=6)
     with pytest.raises(SystemExit, match="bucket closure"):
