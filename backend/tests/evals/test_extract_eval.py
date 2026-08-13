@@ -394,6 +394,20 @@ def test_the_regression_pin_raises_on_a_changed_count_for_a_tabulated_size(monke
         assert_gold_sentence_regression_pin(500, 1235)
 
 
+def test_the_shipped_pin_carries_the_measured_test500_gold_sentence_count():
+    # The SHIPPED entry, not a monkeypatched one: the test above proves the mechanism works
+    # on an arbitrary value, and would still pass if `_GOLD_SENTENCE_PINS` shipped empty.
+    # This pins the number itself. 1145 was ESTABLISHED BY MEASUREMENT -- the Test-500
+    # control-arm run at 367b6e7 -- and is a regression pin, NOT an independent validation:
+    # it catches a change in how gold sentences are constructed, and says nothing about
+    # whether 1145 is the biologically right answer. If gold construction legitimately
+    # changes, re-measure and update this with the run that established the new value.
+    assert extract_eval._GOLD_SENTENCE_PINS[500] == 1145
+    assert_gold_sentence_regression_pin(500, 1145)
+    with pytest.raises(SystemExit, match="gold-sentence pin"):
+        assert_gold_sentence_regression_pin(500, 1146)
+
+
 def _paper(pmid: str, text: str) -> Paper:
     return Paper(
         id=pmid,

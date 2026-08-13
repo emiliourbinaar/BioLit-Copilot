@@ -145,7 +145,7 @@ def sentence_metrics(
     return metrics_from_counts(tp, fp, fn)
 
 
-_GOLD_SENTENCE_PINS: dict[int, int] = {}
+_GOLD_SENTENCE_PINS: dict[int, int] = {500: 1145}
 
 
 def assert_gold_sentence_recall_anchor(metrics: ConceptMetrics, *, arm: str) -> None:
