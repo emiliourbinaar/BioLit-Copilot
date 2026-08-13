@@ -42,15 +42,20 @@ class _StubClient:
         *,
         content: list[SimpleNamespace] | None = None,
         stop_reason: str = "end_turn",
+        error: BaseException | None = None,
     ) -> None:
         if content is None:
             content = [_text_block('{"finding_sentences": [1]}')]
-        self._content, self._stop_reason = content, stop_reason
+        self._content, self._stop_reason, self._error = content, stop_reason, error
         self.calls: list[dict] = []
         self.messages = SimpleNamespace(create=self._create)
 
     def _create(self, **kwargs) -> SimpleNamespace:
         self.calls.append(kwargs)
+        # `error` stands in for a transport failure -- a 429, a timeout, a dropped
+        # connection. The real SDK raises those from this call.
+        if self._error is not None:
+            raise self._error
         return SimpleNamespace(stop_reason=self._stop_reason, content=self._content)
 
 
@@ -157,6 +162,40 @@ def test_a_repeated_in_range_index_yields_one_finding_and_no_out_of_range():
     extractor = LlmExtractor(client)
     assert [f.sentence_index for f in extractor.findings(_paper())] == [1]
     assert extractor.out_of_range == 0
+
+
+def test_a_transport_failure_is_counted_by_exception_type_and_costs_only_that_paper():
+    # The eval makes 500 sequential calls and runs at least twice. One transient 429 must not
+    # lose the whole run, so a raise from `messages.create` is a COUNTED DIAGNOSTIC and no
+    # findings -- the identical policy this class already applies to an unusable stop reason,
+    # and for the identical reason: an arm that raises loses the run, while a counter keeps
+    # the arm scoreable and the failure visible in the log.
+    # Counted BY TYPE, not as a bare total: a systematic harness bug shows up as 500 identical
+    # entries where a flaky network shows a handful of mixed ones, and a scalar hides that.
+    # The SDK already retries 429/5xx twice by default, so this is the residual backstop.
+    client = _StubClient(error=RuntimeError("429 rate limited"))
+    extractor = LlmExtractor(client)
+    assert extractor.findings(_paper()) == []
+    assert extractor.errors == {"RuntimeError": 1}
+    # ... and it is NOT miscounted as a refusal or as a stop reason. A refusal is the failure
+    # mode the spec names and an operational finding in its own right; folding a network
+    # error into it would manufacture a safety story out of a dropped connection.
+    assert extractor.refusals == 0
+    assert extractor.unusable_stops == {}
+
+
+def test_a_malformed_payload_on_a_clean_stop_is_counted_rather_than_aborting_the_run():
+    # The second failure the eval must survive, and the one the stop-reason guard cannot see:
+    # `stop_reason` is `end_turn`, so the truncation check passes, and the payload is still
+    # not the JSON the schema promised. Structured outputs make this unlikely, not impossible,
+    # and mid-corpus one JSONDecodeError costs every paper after it. The catch is NARROW --
+    # around the parse only -- so a bug in `findings_from_sentence_indices` still raises
+    # instead of being silently counted as a model failure.
+    client = _StubClient(content=[_text_block("not json at all")])
+    extractor = LlmExtractor(client)
+    assert extractor.findings(_paper()) == []
+    assert extractor.errors == {"JSONDecodeError": 1}
+    assert extractor.refusals == 0
 
 
 def test_a_licence_forbidden_paper_is_never_sent_to_the_api():

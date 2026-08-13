@@ -78,11 +78,16 @@ class LlmExtractor:
     def __init__(
         self, client: Any, *, model: str = "claude-opus-5", effort: str = "medium"
     ) -> None:
-        self._client, self._model, self._effort = client, model, effort
+        # `model` and `effort` are PUBLIC because the run log must name which model and which
+        # effort produced an arm, and the only value that cannot disagree with the one the API
+        # was asked for is the one this object hands the API. A runner passing its own copy
+        # alongside the extractor would log an unattributable run the moment the two diverge.
+        self._client, self.model, self.effort = client, model, effort
         self.refusals = 0
         self.unusable_stops: Counter[str] = Counter()
         self.out_of_range = 0
         self.licence_skipped = 0
+        self.errors: Counter[str] = Counter()
 
     def findings(self, paper: Paper) -> list[Finding]:
         # Redundant with build_record's gate, deliberately: neither layer alone is
@@ -98,16 +103,25 @@ class LlmExtractor:
             return []
         spans = sentence_spans(text)
         numbered = "\n".join(f"[{i}] {text[start:end]}" for i, (start, end) in enumerate(spans))
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=_MAX_TOKENS,
-            system=_SYSTEM,
-            output_config={
-                "effort": self._effort,
-                "format": {"type": "json_schema", "schema": _SCHEMA},
-            },
-            messages=[{"role": "user", "content": numbered}],
-        )
+        try:
+            response = self._client.messages.create(
+                model=self.model,
+                max_tokens=_MAX_TOKENS,
+                system=_SYSTEM,
+                output_config={
+                    "effort": self.effort,
+                    "format": {"type": "json_schema", "schema": _SCHEMA},
+                },
+                messages=[{"role": "user", "content": numbered}],
+            )
+        except Exception as exc:
+            # A transport failure costs ONE PAPER, not the run: the eval makes 500 sequential
+            # calls and runs at least twice, so a single 429 or dropped connection must not
+            # discard everything before it. Same policy as the unusable stop reasons below,
+            # and the catch is deliberately placed around THIS CALL ONLY so nothing downstream
+            # of it -- a harness bug in span conversion, say -- is swallowed by it.
+            self.errors[type(exc).__name__] += 1
+            return []
         # Check stop_reason BEFORE reading content: on anything but end_turn, content is
         # empty or partial. A refusal empties key_findings only -- it says nothing about
         # entities, which come from the separate deterministic NER/linking stage.
@@ -120,7 +134,16 @@ class LlmExtractor:
             return []
         # The first block is a thinking block on every live call, not the answer.
         payload = next((b.text for b in response.content if b.type == "text"), "")
-        indices = json.loads(payload)["finding_sentences"]
+        try:
+            indices = json.loads(payload)["finding_sentences"]
+        except Exception as exc:
+            # The stop reason said `end_turn` and the payload is still not the JSON the schema
+            # promised. Structured outputs make this unlikely, not impossible, and mid-corpus
+            # one JSONDecodeError costs every paper after it. Narrow on purpose: the
+            # conversion below stays OUTSIDE the try, so a harness bug there raises instead of
+            # being counted as a model failure.
+            self.errors[type(exc).__name__] += 1
+            return []
         out = findings_from_sentence_indices(text, indices)
         self.out_of_range += len(set(indices)) - len(out)
         return out

@@ -1,20 +1,28 @@
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from biolit.cluster.pairing import sentence_index
 from biolit.domain.enums import EntityLabel, Source, TextType
 from biolit.domain.paper import Paper
-from biolit.domain.records import Entity
+from biolit.domain.records import Entity, ExtractedRecord
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
+from biolit.extract.llm import LlmExtractor
 from biolit.ner.windowing import sentence_spans
 from biolit_evals import extract_eval
 from biolit_evals.end_to_end import metrics_from_counts
 from biolit_evals.extract_eval import (
     MissBuckets,
+    RelationCoverage,
     assert_bucket_closure,
+    assert_gold_relation_ceiling,
     assert_gold_sentence_recall_anchor,
     assert_gold_sentence_regression_pin,
     classify_misses,
     gold_finding_sentences,
+    gold_relation_coverage,
+    run_extract_eval,
     sentence_metrics,
 )
 from biolit_evals.mesh_gold import GoldDocument, GoldMention
@@ -1749,3 +1757,453 @@ def test_bucket_closure_rejects_a_sentence_that_two_buckets_both_claim():
     # `n_false_negatives=1` is the truth here: one real miss, double-counted to a `total` of 2.
     with pytest.raises(SystemExit, match="bucket overlap"):
         assert_bucket_closure(_mb(lost={"a": {0}}, elsewhere={"a": {0}}), n_false_negatives=1)
+
+
+# --- Task 8: the runner ------------------------------------------------------------------
+# sentence_spans(RUN_TEXT_A) == [(0, 20), (21, 53), (54, 86)] and
+# sentence_spans(RUN_TEXT_B) == [(0, 26), (27, 48)] -- both verified with the real splitter,
+# not assumed. The mention offsets below were read off the same run.
+RUN_TEXT_A = (
+    "Metformin was given. Acidosis followed metformin use. Metformin caused acidosis again."
+)
+RUN_TEXT_B = "Metformin caused acidosis. Aspirin caused fever."
+CHEM, DIS = "MESH:D008687", "MESH:D000138"
+DECOY_CHEM = "MESH:D001241"  # never mentioned anywhere -> its relation realizes no sentence
+
+
+def _gm(pmid: str, text: str, start: int, end: int, label: EntityLabel, ids: tuple[str, ...]):
+    return GoldMention(
+        pmid=pmid, start=start, end=end, text=text[start:end], label=label, mesh_ids=ids
+    )
+
+
+def _run_documents() -> list[GoldDocument]:
+    """Two documents whose three arms score to distinct values at every level.
+
+    pA: gold sentences {1, 2}; the real entity set links the chemical only, so BOTH misses
+        are `endpoint_lost` -- bucket (a) has two members, which is what lets the restricted
+        recall be a fraction rather than 0.0 or 1.0.
+    pB: gold sentence {0}; the real entity set links both endpoints in it, so it is a hit.
+    """
+    doc_a = GoldDocument(
+        pmid="pA",
+        text=RUN_TEXT_A,
+        mentions=[
+            _gm("pA", RUN_TEXT_A, 0, 9, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("pA", RUN_TEXT_A, 21, 29, EntityLabel.DISEASE, (DIS,)),
+            _gm("pA", RUN_TEXT_A, 39, 48, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("pA", RUN_TEXT_A, 54, 63, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("pA", RUN_TEXT_A, 71, 79, EntityLabel.DISEASE, (DIS,)),
+        ],
+    )
+    doc_b = GoldDocument(
+        pmid="pB",
+        text=RUN_TEXT_B,
+        mentions=[
+            _gm("pB", RUN_TEXT_B, 0, 9, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("pB", RUN_TEXT_B, 17, 25, EntityLabel.DISEASE, (DIS,)),
+        ],
+    )
+    return [doc_a, doc_b]
+
+
+# The decoy relation on pA is never realized as a gold sentence (DECOY_CHEM is not mentioned),
+# so the three coverage counts are 3 / 2 / 1 -- all distinct and all non-zero.
+RUN_RELATIONS = {"pA": {(CHEM, DIS), (DECOY_CHEM, DIS)}, "pB": {(CHEM, DIS)}}
+RUN_ENTITIES: dict[str, list[Entity]] = {
+    "pA": [Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=CHEM)],
+    "pB": [
+        Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=CHEM),
+        Entity(text="acidosis", label=EntityLabel.DISEASE, start=17, end=25, canonical_id=DIS),
+    ],
+}
+
+
+def _run_papers() -> list[Paper]:
+    # THE SAME-STRING CONSTRUCTION: the whole GoldDocument.text goes in as the abstract.
+    return [_paper(doc.pmid, doc.text) for doc in _run_documents()]
+
+
+class _StubClient:
+    """Records the request and returns a scripted response. Tests never touch the API.
+
+    COPIED from tests/extract/test_llm.py rather than imported across test modules, and
+    extended with a per-call script because the runner makes one call PER PAPER and the
+    interesting fixtures differ by paper. A script entry is either `(stop_reason, content)`
+    or an exception instance to raise from `messages.create`.
+    """
+
+    def __init__(self, script: list) -> None:
+        self._script = list(script)
+        self.calls: list[dict] = []
+        self.messages = SimpleNamespace(create=self._create)
+
+    def _create(self, **kwargs) -> SimpleNamespace:
+        self.calls.append(kwargs)
+        entry = self._script[len(self.calls) - 1]
+        if isinstance(entry, BaseException):
+            raise entry
+        stop_reason, content = entry
+        return SimpleNamespace(stop_reason=stop_reason, content=content)
+
+
+def _reply(indices: list[int]) -> tuple[str, list[SimpleNamespace]]:
+    payload = json.dumps({"finding_sentences": indices})
+    return ("end_turn", [SimpleNamespace(type="text", text=payload)])
+
+
+def _run(tmp_path, *, llm_extractor=None, papers=None, dataset="unit"):
+    log = tmp_path / "extract_runs.jsonl"
+    line = run_extract_eval(
+        documents=_run_documents(),
+        relations=RUN_RELATIONS,
+        entities_by_paper=RUN_ENTITIES,
+        papers=_run_papers() if papers is None else papers,
+        llm_extractor=llm_extractor,
+        dataset=dataset,
+        log_path=str(log),
+        git_sha="deadbee",
+        now="2026-07-29T00:00:00+00:00",
+    )
+    return line, log
+
+
+def test_the_run_logs_one_line_per_arm_with_buckets_and_bucket_a_recall(tmp_path):
+    # The runner's contract: three scored arms, the bucket decomposition, the bucket-(a)
+    # restricted LLM recall, and mean sentences per paper for every arm -- asserted on the
+    # WRITTEN line, because a field computed but not persisted is not reproducible.
+    # The stub answers [1] for pA (a bucket-(a) gold sentence) and [1] for pB (not gold), so
+    # every headline number below differs from every other and from 0.0 and 1.0.
+    client = _StubClient([_reply([1]), _reply([1])])
+    line, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
+
+    assert set(line["arms"]) == {"control-gold", "control-real", "llm"}
+    assert line["arms"]["control-gold"]["sentence"]["recall"] == 1.0
+    assert (
+        line["arms"]["control-real"]["miss_buckets"]["total"]
+        == (line["arms"]["control-real"]["sentence"]["fn"])
+    )
+    assert "recall_on_endpoint_lost" in line["arms"]["llm"]
+    for arm in line["arms"].values():
+        assert "mean_sentences_per_paper" in arm
+
+    # Distinct, hand-checked values -- an arm reading another arm's numbers cannot pass.
+    # control-gold selects pA{1,2} + pB{0} = 3 over 2 papers; control-real selects pB{0}
+    # alone; the LLM selects one sentence per paper.
+    assert line["arms"]["control-gold"]["mean_sentences_per_paper"] == 1.5
+    assert line["arms"]["control-real"]["mean_sentences_per_paper"] == 0.5
+    assert line["arms"]["llm"]["mean_sentences_per_paper"] == 1.0
+    assert (line["arms"]["control-real"]["sentence"]["tp"], line["n_gold_sentences"]) == (1, 3)
+    assert line["arms"]["control-real"]["miss_buckets"]["endpoint_lost"] == 2
+    # The restricted recall is 1 of bucket (a)'s 2 sentences = 0.5, while the arm's OVERALL
+    # recall is 1 of 3 -- so a runner that logged the aggregate under this name fails here.
+    assert line["arms"]["llm"]["recall_on_endpoint_lost"]["recall"] == 0.5
+    assert line["arms"]["llm"]["sentence"]["recall"] == pytest.approx(1 / 3)
+
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert written == line
+    assert written["arms"]["llm"]["diagnostics"]["refusals"] == 0
+
+
+def test_the_written_line_names_the_model_and_effort_that_actually_produced_the_llm_arm(tmp_path):
+    # A run whose log line does not say which model and effort produced it is not
+    # attributable, and Task 9's pilot compares two efforts side by side. Both fields are
+    # read OFF THE EXTRACTOR THAT MADE THE CALLS rather than passed in beside it, so the
+    # logged value cannot disagree with the value the API was asked for -- which is what the
+    # last two assertions pin. A non-default effort is used so a hardcoded "medium" fails.
+    client = _StubClient([_reply([1]), _reply([1])])
+    extractor = LlmExtractor(client, model="claude-opus-5-pilot", effort="high")
+    _, log = _run(tmp_path, llm_extractor=extractor)
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+
+    assert written["arms"]["llm"]["model"] == "claude-opus-5-pilot"
+    assert written["arms"]["llm"]["effort"] == "high"
+    assert client.calls[0]["model"] == written["arms"]["llm"]["model"]
+    assert client.calls[0]["output_config"]["effort"] == written["arms"]["llm"]["effort"]
+
+
+def test_the_run_halts_when_the_corpus_size_contradicts_its_dataset_tag(tmp_path):
+    # FOUND BY MUTATION: deleting the `assert_dataset_size` CALL from `run_extract_eval` left
+    # every test in this file green, because each gate was tested as a function and nothing
+    # proved the runner invokes it. Two documents under the tag that declares 500 is the
+    # cheapest fixture that reaches the real call site.
+    with pytest.raises(SystemExit, match="dataset tag"):
+        _run(tmp_path, dataset="bc5cdr_test500")
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_the_run_halts_when_gold_construction_departs_from_its_pin(tmp_path, monkeypatch):
+    # Same mutation finding, second gate: deleting the `assert_gold_sentence_regression_pin`
+    # CALL was invisible. The pin table is empty until Task 9 fills it, so one entry is
+    # installed locally for the two-document fixture -- the same monkeypatch precedent
+    # test_the_regression_pin_raises_on_a_changed_count_for_a_tabulated_size uses, applied at
+    # the call site instead of to the function.
+    monkeypatch.setitem(extract_eval._GOLD_SENTENCE_PINS, 2, 99)
+    with pytest.raises(SystemExit, match="gold-sentence pin"):
+        _run(tmp_path)
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_the_run_halts_when_more_relations_are_realized_than_the_corpus_holds(
+    tmp_path, monkeypatch
+):
+    # Third gate, same mutation finding. The ceiling only has an entry for `bc5cdr_test500`,
+    # and that tag demands 500 documents, so the call site is unreachable from a unit fixture
+    # without a table entry -- installed locally, never in the shipped one.
+    monkeypatch.setitem(extract_eval._DATASET_RELATION_CEILINGS, "unit", 1)
+    with pytest.raises(SystemExit, match="gold relation ceiling"):
+        _run(tmp_path)
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_the_run_gates_bucket_closure_against_control_reals_own_false_negatives(
+    tmp_path, monkeypatch
+):
+    # Fourth gate, same mutation finding. Closure cannot fire on correct code -- that is the
+    # point of it -- so the bucketing is replaced by one that loses every miss. What is pinned
+    # is that the runner CALLS closure and feeds it control-real's own `fn`: with a
+    # hand-supplied count, or no call at all, a run that silently dropped 2 of 2 misses would
+    # still be logged as clean.
+    monkeypatch.setattr(extract_eval, "classify_misses", lambda *args, **kwargs: _mb())
+    with pytest.raises(SystemExit, match="bucket closure"):
+        _run(tmp_path)
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_the_run_gates_control_gold_recall_at_exactly_one(tmp_path, monkeypatch):
+    # Fifth and last gate, same mutation finding, and the one that cannot fire on correct
+    # inputs at all: a gold sentence holds both gold endpoints BY DEFINITION, so a
+    # co-occurrence selector over gold-derived entities cannot miss one. The failure the
+    # anchor exists for is a broken gold-entity construction, which is what is simulated
+    # here -- records with no entities, exactly what a mis-wired `synthesize_records` would
+    # hand it. With the anchor's CALL removed, that run scores recall 0.0 and logs it.
+    monkeypatch.setattr(
+        extract_eval,
+        "synthesize_records",
+        lambda documents: ([ExtractedRecord(paper_id=d.pmid, entities=[]) for d in documents], {}),
+    )
+    with pytest.raises(SystemExit, match="gold-sentence recall"):
+        _run(tmp_path)
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_a_control_only_run_omits_the_llm_arm_and_still_scores_both_controls(tmp_path):
+    # `--arm control` is free and runs first in Task 9. The LLM arm must be ABSENT, not
+    # present with zeros -- a zeroed arm in the log reads as "the LLM found nothing" rather
+    # than "the LLM was not run", and the two get quoted very differently.
+    _, log = _run(tmp_path, llm_extractor=None)
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert set(written["arms"]) == {"control-gold", "control-real"}
+    assert written["arms"]["control-real"]["miss_buckets"]["endpoint_lost"] == 2
+    assert written["arms"]["control-gold"]["sentence"]["recall"] == 1.0
+
+
+def test_the_log_carries_the_bucket_a_membership_the_restricted_recall_was_scored_on(tmp_path):
+    # recall_on_endpoint_lost is scored against a gold set that exists only in-process.
+    # Persisting bucket (a)'s membership -- as sorted lists, since a frozenset is not JSON --
+    # is what lets a reader RECOMPUTE that number from the log instead of trusting it. The
+    # other three buckets stay counts only: no logged number is derived from them.
+    _, log = _run(tmp_path, llm_extractor=LlmExtractor(_StubClient([_reply([1]), _reply([1])])))
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    buckets = written["arms"]["control-real"]["miss_buckets"]
+    assert buckets["endpoint_lost_sentences"] == {"pA": [1, 2]}
+    assert "never_co_sentential_sentences" not in buckets
+    assert "co_sentential_elsewhere_sentences" not in buckets
+
+
+def test_a_paper_whose_text_is_not_its_gold_document_text_halts_before_any_scoring(tmp_path):
+    # THE SILENT-CORRUPTION HAZARD, and the reason this guard exists at all. This module
+    # splits `document.text` while both extractors split `paper.abstract`, and for real
+    # BC5CDR `document.text` is `title + " " + abstract`. The `naive` Paper below -- title and
+    # abstract in their own fields, which is what a Paper is SUPPOSED to look like -- shifts
+    # every sentence index by one sentence, and nothing in any signature can see it: no
+    # exception, and the scores stay plausible. `classify_misses` documents this as
+    # unenforceable because it never receives the papers; the runner receives both.
+    naive = Paper(
+        id="pA",
+        source=Source.pubmed,
+        title="Metformin was given.",
+        abstract="Acidosis followed metformin use. Metformin caused acidosis again.",
+        text_type=TextType.abstract_only,
+        extraction_allowed=True,
+    )
+    with pytest.raises(SystemExit, match="does not equal its GoldDocument text"):
+        _run(tmp_path, papers=[naive, _paper("pB", RUN_TEXT_B)])
+
+    # ... and the three other ways `papers` can fail to be one-per-document. Each is its own
+    # branch and each corrupts a different number, so each needs its own fixture: with any of
+    # them missing, a corpus that scored the wrong paper set still gets logged as a clean run.
+    with pytest.raises(SystemExit, match="no paper for gold document"):
+        _run(tmp_path, papers=[_paper("pA", RUN_TEXT_A)])
+    with pytest.raises(SystemExit, match="no GoldDocument with that pmid"):
+        _run(tmp_path, papers=[*_run_papers(), _paper("pZ", RUN_TEXT_B)])
+    with pytest.raises(SystemExit, match="repeated paper id"):
+        _run(tmp_path, papers=[*_run_papers(), _paper("pA", RUN_TEXT_A)])
+
+    # Nothing was scored and nothing was logged: the guard runs before any arm.
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_a_licence_restricted_paper_halts_the_run_before_any_paid_call(tmp_path):
+    # `build_record` suppresses the WHOLE record for a non-extractable paper, so scoring it
+    # as "selected nothing" would charge the licence gate's recall cost to the extractor --
+    # and control-gold's recall anchor, which demands exactly 1.0000, would then fire blaming
+    # the HARNESS for what is a licence decision. The controls are scored first, so this
+    # halts with the LLM stub untouched: no money is spent discovering a caller-shape problem
+    # even when the restricted paper is the last one in a 500-document corpus.
+    forbidden = _paper("pB", RUN_TEXT_B).model_copy(update={"extraction_allowed": False})
+    client = _StubClient([_reply([1]), _reply([1])])
+    with pytest.raises(SystemExit, match="extraction_allowed=False"):
+        _run(
+            tmp_path,
+            llm_extractor=LlmExtractor(client),
+            papers=[_paper("pA", RUN_TEXT_A), forbidden],
+        )
+    assert client.calls == []
+    assert not (tmp_path / "extract_runs.jsonl").exists()
+
+
+def test_an_api_error_on_one_paper_costs_that_paper_and_not_the_whole_run(tmp_path):
+    # Error tolerance seen from the RUNNER, which is where it has to hold: 500 sequential
+    # calls, twice. pA raises; pB still answers, so the run continues and pB's hit is still
+    # scored and still logged.
+    client = _StubClient([RuntimeError("429 rate limited"), _reply([0])])
+    line, _ = _run(tmp_path, llm_extractor=LlmExtractor(client))
+    assert len(client.calls) == 2
+    assert line["arms"]["llm"]["diagnostics"]["errors"] == 1
+    assert line["arms"]["llm"]["diagnostics"]["errors_by_type"] == {"RuntimeError": 1}
+    # The errored paper is scored as "selected nothing" -- never dropped from the denominator.
+    # Dropping it would shrink the gold that the arm is measured against and make an
+    # error-heavy run look clean, which is the opposite of what a diagnostic is for. So pA's
+    # two gold sentences are misses and pB's one gold sentence is the only hit.
+    assert (line["arms"]["llm"]["sentence"]["tp"], line["arms"]["llm"]["sentence"]["fn"]) == (1, 2)
+
+    # `errors` is the TOTAL number of failures, not the number of distinct types: thirty
+    # identical 429s in a 500-paper run must read as 30, not as 1. Two papers failing the same
+    # way is the smallest fixture that separates `sum(counter.values())` from `len(counter)`,
+    # and without it the weaker formula survives -- ADR-0014's collapsed-value-space shape.
+    both = _StubClient([RuntimeError("429 rate limited"), RuntimeError("429 rate limited")])
+    line, _ = _run(tmp_path, llm_extractor=LlmExtractor(both))
+    assert line["arms"]["llm"]["diagnostics"]["errors"] == 2
+
+
+def test_a_refusal_stays_a_refusal_in_the_log_and_is_never_folded_into_the_error_count(tmp_path):
+    # A refusal is the failure mode the spec names and an operational finding for a biomedical
+    # product, not merely a diagnostic -- error tolerance must not swallow the signal the eval
+    # exists to measure. A refusal arrives as a stop reason and never as an exception, so the
+    # two counters cannot collide; this is the fixture that SAYS so, rather than leaving it to
+    # a reader of `LlmExtractor.findings`.
+    client = _StubClient([("refusal", []), _reply([0])])
+    line, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    diagnostics = written["arms"]["llm"]["diagnostics"]
+    assert (diagnostics["refusals"], diagnostics["errors"]) == (1, 0)
+    assert diagnostics["unusable_stops"] == {}
+    assert line["arms"]["llm"]["diagnostics"] == diagnostics
+
+
+def test_an_unusable_stop_reason_survives_the_log_as_an_object_keyed_by_reason(tmp_path):
+    # `unusable_stops` is a Counter keyed by stop reason, so it must serialise as a nested
+    # JSON OBJECT rather than a scalar. Logging its total instead would hide WHICH stop reason
+    # occurred -- and `max_tokens` (raise the budget) and `pause_turn` (resume the call) are
+    # different operational problems with different fixes, which is why Task 7 keyed it.
+    client = _StubClient([("max_tokens", []), _reply([0])])
+    _, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert written["arms"]["llm"]["diagnostics"]["unusable_stops"] == {"max_tokens": 1}
+    assert written["arms"]["llm"]["diagnostics"]["refusals"] == 0
+
+
+def test_every_arm_reports_the_same_diagnostics_shape_and_the_controls_zeros_are_structural(
+    tmp_path,
+):
+    # One schema across arms so a log reader does not have to branch on the arm name, and the
+    # control's zeros are true rather than asserted: it makes no API call, cannot refuse and
+    # cannot be truncated.
+    # `licence_skipped` is 0 for the LLM arm too, and NOT because no paper was restricted --
+    # `build_record` gates on the licence before the extractor is ever called, so that counter
+    # can never move on this path. A Task 9 reader must not read the 0 as a licence finding.
+    line, _ = _run(tmp_path, llm_extractor=LlmExtractor(_StubClient([_reply([1]), _reply([1])])))
+    zeros = {
+        "refusals": 0,
+        "out_of_range": 0,
+        "licence_skipped": 0,
+        "unusable_stops": {},
+        "errors": 0,
+        "errors_by_type": {},
+    }
+    assert line["arms"]["control-gold"]["diagnostics"] == zeros
+    assert line["arms"]["control-real"]["diagnostics"] == zeros
+    assert line["arms"]["llm"]["diagnostics"] == zeros
+    assert set(line["arms"]["llm"]["diagnostics"]) == set(zeros)
+
+
+def test_a_fabricated_sentence_index_is_dropped_and_reaches_the_log_as_out_of_range(tmp_path):
+    # FOUND BY MUTATION: hardcoding `out_of_range` to 0 in the runner passed every other test
+    # in this file, so the field was logged and unpinned -- and it is the diagnostic that says
+    # whether the model addressed sentences that exist. pA has 3 sentences, so 99 addresses
+    # nothing; it is DROPPED rather than clamped, which is the whole reason extractors return
+    # indices instead of offsets. The repeat pins the dedupe too: `out_of_range` counts
+    # INDICES DROPPED, so [1, 99, 99] is one, not two.
+    client = _StubClient([_reply([1, 99, 99]), _reply([0])])
+    line, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert written["arms"]["llm"]["diagnostics"]["out_of_range"] == 1
+    # The fabricated index became no selection at all: two real sentences, both gold.
+    assert (line["arms"]["llm"]["n_selected"], line["arms"]["llm"]["sentence"]["tp"]) == (2, 2)
+
+
+def test_relation_coverage_separates_realized_relations_from_asserted_across_sentences(tmp_path):
+    # The population behind the <= 1066 invariant, and the "asserted across sentences" count
+    # beside it -- a real finding about the proxy, not a defect: BC5CDR annotates CID at
+    # DOCUMENT level, so a relation whose endpoints never share a sentence is real gold this
+    # construction cannot express. Three declared relations, two of which a gold sentence
+    # realizes; the decoy's chemical is mentioned nowhere, so no splitter could realize it.
+    # All three counts differ, so a runner reporting any one of them for another fails.
+    coverage = gold_relation_coverage(_run_documents(), RUN_RELATIONS)
+    assert coverage == RelationCoverage(
+        n_relations=3, n_with_gold_sentence=2, n_without_gold_sentence=1
+    )
+    line, _ = _run(tmp_path)
+    assert line["gold_relations"] == {
+        "n_relations": 3,
+        "n_with_gold_sentence": 2,
+        "n_without_gold_sentence": 1,
+    }
+
+
+def test_relation_coverage_counts_only_the_documents_it_was_given():
+    # `--limit N` truncates the documents and NOT the relations mapping, so a count taken from
+    # `relations` directly would price a 20-document pilot against the full corpus's relations
+    # -- and the ceiling check would then be checking a corpus that was never loaded. Keeping
+    # only pA must drop pB's relation from all three counts, not just from the realized one.
+    coverage = gold_relation_coverage(_run_documents()[:1], RUN_RELATIONS)
+    assert coverage == RelationCoverage(
+        n_relations=2, n_with_gold_sentence=1, n_without_gold_sentence=1
+    )
+
+
+def test_relation_coverage_rejects_a_repeated_pmid_like_everything_else_keyed_by_pmid():
+    # Same contract as `gold_finding_sentences` and `classify_misses`: two documents under one
+    # pmid would count that pmid's relations twice and realize them under two different
+    # sentence numberings. The `caller` prefix is pinned so the message names the function
+    # that actually rejected the input.
+    doc = _run_documents()[0]
+    with pytest.raises(ValueError, match="gold_relation_coverage: repeated pmid"):
+        gold_relation_coverage([doc, doc], RUN_RELATIONS)
+
+
+def test_the_relation_ceiling_passes_untabulated_tags_and_catches_more_than_the_corpus_holds():
+    # Test-500 holds 1066 gold CID relations (ADR-0013, the figure its 430/1066 endpoint-loss
+    # result is a share of), and every gold sentence traces back to one of them, so the
+    # realized count cannot exceed it. NO UNIT TEST CAN DISCHARGE THE REAL-CORPUS NUMBER --
+    # that needs the download -- but the guard itself is testable, and both operands of
+    # `ceiling is not None and count > ceiling` are exercised here: an untabulated tag passes
+    # whatever the count (first operand alone would raise), a tabulated tag passes AT the
+    # ceiling (second operand alone would raise), and only over it raises.
+    over = RelationCoverage(n_relations=9999, n_with_gold_sentence=1067, n_without_gold_sentence=0)
+    at = RelationCoverage(n_relations=1066, n_with_gold_sentence=1066, n_without_gold_sentence=0)
+    assert_gold_relation_ceiling(over, dataset="unit")
+    assert_gold_relation_ceiling(at, dataset="bc5cdr_test500")
+    with pytest.raises(SystemExit, match="gold relation ceiling"):
+        assert_gold_relation_ceiling(over, dataset="bc5cdr_test500")

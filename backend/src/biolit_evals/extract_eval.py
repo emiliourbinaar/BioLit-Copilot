@@ -1,10 +1,18 @@
+import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Set as AbstractSet
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from biolit.cluster.pairing import linked_ids, sentence_index
 from biolit.domain.enums import EntityLabel
+from biolit.domain.paper import Paper
 from biolit.domain.records import Entity
+from biolit.extract.base import Extractor, build_record
+from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
+from biolit.extract.llm import LlmExtractor
 from biolit.ner.windowing import sentence_spans
+from biolit_evals.cluster_eval import assert_dataset_size, synthesize_records
 from biolit_evals.end_to_end import ConceptMetrics, metrics_from_counts
 from biolit_evals.mesh_gold import GoldDocument
 
@@ -108,7 +116,9 @@ def gold_finding_sentences(
     return gold
 
 
-def sentence_metrics(pred: Mapping[str, set[int]], gold: Mapping[str, set[int]]) -> ConceptMetrics:
+def sentence_metrics(
+    pred: Mapping[str, AbstractSet[int]], gold: Mapping[str, AbstractSet[int]]
+) -> ConceptMetrics:
     """Micro-averaged P/R/F1 over (paper_id, sentence_index) pairs.
 
     PRECISION IS LOAD-BEARING AND RECALL IS NOT QUOTABLE ALONE: selecting every sentence
@@ -117,6 +127,14 @@ def sentence_metrics(pred: Mapping[str, set[int]], gold: Mapping[str, set[int]])
     Iterates the UNION of pmids so a paper present on only one side still counts -- an
     intersection would drop whole-document misses and whole-document hallucinations from
     both denominators.
+
+    `AbstractSet[int]` rather than `set[int]`: `MissBuckets` stores its membership as
+    `frozenset[int]`, and `run_extract_eval` scores the LLM arm against `endpoint_lost_
+    sentences` DIRECTLY rather than copying it into fresh sets. Only `&`, `-` and `len` are
+    used here, all of which `Set` provides, so the widening admits the frozen mapping without
+    licensing anything a caller could not already do. Copying at the call site would work too,
+    but every copy of a bucket's membership is a chance for the copy to stop being the thing
+    the buckets actually recorded.
     """
     tp = fp = fn = 0
     for pmid in set(pred) | set(gold):
@@ -555,3 +573,558 @@ def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> No
             f"{buckets.co_sentential_elsewhere} elsewhere) != "
             f"{n_false_negatives} false negatives. A miss was misclassified or double-counted."
         )
+
+
+@dataclass(frozen=True)
+class RelationCoverage:
+    """How many gold CID relations the sentence-level proxy actually realizes.
+
+    `n_without_gold_sentence` is A FINDING ABOUT THE PROXY, NOT A DEFECT: BC5CDR annotates
+    CID at DOCUMENT level, so a relation whose endpoints are asserted across two sentences is
+    real gold that no same-sentence construction -- this one or any arm's -- can express.
+    Report it beside every score, because it is the share of gold this eval's gold cannot see.
+    """
+
+    n_relations: int
+    n_with_gold_sentence: int
+    n_without_gold_sentence: int
+
+
+def gold_relation_coverage(
+    documents: Sequence[GoldDocument], relations: Mapping[str, set[tuple[str, str]]]
+) -> RelationCoverage:
+    """Count gold CID relations, and how many of them a gold sentence realizes.
+
+    Raises `ValueError` if two documents share a pmid -- see `_reject_repeated_pmids`. A
+    duplicate would count that pmid's relations twice and realize them under two different
+    sentence numberings.
+
+    COUNTS ONLY THE PMIDS IN `documents`, never the whole `relations` mapping. `main()`'s
+    `--limit N` truncates the documents and not the relations, so a count taken from
+    `relations` directly would price a 20-document pilot against a 500-document corpus's
+    relations -- and `assert_gold_relation_ceiling` would then be checking a corpus that was
+    never loaded.
+
+    Realization is read off `_gold_pairs_by_sentence`, the same function `gold_finding_
+    sentences` builds gold from, so "realized" here means exactly "made some sentence gold".
+    Re-deriving it would let the two answers drift, which is the hazard that function exists
+    to prevent.
+    """
+    _reject_repeated_pmids(documents, caller="gold_relation_coverage")
+    n_relations = n_realized = 0
+    for document in documents:
+        pairs = relations.get(document.pmid, set())
+        n_relations += len(pairs)
+        realized: set[tuple[str, str]] = set()
+        for matched in _gold_pairs_by_sentence(document, pairs).values():
+            realized |= matched
+        n_realized += len(realized)
+    return RelationCoverage(
+        n_relations=n_relations,
+        n_with_gold_sentence=n_realized,
+        n_without_gold_sentence=n_relations - n_realized,
+    )
+
+
+_DATASET_RELATION_CEILINGS = {"bc5cdr_test500": 1066}
+
+
+def assert_gold_relation_ceiling(coverage: RelationCoverage, *, dataset: str) -> None:
+    """INDEPENDENT INVARIANT, unlike `assert_gold_sentence_regression_pin` beside it.
+
+    Every gold sentence is made gold by a gold CID relation, so the number of relations a
+    gold sentence realizes cannot exceed the corpus's published relation count -- 1066 for
+    BC5CDR Test-500 (ADR-0013, and the figure its 430/1066 endpoint-loss result is a share
+    of). Exceeding it means gold sentences trace to relations the corpus does not contain:
+    id prefixing, composite-id expansion in `parse_pubtator_cid`, or a loader that read the
+    wrong split. That is a HARNESS ERROR, which is why this raises rather than pins.
+
+    It is one-sided on purpose. Coming in UNDER the ceiling is the expected result and is
+    itself a finding -- the relations with no gold sentence are the ones asserted across
+    sentences -- so only the impossible direction halts.
+
+    Unknown tags pass, matching `assert_dataset_size` and `assert_gold_cluster_anchor`: unit
+    fixtures use their own tags, and a `--limit N` run is tagged as the pilot it is. A subset
+    of Test-500 is bounded by 1066 anyway, so nothing is lost by not checking it.
+    """
+    ceiling = _DATASET_RELATION_CEILINGS.get(dataset)
+    if ceiling is not None and coverage.n_with_gold_sentence > ceiling:
+        raise SystemExit(
+            f"gold relation ceiling: {coverage.n_with_gold_sentence} gold CID relations have "
+            f"at least one gold sentence, but {dataset!r} contains only {ceiling}. Every gold "
+            "sentence traces back to a real relation, so this cannot exceed the corpus count "
+            "unless the harness invented relations -- check MeSH id prefixing and composite-id "
+            "expansion in the CID loader."
+        )
+
+
+def assert_papers_match_documents(
+    documents: Sequence[GoldDocument], papers: Sequence[Paper]
+) -> None:
+    """CHECKED: the papers ARE the gold documents -- one each, same id, SAME TEXT.
+
+    THIS IS `classify_misses`' UNENFORCED PRECONDITION 2, ENFORCED. That function splits
+    `sentence_spans(document.text)` while both extractors split `paper.abstract or ""`, and
+    for real BC5CDR `document.text` is `title + " " + abstract` (`parse_pubtator_documents`).
+    A caller that builds the natural-looking `Paper(title=..., abstract=...)` therefore
+    desynchronises every sentence index between `pred` and `gold` -- silently, with no
+    exception, and the more so the longer the title. `classify_misses` cannot check it
+    because it never receives the papers. `run_extract_eval` receives both, so the precondition
+    stops being a docstring here and becomes a gate.
+
+    STRICT EQUALITY, not `(paper.abstract or "") == document.text`. The extractors' `or ""`
+    fallback makes `abstract=None` equivalent to `""` for THEM, so the only case this stricter
+    form rejects and they would accept is an empty-text document, which
+    `parse_pubtator_documents` cannot produce (its text is always at least the separator).
+    Fail-closed on a shape that cannot arise beats a compound condition whose second operand
+    no fixture could reach.
+
+    The other three checks are about the SCORED POPULATION rather than offsets, and each is
+    its own branch because each fails differently: a repeated paper id would silently drop one
+    of them from `papers_by_id`; a document with no paper cannot be scored at all; a paper
+    with no document is scored by nothing and quietly widens the corpus a reader thinks ran.
+    """
+    by_id: dict[str, Paper] = {}
+    for paper in papers:
+        if paper.id in by_id:
+            raise SystemExit(
+                f"repeated paper id {paper.id!r} in `papers`. One paper per gold document is "
+                "required: predictions are keyed by `paper.id`, so a duplicate silently drops "
+                "all but one of them and scores whichever survived."
+            )
+        by_id[paper.id] = paper
+    for document in documents:
+        paper = by_id.pop(document.pmid, None)
+        if paper is None:
+            raise SystemExit(
+                f"no paper for gold document {document.pmid!r}. Every document must have "
+                "exactly one paper, or its gold sentences count as misses no arm was given a "
+                "chance to select."
+            )
+        if paper.abstract != document.text:
+            raise SystemExit(
+                f"paper {paper.id!r}: `abstract` does not equal its GoldDocument text. The "
+                "extractors split `paper.abstract` while the gold and the miss buckets split "
+                "`document.text`, so any difference desynchronises every sentence index "
+                "SILENTLY -- no exception, and the scores stay plausible. For BC5CDR the "
+                "document text is `title + ' ' + abstract`, so pass THAT whole string as the "
+                "abstract; splitting it back into `title=` and `abstract=` is exactly the "
+                "mistake this check exists to catch."
+            )
+    if by_id:
+        raise SystemExit(
+            f"paper {sorted(by_id)[0]!r}: no GoldDocument with that pmid. A paper with no "
+            "document is scored against no gold, so its selections land in `sentence_metrics` "
+            "as false positives while nothing it could have got right is ever counted."
+        )
+
+
+def _diagnostics(extractor: object) -> dict:
+    """One diagnostics shape for every arm, read off whatever extractor produced the arm.
+
+    The deterministic control carries none of these counters: it makes no API call, cannot
+    refuse and cannot be truncated, so `getattr` defaults report STRUCTURAL zeros. Written
+    this way rather than as a separate zero literal for the controls, so the two shapes cannot
+    drift apart when a counter is added.
+
+    `licence_skipped` is 0 on this path even for the LLM arm, and NOT because no paper was
+    licence-restricted: `build_record` gates on `extraction_allowed` before the extractor is
+    ever called, so the extractor's own counter can never move here (and `run_extract_eval`
+    halts on such a paper anyway). Do not read that 0 as a licence finding.
+
+    `unusable_stops` and `errors_by_type` are Counters keyed by reason and by exception type,
+    so they serialise as nested OBJECTS. Logging their totals alone would hide which stop
+    reason or which exception occurred, which is the entire reason Task 7 keyed them.
+    """
+    return {
+        "refusals": getattr(extractor, "refusals", 0),
+        "out_of_range": getattr(extractor, "out_of_range", 0),
+        "licence_skipped": getattr(extractor, "licence_skipped", 0),
+        "unusable_stops": dict(getattr(extractor, "unusable_stops", {})),
+        "errors": sum(getattr(extractor, "errors", {}).values()),
+        "errors_by_type": dict(getattr(extractor, "errors", {})),
+    }
+
+
+def _predictions(
+    documents: Sequence[GoldDocument],
+    papers_by_id: Mapping[str, Paper],
+    entities_by_paper: Mapping[str, Sequence[Entity]],
+    extractor: Extractor,
+    *,
+    arm: str,
+) -> dict[str, set[int]]:
+    """One arm's selected sentence indices per pmid, through the production `build_record`.
+
+    Runs `build_record` rather than calling `extractor.findings` directly, so every arm goes
+    through the same licence enforcement point the pipeline uses -- the premise both this eval
+    and the clustering eval rest on (ADR-0013: both arms run the production code path).
+
+    Iterates `documents`, not `papers`, so call order is the corpus order for every arm and a
+    paper with no document cannot be scored -- `assert_papers_match_documents` has already
+    rejected both mismatches, so the lookup cannot fail.
+    """
+    pred: dict[str, set[int]] = {}
+    for document in documents:
+        paper = papers_by_id[document.pmid]
+        record = build_record(
+            paper, entities=entities_by_paper.get(document.pmid, ()), extractor=extractor
+        )
+        if record is None:
+            raise SystemExit(
+                f"{arm}: paper {paper.id!r} has extraction_allowed=False, so `build_record` "
+                "suppressed its whole record. Scoring it as 'selected nothing' would charge "
+                "the licence gate's recall cost to the extractor, and control-gold's recall "
+                "anchor -- which requires exactly 1.0000 -- would then fire blaming the "
+                "harness for a licence decision. Filter licence-restricted papers before "
+                "scoring and report the exclusion separately."
+            )
+        pred[document.pmid] = {finding.sentence_index for finding in record.key_findings}
+    return pred
+
+
+def _arm_report(
+    pred: Mapping[str, set[int]], metrics: ConceptMetrics, n_papers: int, extractor: object
+) -> dict:
+    """The per-arm block every arm shares: score, selection rate, diagnostics.
+
+    `mean_sentences_per_paper` divides by EVERY paper, including the ones the arm selected
+    nothing in. Dividing by the papers that produced a selection would flatter a silent arm --
+    and this figure exists precisely because recall alone is not quotable (selecting every
+    sentence scores recall 1.0), so it must be comparable across arms with different silences.
+
+    NO `if n_papers else 0.0` GUARD, on ADR-0014's first question. An empty corpus never
+    reaches here: `assert_gold_sentence_recall_anchor` scores `metrics_from_counts(0, 0, 0)`
+    as recall 0.0000 and halts the run first (verified by calling `run_extract_eval` with
+    `documents=[]`). A guard on a branch nothing can take needs neither a fixture nor a flag,
+    and a "mean over zero papers" reported as 0.0 would be a lie anyway -- if that anchor is
+    ever removed, `ZeroDivisionError` is the honest outcome.
+    """
+    n_selected = sum(len(indices) for indices in pred.values())
+    return {
+        "sentence": asdict(metrics),
+        "n_selected": n_selected,
+        "mean_sentences_per_paper": n_selected / n_papers,
+        "diagnostics": _diagnostics(extractor),
+    }
+
+
+DEFAULT_LOG = "evals/extract_runs.jsonl"
+
+
+def run_extract_eval(
+    *,
+    documents: Sequence[GoldDocument],
+    relations: Mapping[str, set[tuple[str, str]]],
+    entities_by_paper: Mapping[str, Sequence[Entity]],
+    papers: Sequence[Paper],
+    llm_extractor: LlmExtractor | None,
+    dataset: str,
+    log_path: str,
+    git_sha: str,
+    now: str,
+) -> dict:
+    """Score every arm through one code path and append one JSON line to `log_path`.
+
+    Pass `llm_extractor=None` for a control-only run: the LLM arm is then ABSENT from the
+    line rather than present with zeros, because a zeroed arm in the log reads as "the LLM
+    found nothing". Every impure input is injected -- log_path, git_sha, now -- so this stays
+    offline-testable, matching `run_cluster_eval` and `run_e2e_eval`.
+
+    TYPED TO `LlmExtractor`, NOT TO THE `Extractor` PROTOCOL. The seam for a different
+    extractor is still `Extractor` (that is what `_predictions` takes), but this arm's
+    `diagnostics`, `model` and `effort` are `LlmExtractor`'s contract, not the protocol's, and
+    reading them off an object the protocol does not promise them on would be a lie the type
+    checker could not catch.
+
+    ORDER IS LOAD-BEARING IN TWO PLACES:
+      - the two guards run BEFORE anything is scored, so a mis-declared corpus or a paper that
+        is not its gold document halts before producing numbers;
+      - the CONTROLS are scored before the LLM arm, so a licence-restricted paper or a broken
+        caller shape costs nothing. Discovering it after 500 paid calls is the failure mode
+        this ordering exists to prevent.
+
+    WHAT IS LOGGED THAT A READER COULD NOT RECOMPUTE: bucket (a)'s membership. It is the gold
+    `recall_on_endpoint_lost` was scored against and exists only in-process otherwise, so
+    without it that number must be taken on trust. The other three buckets are counts only --
+    no logged number is derived from them.
+    """
+    # Before any scoring: a mis-declared corpus makes every number below unattributable.
+    assert_dataset_size(dataset, len(documents))
+    assert_papers_match_documents(documents, papers)
+    papers_by_id = {paper.id: paper for paper in papers}
+
+    gold = gold_finding_sentences(documents, relations)
+    n_gold_sentences = sum(len(indices) for indices in gold.values())
+    assert_gold_sentence_regression_pin(len(documents), n_gold_sentences)
+    coverage = gold_relation_coverage(documents, relations)
+    assert_gold_relation_ceiling(coverage, dataset=dataset)
+
+    # control-gold's entity set comes from `synthesize_records`, reused rather than rebuilt:
+    # it carries the pinned one-Entity-per-(mention, mesh_id) decision, including the zero-id
+    # mention that still yields one `canonical_id=None` entity. A second construction of the
+    # same thing is a second thing to keep in agreement.
+    gold_records, _ = synthesize_records(documents)
+    gold_entities: dict[str, Sequence[Entity]] = {r.paper_id: r.entities for r in gold_records}
+
+    arms: dict[str, dict] = {}
+    control_gold = SameSentenceAsEntitiesExtractor(gold_entities)
+    gold_pred = _predictions(
+        documents, papers_by_id, gold_entities, control_gold, arm="control-gold"
+    )
+    gold_metrics = sentence_metrics(gold_pred, gold)
+    assert_gold_sentence_recall_anchor(gold_metrics, arm="control-gold")
+    arms["control-gold"] = _arm_report(gold_pred, gold_metrics, len(documents), control_gold)
+
+    control_real = SameSentenceAsEntitiesExtractor(entities_by_paper)
+    real_pred = _predictions(
+        documents, papers_by_id, entities_by_paper, control_real, arm="control-real"
+    )
+    real_metrics = sentence_metrics(real_pred, gold)
+    buckets = classify_misses(
+        documents, relations, gold, real_pred, entities_by_paper=entities_by_paper
+    )
+    assert_bucket_closure(buckets, n_false_negatives=real_metrics.fn)
+    arms["control-real"] = _arm_report(real_pred, real_metrics, len(documents), control_real) | {
+        "miss_buckets": {
+            "endpoint_lost": buckets.endpoint_lost,
+            "endpoint_unlocatable": buckets.endpoint_unlocatable,
+            "never_co_sentential": buckets.never_co_sentential,
+            "co_sentential_elsewhere": buckets.co_sentential_elsewhere,
+            "total": buckets.total,
+            "endpoint_lost_sentences": {
+                pmid: sorted(indices) for pmid, indices in buckets.endpoint_lost_sentences.items()
+            },
+        }
+    }
+
+    if llm_extractor is not None:
+        llm_pred = _predictions(
+            documents, papers_by_id, entities_by_paper, llm_extractor, arm="llm"
+        )
+        llm_metrics = sentence_metrics(llm_pred, gold)
+        # THE BOTTLENECK-ESCAPE PROOF. Gold is restricted to bucket (a) -- the misses no
+        # window variant and no pairing rule can recover, because control-real never linked
+        # an endpoint at all -- and the LLM arm is scored against that restriction ALONE. An
+        # aggregate comparison cannot rule out the LLM merely being better at the shared part
+        # of the task while never reaching what control-real structurally cannot.
+        # `buckets.endpoint_lost_sentences` is used DIRECTLY: re-deriving which sentences
+        # those are would duplicate the bucketing logic, the exact drift
+        # `_gold_pairs_by_sentence` was factored out to prevent.
+        # PRECISION IS DELIBERATELY NOT REPORTED HERE. Against a gold restricted to one
+        # bucket, every correct selection outside that bucket scores as a false positive, so
+        # a precision computed here would be a number about nothing. The arm's real precision
+        # is in `sentence`, over the whole gold.
+        restricted = sentence_metrics(llm_pred, buckets.endpoint_lost_sentences)
+        arms["llm"] = _arm_report(llm_pred, llm_metrics, len(documents), llm_extractor) | {
+            # Read off the extractor that made the calls, not passed in beside it: a run whose
+            # log line does not say which model and effort produced it is not attributable,
+            # and a separately supplied value can disagree with the one the API was asked for.
+            "model": llm_extractor.model,
+            "effort": llm_extractor.effort,
+            "recall_on_endpoint_lost": {
+                "recall": restricted.recall,
+                "tp": restricted.tp,
+                "fn": restricted.fn,
+                "n_gold_sentences": buckets.endpoint_lost,
+            },
+        }
+
+    line = {
+        "timestamp": now,
+        "git_sha": git_sha,
+        "dataset": dataset,
+        "n_documents": len(documents),
+        "n_gold_sentences": n_gold_sentences,
+        "gold_relations": asdict(coverage),
+        "arms": arms,
+    }
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+    return line
+
+
+def main(argv: list[str] | None = None) -> None:
+    # Heavy imports are local so importing this module for scoring stays cheap and offline,
+    # the same pattern as `cluster_eval.main` and `end_to_end.main`.
+    import argparse
+    from datetime import UTC, datetime
+
+    import anthropic
+
+    from biolit.canon.canonicalize import canonicalize
+    from biolit.canon.linker import DictionaryLinker
+    from biolit.canon.mesh import MeshDictionary
+    from biolit.config import get_settings
+    from biolit.domain.enums import Source, TextType
+    from biolit.ner.extract import extract_entities
+    from biolit.ner.model import NerModel
+    from biolit_evals._meta import git_sha
+    from biolit_evals.mesh_gold_download import (
+        TEST_MEMBER,
+        load_bc5cdr_cid_relations,
+        load_bc5cdr_documents,
+    )
+
+    parser = argparse.ArgumentParser(
+        description="Score sentence selection on BC5CDR Test-500: two controls and the LLM arm."
+    )
+    parser.add_argument(
+        "--arm",
+        choices=["control", "llm", "all"],
+        default="all",
+        help=(
+            "control = the two free arms only. llm is an ALIAS for all: the LLM arm's "
+            "recall_on_endpoint_lost is defined against control-real's bucket (a) membership, "
+            "so the controls are always scored beside it and the LLM arm cannot run alone."
+        ),
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help=(
+            "Score only the first N documents (default: all 500). A limited run is TAGGED "
+            "bc5cdr_test500_limitN, not bc5cdr_test500, so `assert_dataset_size` keeps its "
+            "meaning instead of being skipped and no pilot line can be mistaken for a full "
+            "run. Omit this flag to produce the canonical full-corpus line."
+        ),
+    )
+    parser.add_argument(
+        "--effort",
+        choices=["low", "medium", "high", "xhigh", "max"],
+        default="medium",
+        help="Reasoning effort for the LLM arm. Recorded in the log line under arms.llm.effort.",
+    )
+    args = parser.parse_args(argv)
+
+    settings = get_settings()
+    url = settings.bc5cdr_cdr_zip_url
+    # Test split ONLY: the NER checkpoint was fine-tuned on BC5CDR's training split, so any
+    # arm running real NER must stay held out or the number is contaminated.
+    # `parse_pubtator_documents` yields ONE GoldDocument per PubTator block, i.e. per pmid --
+    # which the whole module requires, since a sentence index only means anything relative to
+    # one text. `load_domain_norm_documents` is the loader that CANNOT be used here: it emits
+    # one document per annotated record (49 records over 3 pmids in the committed sample).
+    # The requirement is not merely assumed: `gold_finding_sentences` raises `ValueError` on a
+    # repeated pmid, so a corpus that ever violated it halts instead of scoring.
+    documents = load_bc5cdr_documents(url, TEST_MEMBER)
+    relations = load_bc5cdr_cid_relations(url, TEST_MEMBER)
+    dataset = "bc5cdr_test500"
+    if args.limit is not None:
+        # A LIMITED CORPUS CONTRADICTS THE FULL CORPUS'S TAG, so the tag changes with it
+        # rather than the guard being skipped: `assert_dataset_size` still runs, unknown tags
+        # still pass by design, and the pilot's log line is self-identifying at a glance.
+        # `--limit 500` is therefore still tagged as a limited run: conservative on purpose,
+        # since the alternative is a flag that can silently mint a full-run line.
+        documents = documents[: args.limit]
+        dataset = f"bc5cdr_test500_limit{args.limit}"
+
+    papers = [
+        Paper(
+            id=document.pmid,
+            source=Source.pubmed,
+            pmid=document.pmid,
+            # THIS LOOKS WRONG AND IS THE ONLY CORRECT CONSTRUCTION. `document.text` is
+            # already `title + " " + abstract` (`parse_pubtator_documents`), and the
+            # extractors split `paper.abstract` while the gold and the miss buckets split
+            # `document.text`. Splitting the text back into its `title=` and `abstract=`
+            # fields -- which is what a Paper is "supposed" to look like, and is exactly the
+            # edit a future reader will be tempted to make -- shifts every sentence index
+            # between `pred` and `gold` with no exception and no implausible score.
+            # `title` is left empty because nothing reads it here and a populated one would
+            # imply the abstract excludes it. `assert_papers_match_documents` inside
+            # `run_extract_eval` fails the run if this ever stops holding.
+            title="",
+            abstract=document.text,
+            text_type=TextType.abstract_only,
+            extraction_allowed=True,
+        )
+        for document in documents
+    ]
+
+    dictionary = MeshDictionary.from_artifact(settings.mesh_artifact_path)
+    linker = DictionaryLinker(dictionary)
+    model = NerModel.load(settings)
+    entities_by_paper: dict[str, list[Entity]] = {}
+    for document in documents:
+        # Same string again, for the same reason: the entities' offsets are what
+        # `classify_misses` places into sentences.
+        preds = extract_entities(document.text, model, score_threshold=settings.ner_score_threshold)
+        entities_by_paper[document.pmid] = list(canonicalize(preds, document.text, linker=linker))
+
+    llm_extractor = None
+    if args.arm != "control":
+        # max_retries above the SDK default of 2: over 500 sequential calls a transient 429 is
+        # near-certain, and a retry that succeeds costs seconds where a counted error costs a
+        # whole paper's score. What retries cannot fix is counted by `LlmExtractor.errors`.
+        llm_extractor = LlmExtractor(anthropic.Anthropic(max_retries=5), effort=args.effort)
+
+    line = run_extract_eval(
+        documents=documents,
+        relations=relations,
+        entities_by_paper=entities_by_paper,
+        papers=papers,
+        llm_extractor=llm_extractor,
+        dataset=dataset,
+        log_path=DEFAULT_LOG,
+        git_sha=git_sha(),
+        now=datetime.now(UTC).isoformat(),
+    )
+
+    print(
+        f"dataset={line['dataset']} docs={line['n_documents']} "
+        f"gold_sentences={line['n_gold_sentences']} sha={line['git_sha']}"
+    )
+    if args.limit is not None:
+        print("  PILOT RUN -- a limited corpus. Do not quote these numbers as the full run.")
+    relation_counts = line["gold_relations"]
+    print(
+        f"  gold CID relations: {relation_counts['n_relations']} over these documents, "
+        f"{relation_counts['n_with_gold_sentence']} realized by >=1 gold sentence, "
+        f"{relation_counts['n_without_gold_sentence']} asserted ACROSS sentences and so "
+        "invisible to this proxy"
+    )
+    for name, arm in line["arms"].items():
+        score = arm["sentence"]
+        print(f"\n=== {name} ===")
+        print(
+            f"  P={score['precision']:.4f} R={score['recall']:.4f} F1={score['f1']:.4f} "
+            f"(tp={score['tp']} fp={score['fp']} fn={score['fn']})"
+        )
+        print(
+            f"  mean sentences/paper: {arm['mean_sentences_per_paper']:.3f} "
+            f"({arm['n_selected']} selected) -- no recall figure is quotable without this"
+        )
+        if "miss_buckets" in arm:
+            buckets = arm["miss_buckets"]
+            print(
+                f"  miss buckets: endpoint_lost={buckets['endpoint_lost']} "
+                f"endpoint_unlocatable={buckets['endpoint_unlocatable']} "
+                f"never_co_sentential={buckets['never_co_sentential']} "
+                f"co_sentential_elsewhere={buckets['co_sentential_elsewhere']} "
+                f"(total={buckets['total']})"
+            )
+            print(
+                "    endpoint_lost AND endpoint_unlocatable are both unrecoverable by any "
+                "window or pairing change -- quoting (a) alone understates the population"
+            )
+        if "recall_on_endpoint_lost" in arm:
+            restricted = arm["recall_on_endpoint_lost"]
+            print(f"  model={arm['model']} effort={arm['effort']}")
+            print(
+                f"  recall_on_endpoint_lost: {restricted['recall']:.4f} "
+                f"({restricted['tp']} of {restricted['n_gold_sentences']}) -- the "
+                "bottleneck-escape proof, not inferable from the aggregate above"
+            )
+        print(f"  diagnostics: {arm['diagnostics']}")
+        if arm["diagnostics"]["errors"]:
+            print(
+                "    ERRORS OCCURRED: those papers scored as selecting nothing, so this arm's "
+                "recall is understated. Judge the run before quoting it."
+            )
+
+
+if __name__ == "__main__":
+    main()
