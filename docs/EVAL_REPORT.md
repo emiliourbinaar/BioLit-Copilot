@@ -1764,3 +1764,204 @@ match the observation, and do not commit the run as a result.
 6. **Alternative pairing heuristics were not swept.** Same-paragraph, N-token windows, and
    dependency-path variants are all cheap and unmeasured, so the 77.0%-of-ceiling figure
    prices *same-sentence specifically*, not the best achievable deterministic heuristic.
+
+---
+
+## Phase 4: pricing an LLM extractor against a free deterministic control — and the first measured crack in the entity bottleneck
+
+### ⭐ Headline finding: 127 of 270 — the bottleneck is reachable after all
+
+**An LLM extractor recovered 127 of the 270 gold sentences (recall 0.4704) that the real
+pipeline is structurally incapable of reaching.**
+
+That population is `endpoint_lost`: sentences where no gold relation qualifying them has both
+endpoints linked *anywhere* in the paper. The entity was never extracted, so there is nothing
+for a wider window, a different pairing rule, or a better clustering key to operate on. This
+project has now priced upstream entity loss as the dominant, downstream-unrecoverable
+bottleneck **three times** — Phase 3C's 1679 span-correct-but-unlinked mentions, Phase 3's
+40.3% of gold CID relations losing an endpoint before pairing is ever consulted (ADR-0013), and
+the 270 sentences here. The first two measurements established that nothing downstream could
+reach it. **This is the first measurement showing that something can.**
+
+The claim is deliberately narrow. It is not that the LLM is a better sentence selector — on the
+shared task it is decisively worse (below). It is that a mechanism which does not depend on the
+NER + linking stage having succeeded can recover a substantial share of what that stage lost,
+and that this is now measured rather than argued.
+
+`recall_on_endpoint_lost` is logged as its own field precisely because **it is not inferable
+from any aggregate.** An arm can improve overall recall purely by getting better at the shared,
+already-reachable part of the task; only the restricted number distinguishes that from actually
+reaching what the control cannot.
+
+### What was measured
+
+Three arms over **BC5CDR Test-500** (500 documents, 1145 gold finding sentences), scored at
+sentence level. Gold is the sentence-level co-occurrence proxy defined in
+`gold_finding_sentences`: a sentence is gold iff both endpoints of at least one gold CID
+relation are annotated in it.
+
+| Arm | What it is |
+|---|---|
+| `control-gold` | Same-sentence co-occurrence over entities synthesized from **gold** mentions + gold ids |
+| `control-real` | Same-sentence co-occurrence over the **real** NER + linking pipeline — the free deterministic control |
+| `llm` | `claude-opus-5`, `effort=low`, structured outputs, returning sentence **indices** rather than offsets |
+
+### Results
+
+| Arm | P | R | F1 | mean sentences/paper | `recall_on_endpoint_lost` |
+|---|---|---|---|---|---|
+| control-gold | 0.5896 | **1.0000** | 0.7418 | 3.884 | — |
+| **control-real** | **0.6206** | **0.6271** | **0.6238** | **2.314** | — |
+| llm `low` (run 1) | 0.2296 | 0.4559 | 0.3054 | 4.548 | **0.4704** (127/270) |
+| llm `low` (run 2) | 0.2312 | 0.4576 | 0.3072 | 4.532 | **0.4704** (127/270) |
+| llm `high` | 0.2314 | 0.4585 | 0.3076 | 4.538 | 0.4630 (125/270) |
+
+`control-gold` recall is **1.0000 by construction** — gold entities make every gold sentence
+co-sentential by definition — so it is a harness anchor, not a result. Its *precision* of 0.5896
+is the informative half: even with perfect entities, same-sentence co-occurrence selects 797
+sentences that are not gold findings.
+
+> **On the shared task, the free heuristic wins decisively: F1 0.6238 against 0.3054.** The LLM
+> over-selects — 4.55 sentences per paper against 2.31 — and pays for it in precision (0.2296
+> against 0.6206). Any reading of this eval that quotes the LLM arm's aggregate as a win has
+> misread it.
+
+### control-real's miss decomposition
+
+Of control-real's 427 false negatives:
+
+| Bucket | Count | Recoverable by a windowing or pairing change? |
+|---|---|---|
+| `endpoint_lost` | **270** | **No** — endpoint never linked anywhere in the paper |
+| `endpoint_unlocatable` | **0** | **No** — endpoint linked but carries no offset |
+| `never_co_sentential` | 45 | Yes — both endpoints locatable, no sentence holds both |
+| `co_sentential_elsewhere` | 112 | Yes — co-sentential somewhere, just not at the gold sentence |
+| **total** | **427** | closes against `sentence.fn` exactly |
+
+**63.2% of control-real's misses are structurally unrecoverable.** That is the sentence-level
+counterpart to ADR-0013's per-relation 40.3%, and **not the same statistic** — that one counts
+relations, this counts gold sentences, and one sentence can be made gold by several relations.
+Do not quote them interchangeably.
+
+`endpoint_unlocatable` measured **0**. It is an empty-but-correct bucket, not a finding: the
+population is reachable on the production path (`ner/extract.py` appends entities whose offsets
+are `None`, and linking never touches offsets), so the bucket converts a silent
+misclassification into a visible zero. It is reported for that reason, not because it found
+anything.
+
+### The naive union is provably worse — which locates the real open question
+
+A hybrid is the obvious next thought, and the arithmetic rules out its simplest form.
+
+Control-real's 718 true positives and the LLM's 127 `endpoint_lost` recoveries are **disjoint by
+construction** — the 270 are sentences control-real missed. A union therefore reaches at least
+**845/1145 = 0.7380 recall**, against control-real's 0.6271.
+
+But false-positive sets union too, so the union inherits **at least the LLM's 1752 false
+positives**. Granting the union *every* gold sentence — maximally generous, recall 1.0000 — its
+precision is at most 1145/(1145+1752) = 0.3952, giving **F1 at most 0.5666**.
+
+> **A naive union of the two arms cannot beat the free control on F1 (≤ 0.5666 against 0.6238),
+> even under assumptions that cannot hold.** The recall gain is real; the precision cost is
+> larger.
+
+This is not a verdict against the capability. It locates the open question precisely: a
+deployable hybrid needs some way to **tell the LLM's genuine bottleneck-escape recoveries apart
+from its general over-selection**, before a union is worth building at all. Note that
+`recall_on_endpoint_lost` cannot itself be that discriminator — computing which misses are
+`endpoint_lost` requires gold, which is unavailable at inference time.
+
+### Effort was chosen by measurement, not by default
+
+A three-way pilot at `--limit 20` (`low` / `medium` / `high`) preceded the full runs. All three
+consumed **identical input tokens (17,497)**, confirming that `--limit` selects the same
+documents every time and that the comparison was valid.
+
+The pilot found `low` tied or better, with `medium` and `high` selecting **byte-identically**.
+The full-corpus runs confirm it: `high` scores F1 0.3076 against `low`'s 0.3054 / 0.3072 — a
+**0.0013 difference, inside the measured 0.0018 run-to-run noise floor** — while spending **49%
+more output tokens** and scoring *lower* on the bottleneck metric (125/270 against 127/270).
+
+**Effort is not a live variable on this task.** Measuring the noise floor *first* is what makes
+that a conclusion rather than a guess; a single `low` run against a single `high` run could not
+have distinguished a real difference from run-to-run variance.
+
+### Stability: consistency, not determinism
+
+Two identical `low` runs differ by **ΔF1 0.0018** (0.6% relative) and agree to the exact count
+on `recall_on_endpoint_lost` (127/270 both). Output tokens differ (11,150 against 11,112), so
+the model **is not deterministic** — `temperature` is not accepted on Opus 5 and adaptive
+thinking is on. It is highly consistent on this task, which is a different claim, and the one
+the data supports.
+
+### Cost: measured, and an order of magnitude below the pre-measurement estimate
+
+| | Tokens (500 docs) | Cost at Opus 5 list ($5 / $25 per MTok) |
+|---|---|---|
+| `low` | 441,052 in / 11,150 out | **$2.48** |
+| `high` | 441,052 in / 16,608 out | $2.62 |
+| **All runs incl. pilot** | **1,375,647 in / 40,477 out** | **$7.89** |
+
+**Thinking barely engages on this task** — roughly 22 output tokens per call at `low`. A
+pre-measurement estimate that assumed thinking would dominate output was wrong by up to **8x**.
+The $0.30 pilot eliminated that uncertainty before the full runs were committed to, and priced
+the full run to within 1%.
+
+Prompt caching does **not** apply: the system prompt is 452 characters, below the 512-token
+minimum for `claude-opus-5`, so a `cache_control` marker would be inert. It was removed rather
+than shipped as a caching claim that does not hold.
+
+### Operational diagnostics
+
+**Zero refusals, zero errors, zero out-of-range indices across ~1500 calls.** No token total
+under-reports and no metric needs a caveat for dropped work.
+
+The zero refusal rate is itself a finding: biomedical abstracts at this scale produced no safety
+friction, where a non-zero rate would have been an operational concern for a product in this
+domain rather than merely a diagnostic.
+
+`out_of_range` counts **indices dropped after de-duplication**, derived from
+`findings_from_sentence_indices`' own `sorted(set(indices))` rather than restating its range
+predicate — so the counter and the drop cannot drift.
+
+### Limitations
+
+1. **The gold is a proxy, and the prompt asks a different question than the gold encodes.** The
+   system prompt asks for *"sentences that state the study's findings"*; gold is *"sentences
+   where both endpoints of an annotated CID relation appear"*. Some of the LLM's 1752 false
+   positives are plausibly genuine finding sentences containing no CID pair. **The aggregate
+   numbers cannot separate those two explanations**, so the LLM arm's precision is a lower bound
+   on its performance at the task it was actually asked to do.
+2. **321 of 1066 gold CID relations (30.1%) are asserted ACROSS sentences** and are structurally
+   invisible to this proxy. This is a ceiling on the whole sentence-level framing, distinct from
+   the 270-sentence ceiling on the real pipeline: different failures, different fixes. The LLM
+   result speaks to the second, not the first.
+3. **One `high` run, against two `low` runs.** The effort conclusion rests on a single `high`
+   measurement compared against a two-run noise floor. That is enough to rule out a *large*
+   effect, not to resolve a difference smaller than 0.0018 F1.
+4. **`recall_on_endpoint_lost` requires gold to compute.** It measures a capability; it is not
+   available as a runtime signal, which is exactly why the discriminator question is open.
+5. **The hybrid bound is an upper bound, not a measurement.** The union was never run; 0.5666 is
+   what the arithmetic permits, and the actual figure would be lower.
+6. **`effort` was swept; the prompt was not.** The 0.2296 precision prices *this* prompt, not the
+   best achievable one. Prompt iteration is cheap and unmeasured.
+
+### Reproducing this
+
+```bash
+# Free -- no credential, no API call. Downloads CDR_Data.zip on first run.
+uv run python -m biolit_evals.extract_eval --arm control
+
+# Paid -- ~$2.48 per full run at Opus 5 list.
+uv run --env-file .env python -m biolit_evals.extract_eval --arm llm --effort low
+
+# Pilot shape, ~$0.10: writes a `bc5cdr_test500_limit20` line that cannot be
+# mistaken for a full run.
+uv run --env-file .env python -m biolit_evals.extract_eval --arm llm --limit 20 --effort low
+```
+
+Six gates run on the real path: `assert_dataset_size`, `assert_papers_match_documents`,
+`assert_gold_sentence_regression_pin`, `assert_gold_relation_ceiling`,
+`assert_gold_sentence_recall_anchor`, and `assert_bucket_closure`. Five of those call sites were
+found **unpinned** during implementation — each gate was tested as a function while nothing
+proved the runner invoked it — and now have tests that fail when the **call** is removed.
