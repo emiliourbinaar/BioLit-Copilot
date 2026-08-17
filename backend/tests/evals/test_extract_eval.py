@@ -1620,8 +1620,9 @@ def test_an_unlocatable_endpoint_does_not_hide_a_relation_whose_endpoints_are_bo
 
 def test_the_buckets_name_which_sentences_they_hold_not_only_how_many():
     # THE TASK 8 BLOCKER. `recall_on_endpoint_lost` restricts gold to the sentences classified
-    # into bucket (a) and scores the LLM arm against that restriction alone -- the eval's
-    # bottleneck-escape proof. A COUNT CANNOT EXPRESS IT: the restriction needs the identity of
+    # into bucket (a) and scores the LLM arm against that restriction alone. (That score is
+    # uninterpretable without a baseline -- see ADR-0015 -- but computing it at all still needs
+    # the membership.) A COUNT CANNOT EXPRESS IT: the restriction needs the identity of
     # every (pmid, sentence index) pair in the bucket, not how many there are.
     # The fixture is pI's shape -- ONE pmid whose TWO gold sentences are both endpoint_lost --
     # chosen so a membership mapping keyed by pmid (1 key) and a sentence count (2) differ. A

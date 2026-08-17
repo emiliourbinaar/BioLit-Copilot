@@ -234,8 +234,15 @@ class MissBuckets:
                                anywhere in the paper. UNRECOVERABLE by any window or pairing
                                mechanism, and the sentence-level counterpart of ADR-0013's
                                PER-RELATION 40.3% (430 of 1066 gold CID relations in Test-500
-                               lose an endpoint). It is the subset on which the LLM arm's
-                               recall is the direct proof of bottleneck escape. Not the same
+                               lose an endpoint). An arm's recall on this subset is reported
+                               as `recall_on_endpoint_lost`, and IT IS UNINTERPRETABLE ALONE:
+                               `control-real` scores 0 here BY CONSTRUCTION, since the bucket
+                               is defined from its own misses, so beating it measures the
+                               definition rather than the arm. Report a baseline beside the
+                               number -- a rate-matched selector and the best free positional
+                               heuristic -- or it says nothing. See ADR-0015, which exists
+                               because a claim was once shipped on the guaranteed-zero
+                               comparison. Not the same
                                number as 40.3%: that counts relations, this counts gold
                                sentences, and one sentence can be made gold by several
                                relations. Do not quote them as the same statistic.
@@ -958,7 +965,8 @@ def run_extract_eval(
             documents, papers_by_id, entities_by_paper, llm_extractor, arm="llm"
         )
         llm_metrics = sentence_metrics(llm_pred, gold)
-        # THE BOTTLENECK-ESCAPE PROOF. Gold is restricted to bucket (a) -- the misses no
+        # THE RESTRICTED-POPULATION SCORE, NOT A PROOF OF ANYTHING ON ITS OWN. Gold is
+        # restricted to bucket (a) -- the misses no
         # window variant and no pairing rule can recover, because control-real never linked
         # an endpoint at all -- and the LLM arm is scored against that restriction ALONE. An
         # aggregate comparison cannot rule out the LLM merely being better at the shared part
@@ -1182,8 +1190,12 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  model={arm['model']} effort={arm['effort']}")
             print(
                 f"  recall_on_endpoint_lost: {restricted['recall']:.4f} "
-                f"({restricted['tp']} of {restricted['n_gold_sentences']}) -- the "
-                "bottleneck-escape proof, not inferable from the aggregate above"
+                f"({restricted['tp']} of {restricted['n_gold_sentences']})"
+            )
+            print(
+                "    UNINTERPRETABLE ALONE -- control-real scores 0 here BY CONSTRUCTION. "
+                "Compare against a rate-matched selector and the best free positional "
+                "heuristic before quoting it (ADR-0015)."
             )
         print(f"  diagnostics: {arm['diagnostics']}")
         if arm["diagnostics"]["errors"]:
