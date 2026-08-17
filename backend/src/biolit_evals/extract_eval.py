@@ -10,7 +10,7 @@ from biolit.domain.paper import Paper
 from biolit.domain.records import Entity
 from biolit.extract.base import Extractor, build_record
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
-from biolit.extract.llm import LlmExtractor
+from biolit.extract.llm import USAGE_FIELDS, LlmExtractor
 from biolit.ner.windowing import sentence_spans
 from biolit_evals.cluster_eval import assert_dataset_size, synthesize_records
 from biolit_evals.end_to_end import ConceptMetrics, metrics_from_counts
@@ -735,6 +735,21 @@ def _diagnostics(extractor: object) -> dict:
     `unusable_stops` and `errors_by_type` are Counters keyed by reason and by exception type,
     so they serialise as nested OBJECTS. Logging their totals alone would hide which stop
     reason or which exception occurred, which is the entire reason Task 7 keyed them.
+
+    `usage` IS WHAT THE ARM COST, and it is the one number in this line that nothing else can
+    reconstruct: every other figure is derivable from the corpus and the selections, while the
+    tokens exist only on the responses, which are gone once the run ends. A log that records
+    what a run produced but not what it spent cannot be audited, and a `--limit 20` pilot
+    cannot price the full corpus.
+    ITS KEYS COME FROM `USAGE_FIELDS`, THE SAME TUPLE `LlmExtractor` SEEDS AND ACCUMULATES
+    WITH, so there is exactly one list of field names in the repository and a field added to
+    it appears on every arm at once. The controls' zeros are structural in the same sense as
+    the counters above -- `.get(field, 0)` on an extractor that has no `usage` at all -- so
+    the deterministic arms report the same four keys rather than an empty object, and a reader
+    never has to branch on the arm name to find the cost.
+    NO DOLLAR CONVERSION HERE, DELIBERATELY: see `USAGE_FIELDS` in `biolit.extract.llm`. The
+    arm's `model` and `effort` are logged beside this block by `run_extract_eval`, so the
+    reader already has everything a dated conversion needs.
     """
     return {
         "refusals": getattr(extractor, "refusals", 0),
@@ -743,6 +758,7 @@ def _diagnostics(extractor: object) -> dict:
         "unusable_stops": dict(getattr(extractor, "unusable_stops", {})),
         "errors": sum(getattr(extractor, "errors", {}).values()),
         "errors_by_type": dict(getattr(extractor, "errors", {})),
+        "usage": {field: getattr(extractor, "usage", {}).get(field, 0) for field in USAGE_FIELDS},
     }
 
 

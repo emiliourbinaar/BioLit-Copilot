@@ -65,6 +65,45 @@ def test_parse_pubtator_documents_matches_flat_parser():
     assert [d.pmid for d in docs] == ["1", "2"]
 
 
+def test_parse_pubtator_documents_preserves_file_order_so_limit_n_is_the_same_n_every_run():
+    """WHAT `--limit N` ACTUALLY GUARANTEES, and the invariant the effort pilot rests on.
+
+    `extract_eval.main` slices `documents[: args.limit]` off whatever this returns, and the
+    pilot runs `--limit 20` three times at low/medium/high. Those three runs are only
+    comparable if they score THE SAME 20 PAPERS, so the order here must be the file's, stable
+    across processes, and independent of `PYTHONHASHSEED`.
+
+    IT ALREADY IS -- the parser appends to a list while iterating `text.split("\\n\\n")`, with
+    no set, dict or sort anywhere in the chain -- so this pins a property rather than fixing a
+    defect. It is worth pinning because the only order assertion that existed
+    (`test_parse_pubtator_documents_matches_flat_parser`, `== ["1", "2"]`) uses TWO pmids that
+    are ALREADY IN SORTED ORDER, so a regression to `sorted(...)` or to a pmid-keyed dict
+    would pass it unchanged.
+
+    SEVEN elements, deliberately, not two: on the clustering branch a 2-element fixture let a
+    dropped `sorted()` escape on 4 of 12 `PYTHONHASHSEED` values, and 7 is this project's
+    determinism-fixture size. The pmids are ordered so that file order matches NEITHER
+    lexicographic NOR numeric sort, in either direction -- so any re-ordering is caught, not
+    just an ascending one.
+    """
+    order = ["31", "7", "205", "4", "18", "1000", "62"]
+    raw = "\n\n".join(f"{pmid}|t|Title {pmid}.\n{pmid}|a|Abstract {pmid}." for pmid in order)
+    docs = parse_pubtator_documents(raw)
+
+    assert [d.pmid for d in docs] == order
+    # Anti-vacuity: the fixture really does distinguish file order from the plausible mutants.
+    assert sorted(order) != order
+    assert sorted(order, key=int) != order
+    assert sorted(order, reverse=True) != order
+
+    # ... and that is what `--limit N` hands the runner: the FIRST N of that order, so the
+    # three effort runs of the pilot see one another's corpus and not merely one of the same
+    # size. Every prefix is checked, because a slice of a re-ordered list can still agree with
+    # the correct one at some lengths.
+    for n in range(len(order) + 1):
+        assert [d.pmid for d in docs[:n]] == order[:n]
+
+
 def test_parse_pubtator_documents_offsets_index_the_document_text():
     # The cross-validation test above cannot catch a wrong text reconstruction, because
     # both parsers read offsets from the same mention lines. Only this pins the

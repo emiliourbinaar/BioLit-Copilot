@@ -30,6 +30,21 @@ _SCHEMA: dict[str, Any] = {
 # the documented non-streaming figure; the response itself is a handful of integers.
 _MAX_TOKENS = 16000
 
+# The token counters read off `response.usage`, in the SDK's own names. ONE tuple, used both
+# to seed the accumulator and to drive the accumulation, so a field cannot be counted but not
+# reported or reported but never counted. `biolit_evals.extract_eval._diagnostics` builds
+# every arm's log shape from this same tuple, which is what keeps the LLM arm and the
+# deterministic controls from drifting into two shapes.
+# NO PRICES HERE, DELIBERATELY. Per-token pricing changes and a rate committed to the repo
+# would rot silently into a wrong cost estimate; the dollar conversion belongs in the eval
+# report, next to the date it was true on.
+USAGE_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
+
 
 class LlmExtractor:
     """Selects finding-bearing sentences with an LLM, by INDEX rather than by offset.
@@ -66,6 +81,30 @@ class LlmExtractor:
     under the minimum whatever the tokenizer. Below it, caching silently does
     not happen -- no error, just cache_creation_input_tokens: 0. An inert marker would read
     to the next maintainer as caching that occurs, so it is left out entirely.
+    BOTH CACHE COUNTERS ARE STILL RECORDED, precisely so the log PROVES that 0 rather than
+    this docstring asserting it. They are the cheapest possible check on the paragraph above,
+    and if a future prompt grows past 512 tokens they start moving on their own.
+
+    `usage` IS ACCUMULATED FOR EVERY RESPONSE THE API RETURNS, INCLUDING THE ONES THAT YIELD
+    NO FINDINGS, and is read BEFORE the stop-reason branch below for exactly that reason.
+    The billing rules differ per stop reason -- a refusal declined before any output is not
+    billed, a refusal declined mid-stream bills the streamed partial, and a `max_tokens`
+    truncation bills everything it produced, thinking included -- so this class does not
+    model them. It records what the API reports and lets the numbers say which case occurred.
+    Dropping the usage of a non-`end_turn` response would silently under-report the cost of
+    the failure mode that wastes the MOST money per paper: a truncation pays for up to
+    `_MAX_TOKENS` of thinking and returns nothing scoreable.
+
+    THE ERROR PATH IS THE ONE PLACE THIS COUNT IS A LOWER BOUND, and it is stated rather than
+    left implicit. When `messages.create` raises there is no response object and therefore no
+    `usage` to read: the SDK surfaces an exception, not a partial Message, so nothing can be
+    attributed and nothing is added. Whether the server billed the attempt is unknowable from
+    here. A run whose `errors` counter is non-zero therefore has a token total that
+    UNDER-reports by an unknown amount, which is why the two are logged side by side and must
+    be read together before a pilot's numbers are extrapolated to a full corpus.
+
+    NO PRICES, IN EITHER DIRECTION -- see `USAGE_FIELDS` above. Tokens are recorded; the
+    dollar conversion belongs in the eval report where it can carry the date it was true on.
 
     NO `fallbacks` PARAMETER, DELIBERATELY, against the general API guidance for
     claude-opus-5 code. This is an eval harness measuring one named model's extraction
@@ -83,6 +122,7 @@ class LlmExtractor:
         # was asked for is the one this object hands the API. A runner passing its own copy
         # alongside the extractor would log an unattributable run the moment the two diverge.
         self._client, self.model, self.effort = client, model, effort
+        self.usage: Counter[str] = Counter(dict.fromkeys(USAGE_FIELDS, 0))
         self.refusals = 0
         self.unusable_stops: Counter[str] = Counter()
         self.out_of_range = 0
@@ -122,6 +162,16 @@ class LlmExtractor:
             # of it -- a harness bug in span conversion, say -- is swallowed by it.
             self.errors[type(exc).__name__] += 1
             return []
+        # ACCUMULATED BEFORE THE STOP-REASON BRANCH, so a response that yields no findings
+        # still reports what it cost -- see the class docstring for why that is the whole
+        # point. `usage` is a REQUIRED field on the SDK's `Message`, so it is present on
+        # every response, refusals and truncations included, and is read without a guard.
+        # `input_tokens` and `output_tokens` are required ints; both cache counters are
+        # `Optional[int]` and are None whenever the API reports nothing, which for this arm
+        # is always -- so None is counted as the zero it means, rather than raising.
+        for field in USAGE_FIELDS:
+            counted = getattr(response.usage, field)
+            self.usage[field] += counted if counted is not None else 0
         # Check stop_reason BEFORE reading content: on anything but end_turn, content is
         # empty or partial. A refusal empties key_findings only -- it says nothing about
         # entities, which come from the separate deterministic NER/linking stage.

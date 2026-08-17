@@ -2,13 +2,14 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from anthropic.types.usage import Usage
 
 from biolit.cluster.pairing import sentence_index
 from biolit.domain.enums import EntityLabel, Source, TextType
 from biolit.domain.paper import Paper
 from biolit.domain.records import Entity, ExtractedRecord
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
-from biolit.extract.llm import LlmExtractor
+from biolit.extract.llm import USAGE_FIELDS, LlmExtractor
 from biolit.ner.windowing import sentence_spans
 from biolit_evals import extract_eval
 from biolit_evals.end_to_end import metrics_from_counts
@@ -1843,8 +1844,12 @@ class _StubClient:
 
     COPIED from tests/extract/test_llm.py rather than imported across test modules, and
     extended with a per-call script because the runner makes one call PER PAPER and the
-    interesting fixtures differ by paper. A script entry is either `(stop_reason, content)`
-    or an exception instance to raise from `messages.create`.
+    interesting fixtures differ by paper. A script entry is either
+    `(stop_reason, content, usage)` or an exception instance to raise from `messages.create`.
+
+    `usage` is a REAL `anthropic.types.Usage` and is carried on EVERY scripted response,
+    because it is a required field on the SDK's `Message` -- present on refusals and
+    truncations as much as on clean answers.
     """
 
     def __init__(self, script: list) -> None:
@@ -1857,13 +1862,21 @@ class _StubClient:
         entry = self._script[len(self.calls) - 1]
         if isinstance(entry, BaseException):
             raise entry
-        stop_reason, content = entry
-        return SimpleNamespace(stop_reason=stop_reason, content=content)
+        stop_reason, content, usage = entry
+        return SimpleNamespace(stop_reason=stop_reason, content=content, usage=usage)
 
 
-def _reply(indices: list[int]) -> tuple[str, list[SimpleNamespace]]:
+# One paper's scripted cost, so tests that do not care about tokens still script a response
+# the API could actually return. Both cache counters are left unset -- the SDK's own default,
+# and the shape this arm really produces, since `_SYSTEM` is far below the cacheable minimum.
+_PAPER_USAGE = Usage(input_tokens=310, output_tokens=12)
+
+
+def _reply(
+    indices: list[int], *, usage: Usage = _PAPER_USAGE
+) -> tuple[str, list[SimpleNamespace], Usage]:
     payload = json.dumps({"finding_sentences": indices})
-    return ("end_turn", [SimpleNamespace(type="text", text=payload)])
+    return ("end_turn", [SimpleNamespace(type="text", text=payload)], usage)
 
 
 def _run(tmp_path, *, llm_extractor=None, papers=None, dataset="unit"):
@@ -2107,7 +2120,7 @@ def test_a_refusal_stays_a_refusal_in_the_log_and_is_never_folded_into_the_error
     # exists to measure. A refusal arrives as a stop reason and never as an exception, so the
     # two counters cannot collide; this is the fixture that SAYS so, rather than leaving it to
     # a reader of `LlmExtractor.findings`.
-    client = _StubClient([("refusal", []), _reply([0])])
+    client = _StubClient([("refusal", [], _PAPER_USAGE), _reply([0])])
     line, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
     written = json.loads(log.read_text(encoding="utf-8").strip())
     diagnostics = written["arms"]["llm"]["diagnostics"]
@@ -2121,11 +2134,74 @@ def test_an_unusable_stop_reason_survives_the_log_as_an_object_keyed_by_reason(t
     # JSON OBJECT rather than a scalar. Logging its total instead would hide WHICH stop reason
     # occurred -- and `max_tokens` (raise the budget) and `pause_turn` (resume the call) are
     # different operational problems with different fixes, which is why Task 7 keyed it.
-    client = _StubClient([("max_tokens", []), _reply([0])])
+    client = _StubClient([("max_tokens", [], _PAPER_USAGE), _reply([0])])
     _, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
     written = json.loads(log.read_text(encoding="utf-8").strip())
     assert written["arms"]["llm"]["diagnostics"]["unusable_stops"] == {"max_tokens": 1}
     assert written["arms"]["llm"]["diagnostics"]["refusals"] == 0
+
+
+def test_the_written_log_line_carries_the_llm_arms_token_usage_and_the_controls_zeros(tmp_path):
+    """WHAT THE RUN COST, in the same line as what it scored. A run log that records the
+    numbers but not their price cannot be audited, and a 20-paper pilot exists to predict the
+    ~500-paper x 2 spend BEFORE it is committed -- which it can only do if the tokens survive
+    into the log rather than dying with the in-process extractor.
+
+    Asserted on the WRITTEN line, not the return value: a field computed and returned but not
+    persisted prices nothing the next day.
+
+    EIGHT DISTINCT SCRIPTED VALUES over two papers, and all four totals differ from each
+    other and from every value they are made of. So a runner that hardcodes any field to 0,
+    reports one field's number under another's name, or logs the last response instead of the
+    sum, fails here -- the gap Task 8 found in `out_of_range`, which was logged and unpinned.
+
+    NO DOLLAR FIGURE IS ASSERTED, because none is computed: per-token pricing changes, and a
+    rate frozen into the repo would rot into a wrong estimate silently. `model` and `effort`
+    already sit in this same arm block (pinned by
+    `test_the_written_line_names_the_model_and_effort_that_actually_produced_the_llm_arm`),
+    so the reader has everything the conversion needs and nothing is duplicated to carry it.
+    """
+    client = _StubClient(
+        [
+            _reply(
+                [1],
+                usage=Usage(
+                    input_tokens=311,
+                    output_tokens=13,
+                    cache_creation_input_tokens=5,
+                    cache_read_input_tokens=2,
+                ),
+            ),
+            _reply(
+                [0],
+                usage=Usage(
+                    input_tokens=407,
+                    output_tokens=29,
+                    cache_creation_input_tokens=11,
+                    cache_read_input_tokens=3,
+                ),
+            ),
+        ]
+    )
+    line, log = _run(tmp_path, llm_extractor=LlmExtractor(client))
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert written == line
+
+    assert written["arms"]["llm"]["diagnostics"]["usage"] == {
+        "input_tokens": 718,
+        "output_tokens": 42,
+        "cache_creation_input_tokens": 16,
+        "cache_read_input_tokens": 5,
+    }
+    # The deterministic controls make no API call, so their zeros are STRUCTURAL -- and they
+    # are the same four keys, not an empty object, so a reader never branches on the arm name.
+    for control in ("control-gold", "control-real"):
+        assert written["arms"][control]["diagnostics"]["usage"] == dict.fromkeys(USAGE_FIELDS, 0)
+    # ... and the token counts sit beside the identity of the run that produced them.
+    assert (written["arms"]["llm"]["model"], written["arms"]["llm"]["effort"]) == (
+        "claude-opus-5",
+        "medium",
+    )
 
 
 def test_every_arm_reports_the_same_diagnostics_shape_and_the_controls_zeros_are_structural(
@@ -2137,6 +2213,12 @@ def test_every_arm_reports_the_same_diagnostics_shape_and_the_controls_zeros_are
     # `licence_skipped` is 0 for the LLM arm too, and NOT because no paper was restricted --
     # `build_record` gates on the licence before the extractor is ever called, so that counter
     # can never move on this path. A Task 9 reader must not read the 0 as a licence finding.
+    # `usage` IS THE ONE FIELD WHERE THE ARMS LEGITIMATELY DIFFER, and that is the point of it:
+    # the controls make no API call so theirs is a structural zero, while the LLM arm's is a
+    # measurement. Asserting all three equal to `zeros` -- which is what this test did before
+    # tokens were recorded -- would now require the LLM stub to script a 0-token response, and
+    # a shape test that can only pass on a response the API cannot return proves nothing about
+    # the shape. The key SETS are still identical, which is the claim in the test's name.
     line, _ = _run(tmp_path, llm_extractor=LlmExtractor(_StubClient([_reply([1]), _reply([1])])))
     zeros = {
         "refusals": 0,
@@ -2145,10 +2227,21 @@ def test_every_arm_reports_the_same_diagnostics_shape_and_the_controls_zeros_are
         "unusable_stops": {},
         "errors": 0,
         "errors_by_type": {},
+        "usage": dict.fromkeys(USAGE_FIELDS, 0),
     }
     assert line["arms"]["control-gold"]["diagnostics"] == zeros
     assert line["arms"]["control-real"]["diagnostics"] == zeros
-    assert line["arms"]["llm"]["diagnostics"] == zeros
+    # Two scripted `_PAPER_USAGE` responses, one per paper: 2 x 310 in, 2 x 12 out, and no
+    # cache traffic, because no `cache_control` marker is sent and the prefix is under the
+    # cacheable minimum anyway.
+    assert line["arms"]["llm"]["diagnostics"] == zeros | {
+        "usage": {
+            "input_tokens": 620,
+            "output_tokens": 24,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+    }
     assert set(line["arms"]["llm"]["diagnostics"]) == set(zeros)
 
 

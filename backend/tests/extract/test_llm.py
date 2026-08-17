@@ -5,10 +5,11 @@ from types import SimpleNamespace
 from anthropic.resources.messages.messages import Messages
 from anthropic.types.json_output_format_param import JSONOutputFormatParam
 from anthropic.types.output_config_param import OutputConfigParam
+from anthropic.types.usage import Usage
 
 from biolit.domain.enums import Source, TextType
 from biolit.domain.paper import Paper
-from biolit.extract.llm import _SYSTEM, LlmExtractor
+from biolit.extract.llm import _SYSTEM, USAGE_FIELDS, LlmExtractor
 
 # sentence_spans(TEXT) == [(0, 20), (21, 39), (40, 53)]
 TEXT = "Metformin was given. Acidosis followed. Insulin fell."
@@ -34,6 +35,18 @@ def _thinking_block() -> SimpleNamespace:
     return SimpleNamespace(type="thinking", thinking="...")
 
 
+# A REAL `anthropic.types.Usage`, not a hand-rolled stand-in: the stub is the only place the
+# response shape is asserted, so building it from the installed SDK's own model is what makes
+# "the stub matches what the API returns" a fact rather than a hope. Both cache counters are
+# left unset, which is the SDK's own default (`Optional[int] = None`) and is therefore the
+# shape every test here exercises unless it says otherwise.
+# NON-ZERO on purpose: a test that claims "no usage accrued" must be able to fail. With a
+# zero-token default, the error and licence fixtures below would pass even if the extractor
+# accumulated the response it never should have had.
+_DEFAULT_USAGE = Usage(input_tokens=101, output_tokens=7)
+_NO_USAGE = dict.fromkeys(USAGE_FIELDS, 0)
+
+
 class _StubClient:
     """Records the request and returns a canned response. Tests never touch the API."""
 
@@ -43,10 +56,12 @@ class _StubClient:
         content: list[SimpleNamespace] | None = None,
         stop_reason: str = "end_turn",
         error: BaseException | None = None,
+        usage: Usage = _DEFAULT_USAGE,
     ) -> None:
         if content is None:
             content = [_text_block('{"finding_sentences": [1]}')]
         self._content, self._stop_reason, self._error = content, stop_reason, error
+        self._usage = usage
         self.calls: list[dict] = []
         self.messages = SimpleNamespace(create=self._create)
 
@@ -56,7 +71,12 @@ class _StubClient:
         # connection. The real SDK raises those from this call.
         if self._error is not None:
             raise self._error
-        return SimpleNamespace(stop_reason=self._stop_reason, content=self._content)
+        # `usage` is a REQUIRED field on `anthropic.types.Message` -- it is present on EVERY
+        # response the API returns, including refusals and truncations, which is what makes
+        # accumulating before the stop-reason branch possible at all.
+        return SimpleNamespace(
+            stop_reason=self._stop_reason, content=self._content, usage=self._usage
+        )
 
 
 def test_the_prompt_numbers_sentences_and_indices_become_located_findings():
@@ -103,6 +123,73 @@ def test_the_request_pins_the_model_the_effort_and_a_budget_above_the_thinking_f
     assert call["system"] == _SYSTEM
 
 
+def test_the_usage_fields_read_are_the_installed_sdks_own_usage_fields():
+    """THE SAME BLIND SPOT the request-parameter test guards, one field deeper. The stub
+    supplies whatever object this file hands it, so a `usage` counter named after a field the
+    API does not report would pass every test below and read 0 for the whole paid run. Check
+    the names against the installed SDK's `Usage` model instead of trusting them.
+
+    It also pins the TYPES that decide how the fields are read: `input_tokens` and
+    `output_tokens` are REQUIRED ints, so they are added straight, while both cache counters
+    are `Optional[int]` defaulting to None, so they must be coalesced -- `Counter[str] +=
+    None` is a TypeError, and it would land mid-corpus on a paid run.
+    """
+    assert set(USAGE_FIELDS) <= set(Usage.model_fields)
+    assert Usage.model_fields["input_tokens"].is_required()
+    assert Usage.model_fields["output_tokens"].is_required()
+    minimal = Usage(input_tokens=1, output_tokens=1)
+    assert minimal.cache_creation_input_tokens is None
+    assert minimal.cache_read_input_tokens is None
+
+
+def test_usage_accumulates_across_calls_field_by_field():
+    # THE NUMBER THAT PRICES THE RUN. A 20-paper pilot exists to predict the cost of ~500
+    # papers x 2 runs before any of it is spent, so the counters must ADD rather than hold
+    # the last response, and each field must carry its own value rather than another's.
+    # All four values differ, and every doubled total differs from every single value and
+    # from every other total, so a mutant that hardcodes any field to 0, reads one field for
+    # another, or assigns instead of accumulating fails here.
+    usage = Usage(
+        input_tokens=311,
+        output_tokens=13,
+        cache_creation_input_tokens=5,
+        cache_read_input_tokens=2,
+    )
+    client = _StubClient(usage=usage)
+    extractor = LlmExtractor(client)
+    extractor.findings(_paper())
+    extractor.findings(_paper())
+    assert len(client.calls) == 2
+    assert dict(extractor.usage) == {
+        "input_tokens": 622,
+        "output_tokens": 26,
+        "cache_creation_input_tokens": 10,
+        "cache_read_input_tokens": 4,
+    }
+
+
+def test_absent_cache_counters_read_as_zero_rather_than_aborting_the_paper():
+    # BOTH CACHE FIELDS ARE EXPECTED TO BE 0 on this arm and are recorded anyway, so the log
+    # PROVES it rather than asserting it: `_SYSTEM` is 452 ASCII characters and claude-opus-5
+    # will not cache a prefix under 512 tokens, so no `cache_control` marker is sent and no
+    # caching can occur. The SDK reports that as `None`, not as 0 -- see the field-type test
+    # above -- so a straight `+=` raises `TypeError: unsupported operand type(s) for +=:
+    # 'int' and 'NoneType'` and costs the paper. Zero and absent are the same fact here, and
+    # the paper must still be scored, so they are recorded as the same number.
+    # NOT redundant with the eight fixtures above that happen to use the default usage: those
+    # assert nothing about `usage`, so with the coalesce deleted they fail with a TypeError
+    # that names no expectation. This one says what the number must be.
+    client = _StubClient(usage=Usage(input_tokens=101, output_tokens=7))
+    extractor = LlmExtractor(client)
+    assert [f.sentence_index for f in extractor.findings(_paper())] == [1]
+    assert dict(extractor.usage) == {
+        "input_tokens": 101,
+        "output_tokens": 7,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+    }
+
+
 def test_a_refusal_yields_no_findings_and_is_counted_without_reading_content():
     # stop_reason must be checked BEFORE content: a pre-output refusal's content is an
     # EMPTY list, so an implementation that parsed first would raise JSONDecodeError.
@@ -129,6 +216,39 @@ def test_a_truncated_response_is_counted_by_its_stop_reason_and_never_parsed():
     assert extractor.unusable_stops == {"max_tokens": 1}
     # ... and it is not miscounted as a refusal, which would overstate the safety story.
     assert extractor.refusals == 0
+
+
+def test_a_non_end_turn_response_still_reports_what_it_cost():
+    """USAGE IS ACCUMULATED BEFORE THE STOP-REASON BRANCH, for both non-end_turn shapes.
+
+    These are the responses that produce no score, so they are precisely the ones whose cost
+    must stay visible: a `max_tokens` truncation is BILLED FOR EVERYTHING IT PRODUCED --
+    thinking included, which is what `_MAX_TOKENS = 16000` exists to absorb -- and dropping
+    its usage would under-report the cost of the failure mode that wastes the most money per
+    paper. A refusal declined before any output is not billed and simply reports small
+    numbers; a refusal declined mid-stream bills the partial. Reading `response.usage` rather
+    than deciding per stop reason means the API's own answer is recorded in all three cases,
+    with no table of which stop reasons bill that this code would have to keep true.
+
+    The two shapes are checked TOGETHER because the placement is one line and one decision:
+    with the accumulation moved below the `return []`, both go to zero at once.
+    """
+    shapes = (("refusal", 1, {}), ("max_tokens", 0, {"max_tokens": 1}))
+    for stop_reason, refusals, unusable in shapes:
+        client = _StubClient(
+            content=[],
+            stop_reason=stop_reason,
+            usage=Usage(input_tokens=290, output_tokens=16000),
+        )
+        extractor = LlmExtractor(client)
+        assert extractor.findings(_paper()) == []
+        assert (extractor.refusals, dict(extractor.unusable_stops)) == (refusals, unusable)
+        assert dict(extractor.usage) == {
+            "input_tokens": 290,
+            "output_tokens": 16000,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
 
 
 def test_the_payload_is_read_from_the_first_text_block_not_the_first_block():
@@ -182,6 +302,37 @@ def test_a_transport_failure_is_counted_by_exception_type_and_costs_only_that_pa
     # error into it would manufacture a safety story out of a dropped connection.
     assert extractor.refusals == 0
     assert extractor.unusable_stops == {}
+
+
+def test_a_call_that_raises_contributes_no_usage_because_there_is_no_response():
+    # THE ONE PLACE THE TOKEN COUNT IS A LOWER BOUND, stated rather than left implicit. When
+    # `messages.create` raises there is no response object and therefore no `usage`: the SDK
+    # surfaces an exception, not a partial Message, so there is nothing to attribute and this
+    # arm cannot know whether the server billed anything. A run with non-zero `errors`
+    # therefore has a usage figure that UNDER-reports, and by an unknown amount -- which is
+    # why `errors` is logged beside it and why the two must be read together when the pilot's
+    # numbers are extrapolated to the full run.
+    # The stub's usage is deliberately NON-zero (`_DEFAULT_USAGE`), so an implementation that
+    # somehow counted a failed call would show 101/7 here rather than passing by accident.
+    client = _StubClient(error=RuntimeError("429 rate limited"))
+    extractor = LlmExtractor(client)
+    assert extractor.findings(_paper()) == []
+    assert dict(extractor.errors) == {"RuntimeError": 1}
+    assert dict(extractor.usage) == _NO_USAGE
+
+
+def test_a_paper_that_is_never_sent_contributes_no_usage_either():
+    # The two pre-call exits, for the same reason as the error path: no request, no response,
+    # no tokens. Asserted rather than assumed, because `usage` is the number a paid run is
+    # budgeted from -- a licence-restricted or empty paper that quietly added the previous
+    # response's counts would inflate the per-paper cost the pilot extrapolates from.
+    # Again the stub's usage is non-zero, so a leak would be visible.
+    for paper in (_paper(allowed=False), _paper(abstract=None), _paper(abstract="   \n\t ")):
+        client = _StubClient()
+        extractor = LlmExtractor(client)
+        assert extractor.findings(paper) == []
+        assert client.calls == []
+        assert dict(extractor.usage) == _NO_USAGE
 
 
 def test_a_malformed_payload_on_a_clean_stop_is_counted_rather_than_aborting_the_run():
