@@ -1982,8 +1982,12 @@ predicate — so the counter and the drop cannot drift.
    assertion is the expected dominant cause, but at least two other mechanisms contribute an
    unmeasured share: an endpoint never annotated in the document at all, and an endpoint mention
    whose offset falls in an inter-sentence gap and is dropped by `_gold_pairs_by_sentence`. Both
-   have their own test fixtures, so both are known to occur. **The split is unmeasured**, and
-   earlier phrasing that attributed all 321 to cross-sentential assertion overstated it.
+   have their own test fixtures, so both code paths are **reachable**; that is a weaker claim
+   than "both occur on Test-500", and for the gap mechanism it is the only claim the evidence
+   supports — `sentence_spans` leaves only whitespace uncovered, so it needs a gold mention whose
+   span begins on a space, and PubTator surface forms do not normally start with whitespace.
+   **The split is unmeasured**, and earlier phrasing that attributed all 321 to cross-sentential
+   assertion overstated it.
 3. **`effort` was swept; the prompt was not.** The 0.2296 precision prices *this* prompt, not the
    best achievable one. Prompt iteration is cheap and unmeasured, and is the obvious next
    experiment given limitation 1.
