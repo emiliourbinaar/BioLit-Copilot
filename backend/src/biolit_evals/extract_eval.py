@@ -29,8 +29,28 @@ def _gold_pairs_by_sentence(
     misses the gold produced, and no test or anchor would see it.
 
     Sentences with no qualifying pair are omitted, so the returned keys ARE the gold
-    sentences. Mentions whose start falls in no sentence span are dropped, as are labels
-    outside CHEMICAL/DISEASE and mentions with empty `mesh_ids`.
+    sentences. Mentions whose start falls in no sentence span are dropped, as are mentions
+    with empty `mesh_ids` (they contribute no endpoint id to their sentence).
+
+    NO `mention.label not in by_label` OPERAND, on ADR-0014's FIRST question. It was there and
+    was deleted: it is unreachable on two independent grounds, so it protected nothing while
+    documenting behaviour that cannot occur. (1) BY TYPE -- `EntityLabel` is a two-member
+    `StrEnum`, `GoldMention.label` is typed `EntityLabel`, and `by_label` is built literally
+    with exactly those two keys. (2) BY RUNTIME CONSTRUCTION, the same kind of guarantee that
+    retired `LlmExtractor`'s `not spans` -- both `GoldMention` construction sites in the
+    package take their label from `canonical_label`, whose codomain is those two members or
+    `None`, and `None` never reaches the constructor (`parse_pubtator` skips it,
+    `_mentions_from_record` raises). So the type-level/runtime-level distinction does not
+    discriminate here; this operand has both.
+
+    AND THE DELETION IS THE LOUDER CHOICE, not merely the tidier one. If `EntityLabel` ever
+    gains a third member and `by_label` is not updated with it, the guard would SILENTLY
+    `continue` past every mention of that label -- gold construction quietly shrinks, and only
+    the 500-document regression pin might notice, never a `--limit` pilot or a domain-gold
+    run. Without it, `by_label[mention.label]` raises `KeyError` at the first such mention.
+    Every other disagreement this module can detect is made to raise rather than choose
+    (`_reject_repeated_pmids`, the invented/omitted gold checks, `assert_papers_match_
+    documents`); this now matches them. Do not re-add the operand -- extend `by_label`.
     """
     spans = sentence_spans(document.text)
     by_label: dict[EntityLabel, dict[int, set[str]]] = {
@@ -39,7 +59,7 @@ def _gold_pairs_by_sentence(
     }
     for mention in document.mentions:
         index = sentence_index(spans, mention.start)
-        if index is None or mention.label not in by_label:
+        if index is None:
             continue
         by_label[mention.label].setdefault(index, set()).update(mention.mesh_ids)
     chemicals = by_label[EntityLabel.CHEMICAL]
@@ -579,10 +599,28 @@ def assert_bucket_closure(buckets: MissBuckets, *, n_false_negatives: int) -> No
 class RelationCoverage:
     """How many gold CID relations the sentence-level proxy actually realizes.
 
-    `n_without_gold_sentence` is A FINDING ABOUT THE PROXY, NOT A DEFECT: BC5CDR annotates
-    CID at DOCUMENT level, so a relation whose endpoints are asserted across two sentences is
-    real gold that no same-sentence construction -- this one or any arm's -- can express.
-    Report it beside every score, because it is the share of gold this eval's gold cannot see.
+    `n_without_gold_sentence` COUNTS GOLD CID RELATIONS REALIZED BY NO GOLD SENTENCE. It is A
+    FINDING ABOUT THE PROXY, NOT A DEFECT, and it must be reported beside every score, because
+    it is the share of gold this eval's gold cannot see.
+
+    ATTRIBUTE IT NO FURTHER THAN THAT PHRASE. At least three mechanisms feed this one counter
+    and THE SPLIT IS UNMEASURED -- no arm and no test decomposes it:
+      (a) The relation genuinely IS asserted across two sentences. BC5CDR annotates CID at
+          DOCUMENT level, so this is real gold no same-sentence construction -- this one or
+          any arm's -- can express. EXPECTED to be the dominant cause, on the corpus's own
+          annotation design. Expected, not measured.
+      (b) No mention in the document carries an endpoint's id at all, so no sentence can hold
+          both. Distinct from (a) and demonstrably reachable: `DECOY_CHEM` in this module's
+          runner fixture (`tests/evals/test_extract_eval.py`) is exactly this shape.
+      (c) An endpoint IS annotated, but its `start` falls in the inter-sentence gap
+          `sentence_spans` leaves uncovered, so `_gold_pairs_by_sentence` drops it at the
+          `index is None` guard. A HARNESS ARTEFACT rather than a property of the corpus, and
+          the one whose real incidence is least certain: the uncovered region is always
+          whitespace, so this needs a gold mention whose span begins on a space. Its fixture
+          proves the mechanism is reachable in the code; nothing here shows it fires on
+          Test-500.
+    An earlier version of this docstring named only (a), which overstated what the number
+    supports. Do not restore that phrasing without first measuring the split.
     """
 
     n_relations: int
@@ -640,8 +678,9 @@ def assert_gold_relation_ceiling(coverage: RelationCoverage, *, dataset: str) ->
     wrong split. That is a HARNESS ERROR, which is why this raises rather than pins.
 
     It is one-sided on purpose. Coming in UNDER the ceiling is the expected result and is
-    itself a finding -- the relations with no gold sentence are the ones asserted across
-    sentences -- so only the impossible direction halts.
+    itself a finding -- the shortfall is the relations REALIZED BY NO GOLD SENTENCE, for which
+    cross-sentential assertion is the expected dominant cause but not the only one (see
+    `RelationCoverage`) -- so only the impossible direction halts.
 
     Unknown tags pass, matching `assert_dataset_size` and `assert_gold_cluster_anchor`: unit
     fixtures use their own tags, and a `--limit N` run is tagged as the pilot it is. A subset
@@ -1010,7 +1049,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--effort",
         choices=["low", "medium", "high", "xhigh", "max"],
-        default="medium",
+        # DEFAULTS TO `low`, matching `LlmExtractor`'s own default and the effort the recorded
+        # full-corpus run used. No full corpus has been run at `medium` here, so defaulting to
+        # it would make the cheapest way to reproduce this eval produce a number that is not
+        # comparable to the logged one.
+        default="low",
         help="Reasoning effort for the LLM arm. Recorded in the log line under arms.llm.effort.",
     )
     args = parser.parse_args(argv)
@@ -1099,8 +1142,16 @@ def main(argv: list[str] | None = None) -> None:
     print(
         f"  gold CID relations: {relation_counts['n_relations']} over these documents, "
         f"{relation_counts['n_with_gold_sentence']} realized by >=1 gold sentence, "
-        f"{relation_counts['n_without_gold_sentence']} asserted ACROSS sentences and so "
+        f"{relation_counts['n_without_gold_sentence']} REALIZED BY NO GOLD SENTENCE and so "
         "invisible to this proxy"
+    )
+    # Not "asserted across sentences", which is what this line used to say. Cross-sentential
+    # assertion is the EXPECTED dominant cause; an endpoint no mention carries an id for, and
+    # an endpoint dropped for starting in an inter-sentence gap, contribute an unmeasured
+    # share. `RelationCoverage`'s docstring carries the full triage.
+    print(
+        "    cross-sentential assertion is the expected dominant cause of that last count, "
+        "not the whole of it -- the split is UNMEASURED"
     )
     for name, arm in line["arms"].items():
         score = arm["sentence"]

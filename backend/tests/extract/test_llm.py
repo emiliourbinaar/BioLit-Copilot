@@ -114,7 +114,11 @@ def test_the_request_pins_the_model_the_effort_and_a_budget_above_the_thinking_f
     LlmExtractor(client).findings(_paper())
     call = client.calls[0]
     assert call["model"] == "claude-opus-5"
-    assert call["output_config"]["effort"] == "medium"
+    # `low` IS THE PRODUCTION SETTING, and the default must be the setting that was actually
+    # run: the full-corpus arm this eval is quoted from was run at `low`, and no full corpus
+    # was ever run at `medium`. A default that no measurement stands behind invites a rerun
+    # whose numbers are silently not comparable to the recorded ones.
+    assert call["output_config"]["effort"] == "low"
     assert call["max_tokens"] >= 16000
     assert call["output_config"]["format"]["type"] == "json_schema"
     assert call["output_config"]["format"]["schema"]["required"] == ["finding_sentences"]

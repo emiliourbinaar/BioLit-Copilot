@@ -114,9 +114,12 @@ class LlmExtractor:
     add fallbacks here.
     """
 
-    def __init__(
-        self, client: Any, *, model: str = "claude-opus-5", effort: str = "medium"
-    ) -> None:
+    # `effort` DEFAULTS TO THE SETTING THAT WAS ACTUALLY RUN, not to the API's middle rung.
+    # The full BC5CDR Test-500 arm this project quotes was run at `low`; `medium` has never
+    # been run over a full corpus here. A default no measurement stands behind is how a rerun
+    # silently produces numbers that are not comparable to the recorded ones, and the run log
+    # would faithfully record the divergence only AFTER the money was spent.
+    def __init__(self, client: Any, *, model: str = "claude-opus-5", effort: str = "low") -> None:
         # `model` and `effort` are PUBLIC because the run log must name which model and which
         # effort produced an arm, and the only value that cannot disagree with the one the API
         # was asked for is the one this object hands the API. A runner passing its own copy

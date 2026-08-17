@@ -1932,12 +1932,153 @@ def test_the_run_logs_one_line_per_arm_with_buckets_and_bucket_a_recall(tmp_path
     assert written["arms"]["llm"]["diagnostics"]["refusals"] == 0
 
 
+# --- ADR-0014 sub-shape (3) again: the "N of M" pair the headline is quoted as -------------
+# `_run_documents` above collapses TWO value spaces at once. Every one of control-real's
+# misses lands in bucket (a), so `buckets.endpoint_lost == buckets.total`; and the stub's
+# selections give the LLM arm the same true-positive count against the restricted gold as
+# against the whole gold, so `restricted.tp == llm_metrics.tp`. Under that fixture BOTH
+#   "tp": restricted.tp              -> llm_metrics.tp
+#   "n_gold_sentences": buckets.endpoint_lost -> buckets.total
+# survive the entire suite, simultaneously -- so the numerator AND the denominator of the
+# figure this eval is quoted for ("127 of 270") were computed but never pinned. Only
+# `["recall"]` was asserted, and a ratio cannot pin the two integers it is a ratio of.
+#
+# The generalized lesson, which is the same one Task 8 recorded for the runner's gates: a
+# value computed in a runner needs a fixture in which it DIFFERS from its neighbours, not
+# merely a fixture in which it exists. The three documents below give every one of those
+# neighbours a distinct value.
+#
+# sentence_spans(SPLIT_TEXT_HIT) == [(0, 26), (27, 55)] and
+# sentence_spans(SPLIT_TEXT_APART) == [(0, 26), (27, 50), (51, 71)] -- both verified with the
+# real splitter, not assumed, and the mention offsets were read off the same run.
+SPLIT_TEXT_HIT = "Metformin caused acidosis. Metformin worsened acidosis."
+SPLIT_TEXT_APART = "Metformin caused acidosis. Aspirin relieved fever. Acidosis was severe."
+ASPIRIN, FEVER = "MESH:D001241", "MESH:D005334"
+
+
+def _split_documents() -> list[GoldDocument]:
+    """Three documents whose misses do NOT all land in bucket (a).
+
+    sA: RUN_TEXT_A's shape -- gold sentences {1, 2}, real entities link the chemical only, so
+        both misses are `endpoint_lost`. This is the bucket (a) population: 2 sentences.
+    sB: gold sentences {0, 1}, real entities link both endpoints in both, so both are HITS --
+        gold sentences that are in no bucket at all, which is what lets the LLM arm's
+        aggregate true positives exceed its restricted ones.
+    sC: gold sentence {0} only (sentence 1's annotated pair is not a gold relation, sentence 2
+        holds no chemical). The real entity set links BOTH endpoints -- the chemical in
+        sentence 0, the disease in sentence 2 -- so the miss is reachable and locatable but
+        never co-sentential: bucket (c), NOT bucket (a). This is what separates
+        `endpoint_lost` from `total`.
+    """
+    doc_a = GoldDocument(
+        pmid="sA",
+        text=RUN_TEXT_A,
+        mentions=[
+            _gm("sA", RUN_TEXT_A, 0, 9, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("sA", RUN_TEXT_A, 21, 29, EntityLabel.DISEASE, (DIS,)),
+            _gm("sA", RUN_TEXT_A, 39, 48, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("sA", RUN_TEXT_A, 54, 63, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("sA", RUN_TEXT_A, 71, 79, EntityLabel.DISEASE, (DIS,)),
+        ],
+    )
+    doc_b = GoldDocument(
+        pmid="sB",
+        text=SPLIT_TEXT_HIT,
+        mentions=[
+            _gm("sB", SPLIT_TEXT_HIT, 0, 9, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("sB", SPLIT_TEXT_HIT, 17, 25, EntityLabel.DISEASE, (DIS,)),
+            _gm("sB", SPLIT_TEXT_HIT, 27, 36, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("sB", SPLIT_TEXT_HIT, 46, 54, EntityLabel.DISEASE, (DIS,)),
+        ],
+    )
+    doc_c = GoldDocument(
+        pmid="sC",
+        text=SPLIT_TEXT_APART,
+        mentions=[
+            _gm("sC", SPLIT_TEXT_APART, 0, 9, EntityLabel.CHEMICAL, (CHEM,)),
+            _gm("sC", SPLIT_TEXT_APART, 17, 25, EntityLabel.DISEASE, (DIS,)),
+            _gm("sC", SPLIT_TEXT_APART, 27, 34, EntityLabel.CHEMICAL, (ASPIRIN,)),
+            _gm("sC", SPLIT_TEXT_APART, 44, 49, EntityLabel.DISEASE, (FEVER,)),
+            _gm("sC", SPLIT_TEXT_APART, 51, 59, EntityLabel.DISEASE, (DIS,)),
+        ],
+    )
+    return [doc_a, doc_b, doc_c]
+
+
+SPLIT_RELATIONS = {"sA": {(CHEM, DIS)}, "sB": {(CHEM, DIS)}, "sC": {(CHEM, DIS)}}
+SPLIT_ENTITIES: dict[str, list[Entity]] = {
+    "sA": [Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=CHEM)],
+    "sB": [
+        Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=CHEM),
+        Entity(text="acidosis", label=EntityLabel.DISEASE, start=17, end=25, canonical_id=DIS),
+        Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=27, end=36, canonical_id=CHEM),
+        Entity(text="acidosis", label=EntityLabel.DISEASE, start=46, end=54, canonical_id=DIS),
+    ],
+    # The linker resolved the chemical in sentence 0 and the disease in sentence 2, and missed
+    # the disease in sentence 0 -- both endpoints linked, never in one sentence.
+    "sC": [
+        Entity(text="Metformin", label=EntityLabel.CHEMICAL, start=0, end=9, canonical_id=CHEM),
+        Entity(text="Acidosis", label=EntityLabel.DISEASE, start=51, end=59, canonical_id=DIS),
+    ],
+}
+
+
+def _run_split(tmp_path, *, llm_extractor=None):
+    log = tmp_path / "extract_runs.jsonl"
+    line = run_extract_eval(
+        documents=_split_documents(),
+        relations=SPLIT_RELATIONS,
+        entities_by_paper=SPLIT_ENTITIES,
+        papers=[_paper(doc.pmid, doc.text) for doc in _split_documents()],
+        llm_extractor=llm_extractor,
+        dataset="unit",
+        log_path=str(log),
+        git_sha="deadbee",
+        now="2026-08-16T00:00:00+00:00",
+    )
+    return line, log
+
+
+def test_the_restricted_recalls_numerator_and_denominator_differ_from_their_neighbours(tmp_path):
+    # The stub answers [1] for sA (one of bucket (a)'s two sentences), [0, 1] for sB (both of
+    # its gold sentences, neither of which is in ANY bucket -- control-real hit them) and []
+    # for sC. Every number below is therefore hand-checkable and distinct:
+    #   restricted tp = 1   vs   the arm's aggregate tp = 3
+    #   restricted fn = 1   vs   the arm's aggregate fn = 2
+    #   bucket (a) = 2      vs   total misses = 3      vs   all gold sentences = 5
+    #   restricted recall = 1/2 = 0.5   vs   aggregate recall = 3/5 = 0.6
+    # Asserted on the WRITTEN line, because a field computed but not persisted is not
+    # reproducible -- and these two integers are what the eval's headline is quoted as.
+    client = _StubClient([_reply([1]), _reply([0, 1]), _reply([])])
+    line, log = _run_split(tmp_path, llm_extractor=LlmExtractor(client))
+    written = json.loads(log.read_text(encoding="utf-8").strip())
+    assert written == line
+
+    assert written["arms"]["llm"]["recall_on_endpoint_lost"] == {
+        "recall": 0.5,
+        "tp": 1,
+        "fn": 1,
+        "n_gold_sentences": 2,
+    }
+    # The neighbours the three fields above must NOT be reading, stated as values so the
+    # discrimination is visible rather than asserted only by implication.
+    assert written["arms"]["llm"]["sentence"]["tp"] == 3
+    assert written["arms"]["llm"]["sentence"]["fn"] == 2
+    assert written["arms"]["llm"]["sentence"]["recall"] == 0.6
+    buckets = written["arms"]["control-real"]["miss_buckets"]
+    assert (buckets["endpoint_lost"], buckets["never_co_sentential"], buckets["total"]) == (2, 1, 3)
+    assert buckets["endpoint_unlocatable"] == 0
+    assert buckets["co_sentential_elsewhere"] == 0
+    assert buckets["endpoint_lost_sentences"] == {"sA": [1, 2]}
+    assert written["n_gold_sentences"] == 5
+
+
 def test_the_written_line_names_the_model_and_effort_that_actually_produced_the_llm_arm(tmp_path):
     # A run whose log line does not say which model and effort produced it is not
     # attributable, and Task 9's pilot compares two efforts side by side. Both fields are
     # read OFF THE EXTRACTOR THAT MADE THE CALLS rather than passed in beside it, so the
     # logged value cannot disagree with the value the API was asked for -- which is what the
-    # last two assertions pin. A non-default effort is used so a hardcoded "medium" fails.
+    # last two assertions pin. A non-default effort is used so a hardcoded "low" fails.
     client = _StubClient([_reply([1]), _reply([1])])
     extractor = LlmExtractor(client, model="claude-opus-5-pilot", effort="high")
     _, log = _run(tmp_path, llm_extractor=extractor)
@@ -2028,8 +2169,14 @@ def test_a_control_only_run_omits_the_llm_arm_and_still_scores_both_controls(tmp
 def test_the_log_carries_the_bucket_a_membership_the_restricted_recall_was_scored_on(tmp_path):
     # recall_on_endpoint_lost is scored against a gold set that exists only in-process.
     # Persisting bucket (a)'s membership -- as sorted lists, since a frozenset is not JSON --
-    # is what lets a reader RECOMPUTE that number from the log instead of trusting it. The
-    # other three buckets stay counts only: no logged number is derived from them.
+    # is what names WHICH SENTENCES that number's denominator is, so the population it scores
+    # over is identifiable from the log rather than only describable.
+    # IT DOES NOT MAKE THE NUMBER RECOMPUTABLE, and this comment used to say it did. Recomputing
+    # it needs the LLM arm's per-sentence SELECTIONS, and no arm writes those -- `_arm_report`
+    # logs counts, a selection rate and diagnostics, never `pred`. The runner's own docstring
+    # is correctly weaker ("what a reader could NOT recompute"); this comment was the stronger
+    # of the two and was the wrong one. The other three buckets stay counts only: no logged
+    # number is derived from them.
     _, log = _run(tmp_path, llm_extractor=LlmExtractor(_StubClient([_reply([1]), _reply([1])])))
     written = json.loads(log.read_text(encoding="utf-8").strip())
     buckets = written["arms"]["control-real"]["miss_buckets"]
@@ -2197,10 +2344,13 @@ def test_the_written_log_line_carries_the_llm_arms_token_usage_and_the_controls_
     # are the same four keys, not an empty object, so a reader never branches on the arm name.
     for control in ("control-gold", "control-real"):
         assert written["arms"][control]["diagnostics"]["usage"] == dict.fromkeys(USAGE_FIELDS, 0)
-    # ... and the token counts sit beside the identity of the run that produced them.
+    # ... and the token counts sit beside the identity of the run that produced them. These
+    # are `LlmExtractor`'s DEFAULTS, and the default effort is `low` because that is the
+    # setting the recorded full-corpus run used; `medium` has never been run over a full
+    # corpus, so defaulting to it would produce numbers not comparable to the logged ones.
     assert (written["arms"]["llm"]["model"], written["arms"]["llm"]["effort"]) == (
         "claude-opus-5",
-        "medium",
+        "low",
     )
 
 
