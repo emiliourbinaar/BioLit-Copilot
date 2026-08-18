@@ -1,11 +1,15 @@
 import json
+import math
 import random
 import statistics
 
 import pytest
 
+from biolit.domain.enums import EntityLabel
+from biolit.ner.windowing import sentence_spans
 from biolit_evals.baselines import (
     MIN_SEEDS,
+    BaselineReport,
     beats_on_every_seed,
     bernoulli_recall_moments,
     distribution,
@@ -15,10 +19,13 @@ from biolit_evals.baselines import (
     load_llm_arms,
     n_selected,
     pad_to_budget,
+    render_report,
+    run_baselines,
     score_over_seeds,
     score_selection,
     select_at_rate,
 )
+from biolit_evals.mesh_gold import GoldDocument, GoldMention
 
 # Three documents of DIFFERENT lengths, so a selector that ignored the per-document count
 # and emitted a fixed index set would disagree on at least one of them.
@@ -325,6 +332,8 @@ def _log_line(
     n_selected_: int = 5,
     lost: dict[str, list[int]] | None = None,
     with_llm: bool = True,
+    timestamp: str = "2026-08-17T00:59:11+00:00",
+    lost_tp: int = 1,
 ) -> str:
     """One `extract_runs.jsonl` line, shaped exactly as `run_extract_eval` writes it."""
     arms: dict[str, object] = {
@@ -342,17 +351,18 @@ def _log_line(
             # tp == n_gold_sentences a reader that took the bucket size from `tp` would be
             # indistinguishable from one that took it from `n_gold_sentences` -- and on the
             # real log those two are 127 and 270, so the confusion would report the arm as
-            # recalling 127 of 127.
+            # recalling 127 of 127. `lost_tp` moves all three together rather than letting a
+            # caller set a recall that its own tp and fn contradict.
             "recall_on_endpoint_lost": {
-                "recall": 1 / 3,
-                "tp": 1,
-                "fn": 2,
+                "recall": lost_tp / 3,
+                "tp": lost_tp,
+                "fn": 3 - lost_tp,
                 "n_gold_sentences": 3,
             },
         }
     return json.dumps(
         {
-            "timestamp": "2026-08-17T00:59:11+00:00",
+            "timestamp": timestamp,
             "git_sha": "3c029c0",
             "dataset": dataset,
             "n_documents": 500,
@@ -460,3 +470,262 @@ def test_beating_an_arm_is_judged_on_the_worst_seed_not_on_the_mean():
     assert beats_on_every_seed(distribution([0.52] * MIN_SEEDS), 0.4704)
     # Ties do not count as beating: an equal draw is not evidence for the baseline.
     assert not beats_on_every_seed(distribution([0.4704] * MIN_SEEDS), 0.4704)
+
+
+# --------------------------------------------------------------------------------------
+# `run_baselines` -- the orchestration that used to sit inside `main` and was untestable
+# there. FOUND BY MUTATION: five values `main` chose survived every mutant with the whole
+# suite green -- the `assert_gold_sentence_regression_pin` CALL, the budget arm (`arms[0]`
+# vs `arms[-1]`, which silently re-targets the padded row at a DIFFERENT logged run and
+# changes a number quoted as this branch's headline), the rate denominator, the padded
+# row's base `k`, and the positional sweep. `main` keeps no direct test, matching
+# `end_to_end.main` / `ner_eval.main` / `cluster_eval.main`; everything it orchestrated
+# that can be tested moved into `run_baselines` and `render_report`, which are tested here.
+#
+# SIX sentences per document, deliberately. `first 4` must differ from `first 3` and from
+# `first 5` on this fixture, and the padded budget must differ between the two logged arms
+# -- a fixture where the mutated and original values coincide pins nothing, which is the
+# trap that produced this same finding twice already on this branch.
+_SENTENCES = (
+    "Metformin was given.",
+    "Acidosis followed metformin use.",
+    "Aspirin caused fever.",
+    "Filler four here.",
+    "Filler five here.",
+    "Filler six here.",
+)
+_TEXT = " ".join(_SENTENCES)
+_MET, _ACIDOSIS = "MESH:D008687", "MESH:D000138"
+_ASPIRIN, _FEVER = "MESH:D001241", "MESH:D005334"
+
+
+def _corpus_mention(pmid: str, needle: str, label: EntityLabel, mesh_id: str) -> GoldMention:
+    # Offsets are LOCATED in the text rather than written down, so a reworded fixture cannot
+    # silently detach a mention from the sentence it is supposed to sit in.
+    start = _TEXT.index(needle)
+    return GoldMention(
+        pmid=pmid,
+        start=start,
+        end=start + len(needle),
+        text=needle,
+        label=label,
+        mesh_ids=(mesh_id,),
+    )
+
+
+def _corpus_document(pmid: str) -> GoldDocument:
+    return GoldDocument(
+        pmid=pmid,
+        text=_TEXT,
+        mentions=[
+            _corpus_mention(pmid, "Acidosis", EntityLabel.DISEASE, _ACIDOSIS),
+            _corpus_mention(pmid, "metformin use", EntityLabel.CHEMICAL, _MET),
+            _corpus_mention(pmid, "Aspirin", EntityLabel.CHEMICAL, _ASPIRIN),
+            _corpus_mention(pmid, "fever", EntityLabel.DISEASE, _FEVER),
+        ],
+    )
+
+
+_CORPUS = [_corpus_document(pmid) for pmid in ("d1", "d2", "d3")]
+_RELATIONS = {document.pmid: {(_MET, _ACIDOSIS), (_ASPIRIN, _FEVER)} for document in _CORPUS}
+# 3 documents x 6 sentences = 18; sentences 1 and 2 of each are gold, so 6 gold sentences.
+_COUNTS = {document.pmid: len(sentence_spans(document.text)) for document in _CORPUS}
+
+# Bucket (a) holds ONE sentence inside `first 4` (d1's index 1) and ONE outside it (d2's
+# index 5). Both inside would make the padded row's restricted recall a constant 1.0 and
+# the ROBUST/NOT ROBUST verdict unfalsifiable; both outside would make it depend only on
+# the padding. One of each keeps the worst observed draw at 0.5000 and still varying.
+_LOST = {"d1": [1], "d2": [5]}
+
+
+def _two_arm_log(tmp_path) -> str:
+    """A log with TWO full-corpus LLM lines whose selection counts DIFFER.
+
+    Two, and different, is the whole point: with one line, or with two carrying the same
+    `n_selected`, `arms[0]` and `arms[-1]` collapse to the same budget and the mutant that
+    re-targets the padded row at a different run survives untouched.
+    """
+    path = tmp_path / "runs.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                _log_line(
+                    effort="low",
+                    n_selected_=14,
+                    lost=_LOST,
+                    timestamp="2026-08-17T00:59:11+00:00",
+                    lost_tp=1,
+                ),
+                _log_line(
+                    effort="high",
+                    n_selected_=16,
+                    lost=_LOST,
+                    timestamp="2026-08-17T01:51:00+00:00",
+                    lost_tp=2,
+                ),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return str(path)
+
+
+def _report(tmp_path, log_path: str | None = None) -> BaselineReport:
+    return run_baselines(
+        documents=_CORPUS,
+        relations=_RELATIONS,
+        log_path=_two_arm_log(tmp_path) if log_path is None else log_path,
+        n_seeds=MIN_SEEDS,
+    )
+
+
+def test_run_baselines_derives_the_corpus_shape_from_the_documents_it_was_handed(tmp_path):
+    # The counts come from `sentence_spans(document.text)` -- the SAME string gold and the
+    # miss buckets split -- so a baseline's sentence indices mean what the arm's meant.
+    report = _report(tmp_path)
+    assert (report.n_documents, report.n_sentences, report.n_gold) == (3, 18, 6)
+    assert report.n_endpoint_lost == 2
+
+
+# FIVE HUNDRED documents, because `_GOLD_SENTENCE_PINS` carries an entry for 500 documents
+# and for NO other corpus size. On the 3-document fixture above the pin is a no-op, so a
+# `run_baselines` with the pin CALL deleted passes every other test in this file unchanged --
+# the exact value-collapse that let the mutant survive in the first place. At 500 documents
+# this corpus yields 1000 gold sentences against the pinned 1145, so the call is the only
+# thing here that can raise.
+_PINNED_CORPUS = [_corpus_document(f"p{index:03d}") for index in range(500)]
+_PINNED_RELATIONS = {
+    document.pmid: {(_MET, _ACIDOSIS), (_ASPIRIN, _FEVER)} for document in _PINNED_CORPUS
+}
+
+
+def test_run_baselines_puts_the_corpus_through_the_arms_own_gold_construction_pin(tmp_path):
+    # WHAT THE CALL DEFENDS is the property this module's docstring claims outright: these
+    # baselines are scored against the SAME gold the logged arm was scored against. Drop the
+    # call and a corpus whose gold construction has drifted is scored in silence, every row of
+    # the table compares two populations, and nothing printed says so -- the module would be
+    # reproducing the defect it exists to fix. `SystemExit` rather than `ValueError` because
+    # the pin is a runner-level stop, matching how `run_extract_eval` reaches it.
+    with pytest.raises(SystemExit, match="gold-sentence pin"):
+        run_baselines(
+            documents=_PINNED_CORPUS,
+            relations=_PINNED_RELATIONS,
+            log_path=_two_arm_log(tmp_path),
+            n_seeds=MIN_SEEDS,
+        )
+
+
+def test_the_budget_comes_from_the_first_logged_arm_and_not_from_the_last(tmp_path):
+    # THE MUTANT THIS EXISTS FOR is `arms[0]` -> `arms[-1]`, which re-targets the padded row at
+    # a DIFFERENT logged run and moves a number this branch quotes as its headline: on the real
+    # log it swaps the 2274-sentence `low` run for the 2269-sentence `high` one. Nothing printed
+    # contradicts it, because the row's label and its `n` both follow whatever budget was used.
+    #
+    # The fixture log carries TWO full-corpus arms whose `n_selected` DIFFER (14 and 16). Two
+    # equal counts, or a single logged line, would collapse `arms[0]` and `arms[-1]` onto one
+    # value and pin nothing at all.
+    report = _report(tmp_path)
+    assert report.budget == 14
+    assert (report.budget_arm.effort, report.budget_arm.timestamp) == (
+        "low",
+        "2026-08-17T00:59:11+00:00",
+    )
+    # The budget is not merely STORED as 14 -- the padded row was actually built to it.
+    # `pad_to_budget` fixes `n_selected` by construction, so this column is a point mass at
+    # whichever budget the row really used.
+    assert report.padded.n_selected.mean == 14.0
+    assert report.padded.n_selected.minimum == report.padded.n_selected.maximum == 14.0
+    # And the column that carries the claim moves with it: padding to 16 instead of 14 draws
+    # 4 of the 6 unselected sentences instead of 2, lifting bucket-(a) recall from 0.68 to 0.85.
+    assert report.padded.recall_on_endpoint_lost.mean == pytest.approx(0.68, abs=0.03)
+
+
+def test_the_selection_rate_is_the_budget_over_the_corpus_sentence_count(tmp_path):
+    # `budget / n_sentences` is the rate the WHOLE comparison is matched on: it is the p the
+    # rate-matched null draws at, the p its closed-form recall equals, and the figure printed
+    # beside the budget. An off-by-one denominator leaves every row well-formed and every one
+    # of them describing a corpus one sentence larger than the one that was scored.
+    report = _report(tmp_path)
+    assert report.rate == pytest.approx(14 / 18)
+    # `bernoulli_recall_moments(rate, n_lost).mean` IS the rate exactly, so this pins that the
+    # rate reached the closed form rather than only the `rate` field. The SD is the half that
+    # depends on bucket (a)'s size, and it is written out rather than re-derived.
+    assert report.closed_form.mean == pytest.approx(14 / 18)
+    assert report.closed_form.sd == pytest.approx(math.sqrt((14 / 18) * (4 / 18) / 2))
+
+
+def test_the_padded_row_is_built_on_the_first_four_sentences_its_label_claims(tmp_path):
+    # THE BASE IS THE ONLY THING THAT CAN BE CHECKED AGAINST THE CLAIM. The padded row is
+    # LABELLED "first 4 + random pad to N" and its `n_selected` is the budget whatever base it
+    # started from, so a base built with the wrong `k` prints a row that contradicts nothing.
+    # Six sentences per document is deliberate: `first 3`, `first 4` and `first 5` are three
+    # different selections here, where four-sentence documents would collapse two of them.
+    report = _report(tmp_path)
+    assert report.padded_base == {"d1": {0, 1, 2, 3}, "d2": {0, 1, 2, 3}, "d3": {0, 1, 2, 3}}
+    assert n_selected(report.padded_base) == 12
+    # The base actually REACHED the padded row, not just the report field: a 9-sentence
+    # `first 3` base padded to the same budget of 14 draws 5 of the 9 remaining sentences
+    # instead of 2 of 6, which lifts bucket-(a) recall from 0.68 to 0.78.
+    assert report.padded.recall_on_endpoint_lost.mean == pytest.approx(0.68, abs=0.03)
+
+
+def test_the_positional_sweep_is_first_2_first_4_and_last_4_in_that_order(tmp_path):
+    # BOTH HALVES OF EVERY ROW ARE PINNED -- the label AND the score -- because the two mutants
+    # here fail differently. `for k in (2, 4)` -> `(2, 5)` renames the row as well as rescoring
+    # it; a `first_k(counts, k + 1)` would keep the label and change only the score, and a row
+    # whose label disagrees with its numbers is the worse of the two.
+    #
+    # Gold is sentences 1 and 2 of every document, so the three rows carry three different
+    # (n, recall) pairs and no neighbouring k reproduces any of them: `first 3` recalls 1.0 at
+    # n=9, `first 5` 1.0 at n=15, `last 3` 0.0 at n=9, `last 5` 1.0 at n=15.
+    report = _report(tmp_path)
+    assert [(label, scores.n_selected, scores.recall) for label, scores in report.positional] == [
+        ("first 2", 6, 0.5),
+        ("first 4", 12, 1.0),
+        ("last 4", 12, 0.5),
+    ]
+
+
+def test_the_rendered_report_names_the_run_the_budget_was_taken_from(tmp_path):
+    # `budget_arm` is CARRIED rather than re-derived at print time. A renderer that named the
+    # arm by re-indexing `report.arms` could name a different run than the budget came from,
+    # and the reader would be told the padded row matches an arm it does not match -- worse
+    # than the wrong budget alone, because the mismatch is asserted rather than merely present.
+    lines = render_report(_report(tmp_path))
+    assert "Budget for the padded row: 14 sentences (rate 0.7778), from low" in lines
+    assert "  run 2026-08-17T00:59:11+00:00 at sha 3c029c0. No API call was made." in lines
+    assert any(line.startswith("first 4 + random pad to 14") for line in lines)
+    assert any(line.startswith("rate-matched random p=0.7778") for line in lines)
+
+
+def test_the_rendered_verdict_is_judged_against_every_arm_on_the_worst_draw(tmp_path):
+    # The verdict loop is the ONLY caller of `beats_on_every_seed`, so a verdict computed
+    # inside an unreachable `main` was a judgement nothing checked. The two fixture arms sit on
+    # OPPOSITE sides of the padded row's worst observed draw (0.5000) -- `low` scored 1/3 on
+    # bucket (a), `high` 2/3 -- so one row must read ROBUST and the other NOT ROBUST. A fixture
+    # where both arms fell the same side would leave a hard-wired verdict indistinguishable
+    # from a computed one, and the row is also the only place the arm's own score is printed
+    # beside the baseline's WORST draw rather than its mean.
+    lines = render_report(_report(tmp_path))
+    assert [line for line in lines if " -- worst of " in line] == [
+        "  vs LLM low (2026-08-17T00:59) at 0.3333: ROBUST -- worst of 200 draws is 0.5000",
+        "  vs LLM high (2026-08-17T01:51) at 0.6667: NOT ROBUST -- worst of 200 draws is 0.5000",
+    ]
+
+
+def test_the_seed_count_the_caller_asked_for_is_the_seed_count_that_is_drawn(tmp_path):
+    # MIN_SEEDS + 1, not MIN_SEEDS: every other test here passes exactly MIN_SEEDS, so a
+    # `range(n_seeds)` hard-wired back to `range(MIN_SEEDS)` would agree with all of them and
+    # the `--seeds` flag would silently stop doing anything. The printed report reads the
+    # OBSERVED `n_draws` rather than the requested count, so a request that was not honoured
+    # would not even show up in the prose beneath the table.
+    report = run_baselines(
+        documents=_CORPUS,
+        relations=_RELATIONS,
+        log_path=_two_arm_log(tmp_path),
+        n_seeds=MIN_SEEDS + 1,
+    )
+    assert report.padded.recall_on_endpoint_lost.n_draws == MIN_SEEDS + 1
+    assert report.random_null.recall_on_endpoint_lost.n_draws == MIN_SEEDS + 1
+    assert f"over {MIN_SEEDS + 1} seeds" in "\n".join(render_report(report))

@@ -21,7 +21,13 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 
-from biolit_evals.extract_eval import sentence_metrics
+from biolit.ner.windowing import sentence_spans
+from biolit_evals.extract_eval import (
+    assert_gold_sentence_regression_pin,
+    gold_finding_sentences,
+    sentence_metrics,
+)
+from biolit_evals.mesh_gold import GoldDocument
 
 Selection = dict[str, set[int]]
 
@@ -510,20 +516,222 @@ def load_llm_arms(log_path: str, *, dataset: str, n_sentences: int) -> list[LlmA
     return arms
 
 
+@dataclass(frozen=True)
+class BaselineReport:
+    """Everything one baselines run COMPUTED, separated from how it prints.
+
+    WHY THIS TYPE EXISTS AT ALL. All of this used to be locals inside `main`, and `main` is
+    untested by standing precedent (`end_to_end.main`, `ner_eval.main`, `cluster_eval.main`)
+    -- so five values it chose had no test at all, and a reviewer's mutants on every one of
+    them survived a fully green suite: the gold-pin CALL, `arms[0]` vs `arms[-1]` for the
+    budget, the rate denominator, the padded row's base `k`, and the positional sweep. Two of
+    those change quoted numbers. Returning the run's decisions instead of printing them is
+    what lets a test see them.
+
+    `padded_base` IS CARRIED FOR THAT REASON, not for rendering. The padded row's label
+    claims it padded `first 4`, and the row's `n_selected` is the budget whatever base it
+    started from, so nothing printed contradicts a base built with the wrong `k`. The base
+    itself is the only thing that can be checked against the claim.
+
+    `budget_arm` is the arm the budget was taken from, carried rather than re-derived at
+    print time: the rule is "the FIRST logged full-corpus arm", and a renderer that named an
+    arm by re-indexing the list could name a different one than the budget came from.
+    """
+
+    n_documents: int
+    n_sentences: int
+    n_gold: int
+    n_endpoint_lost: int
+    budget: int
+    budget_arm: LlmArm
+    rate: float
+    padded_base: Selection
+    positional: tuple[tuple[str, Scores], ...]
+    padded: ScoreDistribution
+    random_null: ScoreDistribution
+    arms: tuple[LlmArm, ...]
+    closed_form: Moments
+
+
+def run_baselines(
+    *,
+    documents: Sequence[GoldDocument],
+    relations: Mapping[str, set[tuple[str, str]]],
+    log_path: str,
+    n_seeds: int,
+) -> BaselineReport:
+    """Score every baseline beside the logged LLM arms. Makes NO API call and needs no credential.
+
+    The corpus is INJECTED rather than downloaded here, which is the whole point of the split:
+    `main` owns the one impure step (the ~20 MB fetch) and this owns every decision worth
+    testing, matching how `run_extract_eval` and `run_cluster_eval` are already shaped.
+    """
+    # The SAME string the gold and the miss buckets split (`title + " " + abstract`), for the
+    # same reason `extract_eval.main` passes it whole: any other segmentation shifts every
+    # sentence index between these baselines and the arm they are compared against.
+    counts = {document.pmid: len(sentence_spans(document.text)) for document in documents}
+    n_sentences = sum(counts.values())
+    gold = gold_finding_sentences(documents, relations)
+    n_gold = n_selected(gold)
+    # The arm's own gold-construction pin, reused rather than re-checked: if gold construction
+    # has drifted since the logged run, these baselines are scored against a different gold
+    # than the arm was, and every comparison below is between two populations.
+    assert_gold_sentence_regression_pin(len(documents), n_gold)
+
+    arms = load_llm_arms(log_path, dataset="bc5cdr_test500", n_sentences=n_sentences)
+    # ADR-0014 THIRD BRANCH, FLAGGED NOT TESTED: `arms[0]` here is PROVABLY equivalent to any
+    # other index, because `load_llm_arms` raises unless every arm carries identical bucket-(a)
+    # membership -- a guarantee that has its own test. `arms[-1]` was tried as a mutant and
+    # survived green, correctly: there is no behaviour to pin. The `arms[0]` two lines below is
+    # a different matter entirely, since the arms' `n_selected` genuinely differ.
+    endpoint_lost = arms[0].endpoint_lost
+    n_lost = n_selected(endpoint_lost)
+    # THE BUDGET IS THE FIRST LOGGED FULL-CORPUS ARM'S SELECTION COUNT. A fixed rule with no
+    # branch, so the padded row cannot quietly re-target a different run between invocations;
+    # the arm it matches is named in the output beside it.
+    budget = arms[0].scores.n_selected
+    rate = budget / n_sentences
+    seeds = range(n_seeds)
+
+    def score(selection: Mapping[str, AbstractSet[int]]) -> Scores:
+        return score_selection(
+            selection, gold=gold, endpoint_lost=endpoint_lost, n_sentences=n_sentences
+        )
+
+    positional = [(f"first {k}", score(first_k(counts, k))) for k in (2, 4)]
+    positional.append(("last 4", score(last_k(counts, 4))))
+
+    base = first_k(counts, 4)
+    padded = score_over_seeds(
+        lambda rng: pad_to_budget(base, counts, budget, rng),
+        gold=gold,
+        endpoint_lost=endpoint_lost,
+        n_sentences=n_sentences,
+        seeds=seeds,
+    )
+    random_null = score_over_seeds(
+        lambda rng: select_at_rate(counts, rate, rng),
+        gold=gold,
+        endpoint_lost=endpoint_lost,
+        n_sentences=n_sentences,
+        seeds=seeds,
+    )
+    return BaselineReport(
+        n_documents=len(documents),
+        n_sentences=n_sentences,
+        n_gold=n_gold,
+        n_endpoint_lost=n_lost,
+        budget=budget,
+        budget_arm=arms[0],
+        rate=rate,
+        padded_base=base,
+        positional=tuple(positional),
+        padded=padded,
+        random_null=random_null,
+        arms=tuple(arms),
+        closed_form=bernoulli_recall_moments(rate, n_lost),
+    )
+
+
+def render_report(report: BaselineReport) -> list[str]:
+    """The printed table and its surrounding prose, as lines.
+
+    A LIST OF LINES RATHER THAN `print` CALLS, so the rendering is a value a test can assert
+    on. The verdict loop at the end is the reason that matters beyond tidiness: it is the only
+    caller of `beats_on_every_seed`, and a verdict computed inside an unreachable `main` is a
+    judgement nothing checks.
+
+    THE SEED COUNT PRINTED IS THE NUMBER OF DRAWS ACTUALLY MADE (`n_draws`), not the number
+    requested. `run_baselines` builds `range(n_seeds)` so the two agree today; reading the
+    observed one means a future path that dropped a draw could not print the requested count
+    over it.
+    """
+    padded_recall = report.padded.recall_on_endpoint_lost
+    lines = [
+        f"BC5CDR Test-500: {report.n_documents} documents, {report.n_sentences} sentences, "
+        f"{report.n_gold} gold, {report.n_endpoint_lost} of them in bucket (a) "
+        "`endpoint_lost`.",
+        f"Budget for the padded row: {report.budget} sentences (rate {report.rate:.4f}), "
+        f"from {report.budget_arm.effort}",
+        f"  run {report.budget_arm.timestamp} at sha {report.budget_arm.git_sha}. "
+        "No API call was made.",
+        "",
+        HEADER,
+    ]
+    lines.extend(format_row(label, scores) for label, scores in report.positional)
+    lines.append(format_row(f"first 4 + random pad to {report.budget}", report.padded))
+    lines.append(format_row(f"rate-matched random p={report.rate:.4f}", report.random_null))
+    lines.extend(
+        format_row(f"LLM {arm.effort} ({arm.timestamp[:16]})", arm.scores) for arm in report.arms
+    )
+
+    n_draws = padded_recall.n_draws
+    lines.append("")
+    lines.append(f"Stochastic rows are mean +/- SD over {n_draws} seeds, NOT a single draw.")
+    for label, spread in (
+        ("first 4 + pad", padded_recall),
+        ("rate-matched random", report.random_null.recall_on_endpoint_lost),
+    ):
+        lines.append(f"  {label:<22} recall on endpoint_lost: {spread}")
+
+    lines.append("")
+    lines.append(
+        f"CLOSED FORM for the rate-matched null on bucket (a): {report.closed_form}. Under "
+        "independent Bernoulli(p)"
+    )
+    lines.append(
+        "  selection E[recall] = p EXACTLY on any gold subset, so the mean needs no simulation "
+        "at all;"
+    )
+    lines.append(
+        "  the empirical row above is a CHECK on the plumbing, not the source of the number."
+    )
+
+    lines.append("")
+    lines.append("IS THE POSITIONAL BASELINE'S WIN ON BUCKET (a) ROBUST ACROSS SEEDS?")
+    lines.append("  Judged on the WORST observed draw, not the mean -- and over these seeds only.")
+    for arm in report.arms:
+        arm_recall = arm.scores.recall_on_endpoint_lost
+        verdict = "ROBUST" if beats_on_every_seed(padded_recall, arm_recall) else "NOT ROBUST"
+        lines.append(
+            f"  vs LLM {arm.effort} ({arm.timestamp[:16]}) at {arm_recall:.4f}: {verdict} -- "
+            f"worst of {padded_recall.n_draws} draws is {padded_recall.minimum:.4f}"
+        )
+
+    lines.append("")
+    lines.append(
+        "Every row above is free: the corpus is public and the arms are READ from the run log."
+    )
+    lines.append(
+        "No baseline here is a claim that the arm is worthless -- they are the comparators that"
+    )
+    lines.append(
+        "make `recall_on_endpoint_lost` interpretable at all, since control-real scores 0 on it"
+    )
+    lines.append("BY CONSTRUCTION (ADR-0015).")
+    return lines
+
+
 def main(argv: list[str] | None = None) -> None:
+    # THE THIN SHELL, deliberately untested, matching `end_to_end.main`, `ner_eval.main` and
+    # `cluster_eval.main`. It parses arguments, performs the ONE impure step (the corpus
+    # download), and prints -- every decision worth a test lives in `run_baselines` and
+    # `render_report` instead, because the five that used to live here had none.
+    #
     # Heavy imports are local so importing this module for scoring stays cheap and offline,
     # matching `extract_eval.main` and `cluster_eval.main`. NOTHING BELOW NEEDS A CREDENTIAL:
     # the arms are read from the committed log, never re-run, so this costs nothing but the
     # corpus download.
+    #
+    # STILL UNPINNED HERE, NAMED RATHER THAN LEFT SILENT: `TEST_MEMBER`. Swapping it for the
+    # train member would score baselines on a corpus the logged arms never ran on, and the only
+    # thing that would catch it is the gold-sentence pin firing on a different document count
+    # -- from inside `run_baselines`, one call further down. That is the same residual
+    # `extract_eval.main` carries, and it is the price of leaving the shell untested.
     import argparse
 
     from biolit.config import get_settings
-    from biolit.ner.windowing import sentence_spans
-    from biolit_evals.extract_eval import (
-        DEFAULT_LOG,
-        assert_gold_sentence_regression_pin,
-        gold_finding_sentences,
-    )
+    from biolit_evals.extract_eval import DEFAULT_LOG
     from biolit_evals.mesh_gold_download import (
         TEST_MEMBER,
         load_bc5cdr_cid_relations,
@@ -549,111 +757,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    settings = get_settings()
-    url = settings.bc5cdr_cdr_zip_url
-    documents = load_bc5cdr_documents(url, TEST_MEMBER)
-    relations = load_bc5cdr_cid_relations(url, TEST_MEMBER)
-    # The SAME string the gold and the miss buckets split (`title + " " + abstract`), for the
-    # same reason `extract_eval.main` passes it whole: any other segmentation shifts every
-    # sentence index between these baselines and the arm they are compared against.
-    counts = {document.pmid: len(sentence_spans(document.text)) for document in documents}
-    n_sentences = sum(counts.values())
-    gold = gold_finding_sentences(documents, relations)
-    n_gold = n_selected(gold)
-    # The arm's own gold-construction pin, reused rather than re-checked: if gold construction
-    # has drifted since the logged run, these baselines are scored against a different gold
-    # than the arm was, and every comparison below is between two populations.
-    assert_gold_sentence_regression_pin(len(documents), n_gold)
-
-    arms = load_llm_arms(args.log, dataset="bc5cdr_test500", n_sentences=n_sentences)
-    endpoint_lost = arms[0].endpoint_lost
-    n_lost = n_selected(endpoint_lost)
-    # THE BUDGET IS THE FIRST LOGGED FULL-CORPUS ARM'S SELECTION COUNT. A fixed rule with no
-    # branch, so the padded row cannot quietly re-target a different run between invocations;
-    # the arm it matches is named in the output beside it.
-    budget = arms[0].scores.n_selected
-    rate = budget / n_sentences
-    seeds = range(args.seeds)
-
-    print(
-        f"BC5CDR Test-500: {len(documents)} documents, {n_sentences} sentences, {n_gold} gold, "
-        f"{n_lost} of them in bucket (a) `endpoint_lost`."
+    url = get_settings().bc5cdr_cdr_zip_url
+    report = run_baselines(
+        documents=load_bc5cdr_documents(url, TEST_MEMBER),
+        relations=load_bc5cdr_cid_relations(url, TEST_MEMBER),
+        log_path=args.log,
+        n_seeds=args.seeds,
     )
-    print(f"Budget for the padded row: {budget} sentences (rate {rate:.4f}), from {arms[0].effort}")
-    print(f"  run {arms[0].timestamp} at sha {arms[0].git_sha}. No API call was made.\n")
-    print(HEADER)
-
-    for k in (2, 4):
-        print(
-            format_row(
-                f"first {k}",
-                score_selection(
-                    first_k(counts, k),
-                    gold=gold,
-                    endpoint_lost=endpoint_lost,
-                    n_sentences=n_sentences,
-                ),
-            )
-        )
-    print(
-        format_row(
-            "last 4",
-            score_selection(
-                last_k(counts, 4), gold=gold, endpoint_lost=endpoint_lost, n_sentences=n_sentences
-            ),
-        )
-    )
-
-    base = first_k(counts, 4)
-    padded = score_over_seeds(
-        lambda rng: pad_to_budget(base, counts, budget, rng),
-        gold=gold,
-        endpoint_lost=endpoint_lost,
-        n_sentences=n_sentences,
-        seeds=seeds,
-    )
-    print(format_row(f"first 4 + random pad to {budget}", padded))
-    random_null = score_over_seeds(
-        lambda rng: select_at_rate(counts, rate, rng),
-        gold=gold,
-        endpoint_lost=endpoint_lost,
-        n_sentences=n_sentences,
-        seeds=seeds,
-    )
-    print(format_row(f"rate-matched random p={rate:.4f}", random_null))
-
-    for arm in arms:
-        print(format_row(f"LLM {arm.effort} ({arm.timestamp[:16]})", arm.scores))
-
-    print(f"\nStochastic rows are mean +/- SD over {args.seeds} seeds, NOT a single draw.")
-    for label, spread in (("first 4 + pad", padded), ("rate-matched random", random_null)):
-        observed = spread.recall_on_endpoint_lost
-        print(f"  {label:<22} recall on endpoint_lost: {observed}")
-
-    closed = bernoulli_recall_moments(rate, n_lost)
-    print(
-        f"\nCLOSED FORM for the rate-matched null on bucket (a): {closed}. Under independent "
-        f"Bernoulli(p)\n  selection E[recall] = p EXACTLY on any gold subset, so the mean needs "
-        "no simulation at all;\n  the empirical row above is a CHECK on the plumbing, not the "
-        "source of the number."
-    )
-
-    print("\nIS THE POSITIONAL BASELINE'S WIN ON BUCKET (a) ROBUST ACROSS SEEDS?")
-    print("  Judged on the WORST observed draw, not the mean -- and over these seeds only.")
-    for arm in arms:
-        arm_recall = arm.scores.recall_on_endpoint_lost
-        spread = padded.recall_on_endpoint_lost
-        verdict = "ROBUST" if beats_on_every_seed(spread, arm_recall) else "NOT ROBUST"
-        print(
-            f"  vs LLM {arm.effort} ({arm.timestamp[:16]}) at {arm_recall:.4f}: {verdict} -- "
-            f"worst of {spread.n_draws} draws is {spread.minimum:.4f}"
-        )
-    print(
-        "\nEvery row above is free: the corpus is public and the arms are READ from the run "
-        "log.\nNo baseline here is a claim that the arm is worthless -- they are the "
-        "comparators that\nmake `recall_on_endpoint_lost` interpretable at all, since "
-        "control-real scores 0 on it\nBY CONSTRUCTION (ADR-0015)."
-    )
+    for line in render_report(report):
+        print(line)
 
 
 if __name__ == "__main__":
