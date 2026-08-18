@@ -2,6 +2,17 @@
 
 **Date:** 2026-07-29
 **Status:** Approved (brainstorm complete, ready for implementation planning)
+
+> ⚠️ **SUPERSEDED IN PART BY ADR-0015.** This document predicts that meaningful recall on
+> bucket (a) would be *the direct empirical proof* of escaping the entity bottleneck, and in places that it
+> would invert the standing finding. **It does not.** `control-real` scores 0 on that bucket
+> BY CONSTRUCTION -- the bucket is defined from its own misses -- so that comparison could not
+> have come out any other way. Measured against baselines matched on what the arm spends, the
+> LLM arm is indistinguishable from a rate-matched random selector (z = +0.16) and **loses to
+> the first four sentences of the abstract at an identical budget** (0.5496 +/- 0.0128 against
+> 0.4704). The claim was retracted; see ADR-0015 and `EVAL_REPORT.md` Phase 4. Kept unedited
+> below as the reasoning that was actually followed.
+
 **Corpus:** BC5CDR Test-500
 **Model:** `claude-opus-5` ($5 / $25 per MTok)
 

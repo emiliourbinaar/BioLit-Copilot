@@ -1767,109 +1767,123 @@ match the observation, and do not commit the run as a result.
 
 ---
 
-## Phase 4: pricing an LLM extractor against a free deterministic control — and a headline that did not survive its own null model
+## Phase 4: pricing an LLM extractor against a free deterministic control — and against the first four sentences of the abstract
 
-### ⭐ Headline finding: the LLM arm is indistinguishable from rate-matched random selection
+### ⭐ Headline finding: the LLM arm loses to a positional heuristic at an identical selection budget
 
-**An LLM extractor scored 0.4704 recall on the `endpoint_lost` population — the sentences the
-real pipeline is structurally incapable of reaching. A random selector matched on its selection
-rate scores 0.4640 ± 0.0300. That is a z of +0.21. There is no measured capability here.**
+**Selecting the first four sentences of each abstract and padding at random to exactly the
+budget the LLM arm spent beats that arm on precision, recall, F1, and on the bottleneck
+population it was credited with reaching.**
 
-The arm selects **2274 of 4885 sentences — 46.55% of every sentence in the corpus.** A selector
-that picks 46.55% of sentences at random has expected recall of 0.4655 on *every* subset of
-gold, including this one. Recovering ~47% of the bottleneck population is what that volume buys,
-and nothing more.
-
-| Metric | Rate-matched random null (2000 trials) | LLM arm | z |
-|---|---|---|---|
-| **Recall on `endpoint_lost`** | 0.4640 ± 0.0300 | 0.4704 | **+0.21** |
-| Recall overall | 0.4649 ± 0.0149 | 0.4559 | **−0.60** |
-| Precision | 0.2342 ± 0.0064 | 0.2296 | **−0.71** |
-
-**On every metric the arm is statistically indistinguishable from chance at its own rate, and
-directionally slightly below it on two of three.**
-
-### The error this section originally shipped, and the shape of it
-
-An earlier version of this report led with the 0.4704 as *"the first measured crack in the entity
-bottleneck"* — the first evidence that a bottleneck this project had priced twice was reachable.
-**That claim was wrong, and the way it was reached is worth recording, because the error is
-reusable.**
-
-The only comparator offered was `control-real`, which scores **exactly 0** on this population.
-It cannot score anything else: `endpoint_lost` is *defined* as a subset of control-real's own
-misses. **The comparison could not have come out any other way**, so it tested nothing. A
-comparator that structurally cannot lose is not evidence, however large the gap it produces.
-
-> **The guaranteed-zero comparator.** Before reporting that an arm beats a baseline on a
-> restricted population, check whether the baseline *could* have scored above zero on that
-> population. If the restriction is defined in terms of the baseline's own failures, it could
-> not, and the comparison measures the definition rather than the arm. The test that means
-> something is a null model matched on whatever the arm spends — here, selection rate.
-
-Two checks would each have caught it, and both were free, using only figures already in the
-committed run log:
-
-1. **Recall on the complement.** If the arm reached the bottleneck population *preferentially*,
-   it would score higher there than on the gold sentences it could already reach. It does not:
-
-   | run | R overall | R@`endpoint_lost` | R@complement | Δ | Δ/SE |
-   |---|---|---|---|---|---|
-   | low (run 1) | 0.4559 | 0.4704 (127/270) | 0.4514 (395/875) | +0.0189 | 0.62 |
-   | low (run 2) | 0.4576 | 0.4704 (127/270) | 0.4537 (397/875) | +0.0167 | 0.55 |
-   | high | 0.4585 | 0.4630 (125/270) | 0.4571 (400/875) | +0.0058 | 0.19 |
-
-2. **A rate-matched null**, as above.
-
-The report's own stated rationale for logging the restricted metric — *"an arm can improve
-overall recall purely by getting better at the shared, already-reachable part of the task; only
-the restricted number distinguishes that from actually reaching what the control cannot"* — is
-correct as far as it goes, and insufficient. The restricted number distinguishes those two
-things only when it is read against a null. Read against a guaranteed zero, it distinguishes
-nothing.
-
-**What survives is structural, and it is not a result this run produced.** `control-real` scores
-0 on `endpoint_lost` because it is gated on entity extraction having succeeded; any selector not
-so gated — an LLM, a random baseline, a first-*k* heuristic — can touch those sentences. That is
-a property of where a mechanism sits in the pipeline, true by inspection and requiring no
-measurement. **This run provides no evidence that an LLM does it better than chance.**
-
-### What was measured
-
-Three arms over **BC5CDR Test-500** (500 documents, **4885 sentences**, 1145 gold finding
-sentences — 23.44% of all sentences), scored at sentence level. Gold is the sentence-level
-co-occurrence proxy defined in `gold_finding_sentences`: a sentence is gold iff both endpoints of
-at least one gold CID relation are annotated in it.
-
-| Arm | What it is |
-|---|---|
-| `control-gold` | Same-sentence co-occurrence over entities synthesized from **gold** mentions + gold ids |
-| `control-real` | Same-sentence co-occurrence over the **real** NER + linking pipeline — the free deterministic control |
-| `llm` | `claude-opus-5`, `effort=low`, structured outputs, returning sentence **indices** rather than offsets |
-
-### Results
-
-| Arm | P | R | F1 | sentences/paper | selection rate | R@`endpoint_lost` |
+| selector | n | rate | P | R | F1 | R@`endpoint_lost` |
 |---|---|---|---|---|---|---|
-| control-gold | 0.5896 | **1.0000** | 0.7418 | 3.884 | 0.3975 | — |
-| **control-real** | **0.6206** | **0.6271** | **0.6238** | **2.314** | **0.2368** | 0 *(by construction)* |
-| llm `low` (run 1) | 0.2296 | 0.4559 | 0.3054 | 4.548 | 0.4655 | 0.4704 (127/270) |
-| llm `low` (run 2) | 0.2312 | 0.4576 | 0.3072 | 4.532 | 0.4639 | 0.4704 (127/270) |
-| llm `high` | 0.2314 | 0.4585 | 0.3076 | 4.538 | 0.4645 | 0.4630 (125/270) |
-| *rate-matched random* | *0.2342* | *0.4649* | *~0.3122* | *~4.55* | *0.4655* | *0.4640* |
+| **first 4 + pad to 2274** | **2274** | **.4655** | **.2969 ± .0027** | **.5896 ± .0053** | **.3949 ± .0036** | **.5496 ± .0128** |
+| LLM `low` (run 1) | 2274 | .4655 | .2296 | .4559 | .3054 | .4704 (127/270) |
 
-`control-gold` recall is **1.0000 by construction** — gold entities make every gold sentence
-co-sentential by definition — so it is a harness anchor, not a result. Its *precision* of 0.5896
-is the informative half: even with perfect entities, same-sentence co-occurrence selects 797
-sentences that are not gold findings.
+Same budget, same corpus, no model. The positional baseline wins on **every one of 200 seeds**;
+its worst draw on the bottleneck metric is **0.5148**, still clear of the arm's 0.4704.
 
-> **The free heuristic wins decisively: F1 0.6238 against 0.3054**, at zero cost, while selecting
-> half as many sentences per paper (2.31 against 4.55). The LLM arm does not beat it, and does not
-> beat chance at its own selection rate either.
+**"First 2 sentences" — at 44% of the arm's budget — already matches its F1** (.3981 against
+.3054).
+
+An arm that cannot beat the opening sentences of an abstract is not doing the task the eval was
+built to measure. That is a harder claim to argue around than a statistical one, and it does not
+rest on a judgement about significance.
+
+### Every baseline, beside every arm
+
+| selector | n | rate | P | R | F1 | R@`endpoint_lost` |
+|---|---|---|---|---|---|---|
+| control-gold | 1942 | .3975 | .5896 | **1.0000** | .7418 | — |
+| **control-real** (free, deterministic) | 1157 | .2368 | **.6206** | **.6271** | **.6238** | 0 *(by construction)* |
+| first 2 sentences/paper | 1000 | .2047 | .4270 | .3729 | .3981 | .3370 (91/270) |
+| first 4 sentences/paper | 1985 | .4063 | .3139 | .5441 | .3981 | .5000 (135/270) |
+| last 4 sentences/paper | 1985 | .4063 | .2539 | .4402 | .3220 | .4704 (127/270) |
+| **first 4 + pad to 2274** | 2274 | .4655 | .2969 ± .0027 | .5896 ± .0053 | .3949 ± .0036 | **.5496 ± .0128** |
+| rate-matched random | 2271 ± 33 | .4649 | .2348 ± .0069 | .4657 ± .0151 | .3122 ± .0092 | .4654 ± .0303 |
+| llm `low` (run 1) | 2274 | .4655 | .2296 | .4559 | .3054 | .4704 (127/270) |
+| llm `low` (run 2) | 2266 | .4639 | .2312 | .4576 | .3072 | .4704 (127/270) |
+| llm `high` | 2269 | .4645 | .2314 | .4585 | .3076 | .4630 (125/270) |
+
+Stochastic rows are **mean ± SD over 200 seeds**, never a single draw. `control-gold` recall is
+1.0000 by construction — gold entities make every gold sentence co-sentential by definition — so
+it is a harness anchor, not a result.
+
+> **The free deterministic control still wins outright: F1 0.6238**, ahead of every baseline and
+> every arm, while selecting half as many sentences per paper.
+
+### The rate-matched null, and the retraction it forced
+
+An earlier version of this section led with `recall_on_endpoint_lost = 0.4704` as *"the first
+measured crack in the entity bottleneck."* **That claim is retracted.**
+
+The only comparator offered was `control-real`, which scores **exactly 0** on that population and
+cannot score anything else: `endpoint_lost` is *defined* as a subset of control-real's own misses.
+**The comparison could not have come out any other way**, so it measured the definition rather
+than the arm.
+
+The test that means something is a null matched on what the arm spends. The arm selects **2274 of
+4885 sentences — 46.55% of the corpus** — and under independent Bernoulli(*p*) selection the
+expected recall on **any** gold subset is exactly *p*. No simulation is needed for the mean:
+
+| | closed-form null | LLM arm | z |
+|---|---|---|---|
+| Recall on `endpoint_lost` (n = 270) | **0.4655 ± 0.0304** | 0.4704 | **+0.16** |
+| Recall overall (n = 1145) | 0.4655 ± 0.0147 | 0.4559 | −0.65 |
+
+A 200-seed simulation returns 0.4654 ± 0.0303, agreeing with the closed form to 0.0001 — a check
+on the plumbing, not the source of the number.
+
+**Note precision is not a third check.** With `n_selected` fixed, precision is a deterministic
+rescaling of recall — both are computed from the same `tp = 522` — so quoting them as two
+corroborating observations would be one statistic counted twice.
+
+A second free check points the same way. If the arm reached the bottleneck population
+*preferentially*, it would score higher there than on the gold it could already reach:
+
+| run | R@`endpoint_lost` | R@complement | Δ | Δ/SE |
+|---|---|---|---|---|
+| low (run 1) | 0.4704 (127/270) | 0.4514 (395/875) | +0.0189 | 0.55 |
+| low (run 2) | 0.4704 (127/270) | 0.4537 (397/875) | +0.0167 | 0.48 |
+| high | 0.4630 (125/270) | 0.4571 (400/875) | +0.0058 | 0.17 |
+
+Δ is a difference of proportions over **disjoint** samples, so SE is
+`sqrt(p(1-p)(1/270 + 1/875))`.
+
+**What survives is structural, and required no measurement.** `control-real` scores 0 on
+`endpoint_lost` because it is gated on entity extraction succeeding; any selector not so gated — an
+LLM, a random baseline, the first four sentences — can touch those sentences. That is a property of
+pipeline position, true by inspection.
+
+### ⭐ The throughline: four claims, one failure shape
+
+The retraction above was not an isolated slip. **Four claims in this sub-project failed the same
+way — an unmeasured narrative claim treated as established because it sounded plausible** — and
+each was cheap to check:
+
+1. **The bottleneck-escape claim.** Accepted on a comparator that structurally could not lose.
+   Two free checks, both computable from the already-committed run log, each overturned it.
+2. **The cost narrative.** Claimed cost came in "an order of magnitude below the pre-measurement
+   estimate" and that an estimate was "wrong by up to 8x". The repo's own committed plan says
+   *"expect under $2 per run"* and the spec budgets *"~$4"* for two. Measured: **$2.48 — 24%
+   above both.** The 8x referred to a figure the repo never committed to.
+3. **The Δ/SE column.** Used the single-sample SE where a two-sample difference required the
+   pooled one, inflating every value ~14%. It appeared inside the very section written to
+   demonstrate rigour.
+4. **Limitation 7.** The sharpest instance. It *named* the positional baseline as unmeasured,
+   asserted its likely direction — that a selector exploiting "the tendency of abstracts to state
+   findings late" might beat both the arm and the null — and declined to run it. **Fifteen seconds
+   would have shown the direction was backwards**: `last 4` scores F1 .3220 against `first 4`'s
+   .3981, and gold's mean relative sentence position is 0.443, i.e. early. Sentence 0 — the title
+   — is gold at 22.1% against a 10.2% base rate.
+
+The common structure: **a claim was stated in prose, sounded reasonable, and nothing in the
+pipeline required it to be true.** Every gate this branch has — anchors, mutation testing, closure
+checks, ADR-0014's operand triage — constrains *code*. None of them read a sentence in a report.
+The corrective is not more gates but a habit: **when a document asserts a comparison, check whether
+the comparison was run.**
 
 ### control-real's miss decomposition
-
-Of control-real's 427 false negatives:
 
 | Bucket | Count | Recoverable by a windowing or pairing change? |
 |---|---|---|
@@ -1882,56 +1896,42 @@ Of control-real's 427 false negatives:
 **63.2% of control-real's misses are structurally unrecoverable.** That is the sentence-level
 counterpart to ADR-0013's per-relation 40.3%, and **not the same statistic** — that one counts
 relations, this counts gold sentences, and one sentence can be made gold by several relations.
-Do not quote them interchangeably.
 
-`endpoint_unlocatable` measured **0**. It is an empty-but-correct bucket, not a finding: the
-population is reachable on the production path (`ner/extract.py` appends entities whose offsets
-are `None`, and linking never touches offsets), so the bucket converts a silent misclassification
-into a visible zero. Note the run log records nothing distinguishing "no such entity occurred"
-from "they occurred but never blocked a miss" — the 0 is real but unattributed.
+`endpoint_unlocatable` measured **0**: an empty-but-correct bucket, not a finding. The run log
+records nothing distinguishing "no such entity occurred" from "they occurred but never blocked a
+miss", so the zero is real but unattributed.
 
 ### The naive union is ruled out by arithmetic
 
-Control-real's 718 true positives and the LLM's 127 `endpoint_lost` recoveries are **disjoint by
-construction** — the 270 are sentences control-real missed. A union therefore reaches at least
-**845/1145 = 0.7380 recall**, against control-real's 0.6271.
+Control-real's 718 true positives and the arm's 127 `endpoint_lost` recoveries are **disjoint by
+construction**, so a union reaches at least **845/1145 = 0.7380 recall** against 0.6271. But
+false-positive sets union too, so it inherits at least the arm's **1752** false positives.
+Granting it *every* gold sentence — recall 1.0000 — precision is at most 1145/(1145+1752) =
+0.3952, giving **F1 at most 0.5666**, below the free control's 0.6238. F1 = 2·tp/(tp + 2897) is
+monotone increasing in tp, so 0.5666 is the maximum, not an estimate.
 
-But false-positive sets union too, so the union inherits **at least the LLM's 1752 false
-positives**. Granting it *every* gold sentence — recall 1.0000, maximally generous — precision is
-at most 1145/(1145+1752) = 0.3952, giving **F1 at most 0.5666**.
+The bound is on F1 specifically; under F2 it does not rule the union out, which is a judgement
+about the arbiter rather than a defect in the arithmetic. And the 127 recoveries the recall gain
+rests on are **fewer than a random selector at the same rate delivers** (~126 expected), so that
+gain is not evidence of capability.
 
-> **A naive union cannot beat the free control on F1 (≤ 0.5666 against 0.6238)**, even under
-> assumptions that cannot hold. The bound is on F1 specifically; choosing F1 as the arbiter for a
-> stage feeding a downstream Critic filter is itself a judgement, and under F2 the bound does not
-> rule the union out.
+### Effort was chosen by measurement
 
-Note what the null result does to this: **the 127 recoveries the union's recall gain rests on are
-what a random selector at the same rate also delivers** (~125 expected). The recall gain is
-arithmetically real and is not evidence of LLM capability.
+A three-way pilot at `--limit 20` preceded the full runs; all three consumed **identical input
+tokens (17,497)**, confirming `--limit` selects the same documents every time. `high` scores F1
+0.3076 against `low`'s 0.3054 / 0.3072 — a **0.0013 difference against a 0.0019 run-to-run
+difference** — for **49% more output tokens**. Effort is not a live variable on this task.
 
-### Effort was chosen by measurement, not by default
-
-A three-way pilot at `--limit 20` (`low` / `medium` / `high`) preceded the full runs. All three
-consumed **identical input tokens (17,497)**, confirming that `--limit` selects the same documents
-every time and that the comparison was valid.
-
-The pilot found `low` tied or better, with `medium` and `high` scoring identically on every count.
-The full-corpus runs confirm it: `high` scores F1 0.3076 against `low`'s 0.3054 / 0.3072 — a
-**0.0013 difference against a 0.0019 run-to-run difference measured from the two `low` runs**.
-`high` spends **49% more output tokens** for it.
-
-**Effort is not a live variable on this task.** Measuring the run-to-run difference *first* is what
-makes that a conclusion rather than a guess. Note the same standard cuts both ways: `high`'s
-125/270 against `low`'s 127/270 on the bottleneck metric is two sentences on n = 270, far smaller
-than the F1 difference being dismissed as noise, and is **not** evidence against `high`.
+The same standard cuts both ways: `high`'s 125/270 against `low`'s 127/270 is two sentences on
+n = 270, far smaller than the F1 difference dismissed as noise, and is **not** evidence against
+`high`.
 
 ### Stability: consistency, not determinism
 
-Two identical `low` runs differ by **ΔF1 0.0019** (0.6% relative) and agree to the exact count on
+Two identical `low` runs differ by **ΔF1 0.0019** and agree to the exact count on
 `recall_on_endpoint_lost` (127/270 both). Output tokens differ (11,150 against 11,112), so the
 model **is not deterministic** — `temperature` is not accepted on Opus 5 and adaptive thinking is
-on. It is highly consistent on this task, which is a different claim, and the one the data
-supports. Two runs measure a single difference, not a distribution.
+on. Two runs measure a single difference, not a distribution.
 
 ### Cost: $2.48 per full run, 24% above the committed planning estimate
 
@@ -1941,65 +1941,48 @@ supports. Two runs measure a single difference, not a distribution.
 | `high` | 441,052 in / 16,608 out | $2.62 |
 | **All runs incl. pilot** | **1,375,647 in / 40,477 out** | **$7.89** |
 
-The committed plan said *"expect under $2 per run"* and the design spec budgeted *"~$4"* for two
-runs. **Measured: $2.48 per run — 24% above both**, not below anything.
+The committed plan said *"expect under $2 per run"*; the spec budgeted *"~$4"* for two. Measured
+**$2.48 — 24% above both.** What the measurement displaced is a worst case, not the estimate:
+`max_tokens` is 16,000, so a run in which adaptive thinking filled the budget would have cost
+roughly **$200**. Actual output is ~22 tokens per call — thinking barely engages — which is a
+finding about variance, not about the plan being wrong.
 
-What the measurement *did* displace is a worst case, not the plan's estimate: `max_tokens` is
-16,000, so a run in which adaptive thinking filled the output budget would have cost roughly
-**$200**. Actual output is ~22 tokens per call — **thinking barely engages on this task** — which
-is the real finding, and it is about variance, not about the plan being wrong.
-
-The $0.30 pilot priced the full run to **within 1%** (extrapolated $2.464 against actual $2.484),
-which is what a pilot is for.
+The $0.30 pilot priced the full run to **within 1%** (extrapolated $2.464 against actual $2.484).
 
 Prompt caching does **not** apply: the system prompt is 452 ASCII characters, below the 512-token
 minimum for `claude-opus-5`, so a `cache_control` marker would be inert. It was removed rather than
-shipped as a caching claim that does not hold; the log's zero cache counters prove the zero rather
-than asserting it.
+shipped as a claim that does not hold; the log's zero cache counters prove the zero.
 
 ### Operational diagnostics
 
 **Zero refusals, zero errors, zero out-of-range indices across ~1500 calls.** No token total
-under-reports and no metric needs a caveat for dropped work.
-
-The zero refusal rate is itself a finding: biomedical abstracts at this scale produced no safety
-friction, where a non-zero rate would have been an operational concern for a product in this
-domain rather than merely a diagnostic.
-
-`out_of_range` counts **indices dropped after de-duplication**, derived from
-`findings_from_sentence_indices`' own `sorted(set(indices))` rather than restating its range
-predicate — so the counter and the drop cannot drift.
+under-reports and no metric needs a caveat for dropped work. The zero refusal rate is itself a
+finding for a biomedical product, where a non-zero rate would be an operational concern.
 
 ### Limitations
 
 1. **The gold is a proxy, and the prompt asks a different question than the gold encodes.** The
    system prompt asks for *"sentences that state the study's findings"*; gold is *"sentences where
-   both endpoints of an annotated CID relation appear"*. Some of the LLM's 1752 false positives are
-   plausibly genuine finding sentences containing no CID pair. **The aggregate numbers cannot
-   separate those two explanations.** This is the strongest caveat on the null result: it shows
-   this prompt does not beat chance *against this proxy*, not that an LLM cannot do this task.
+   both endpoints of an annotated CID relation appear"*. Some of the arm's 1752 false positives are
+   plausibly genuine finding sentences containing no CID pair. **This is the strongest caveat on
+   the whole result**: it shows this prompt loses to a positional heuristic *against this proxy*,
+   not that an LLM cannot do this task.
 2. **321 of 1066 gold CID relations (30.1%) are realized by no gold sentence.** Cross-sentential
-   assertion is the expected dominant cause, but at least two other mechanisms contribute an
-   unmeasured share: an endpoint never annotated in the document at all, and an endpoint mention
-   whose offset falls in an inter-sentence gap and is dropped by `_gold_pairs_by_sentence`. Both
-   have their own test fixtures, so both code paths are **reachable**; that is a weaker claim
-   than "both occur on Test-500", and for the gap mechanism it is the only claim the evidence
-   supports — `sentence_spans` leaves only whitespace uncovered, so it needs a gold mention whose
-   span begins on a space, and PubTator surface forms do not normally start with whitespace.
-   **The split is unmeasured**, and earlier phrasing that attributed all 321 to cross-sentential
-   assertion overstated it.
-3. **`effort` was swept; the prompt was not.** The 0.2296 precision prices *this* prompt, not the
-   best achievable one. Prompt iteration is cheap and unmeasured, and is the obvious next
-   experiment given limitation 1.
-4. **One `high` run against two `low` runs.** Enough to rule out a large effort effect, not a
-   difference smaller than the measured run-to-run 0.0019 F1.
-5. **The union bound is an upper bound, not a measurement**, and it is on F1 specifically. The
-   union was never run.
-6. **`recall_on_endpoint_lost` requires gold to compute.** It measures a property of a run, not a
-   signal available at inference time.
-7. **The null is rate-matched, not content-matched.** A selector matched on *position* (e.g. the
-   last *k* sentences, exploiting the tendency of abstracts to state findings late) was not
-   measured and might beat both the LLM and the random null.
+   assertion is the expected dominant cause, but an endpoint never annotated at all, and an
+   endpoint whose offset falls in an inter-sentence gap, contribute an unmeasured share. Both code
+   paths are reachable; for the gap mechanism that is the only claim the evidence supports.
+3. **"Robust across seeds" means the observed extreme, not a confidence statement.** The positional
+   baseline beat every arm on all 200 seeds drawn; that is not a claim about unseen seeds.
+4. **`effort` was swept; the prompt was not.** 0.2296 prices *this* prompt. Prompt iteration is
+   cheap and unmeasured, and is the obvious next experiment given limitation 1.
+5. **One `high` run against two `low` runs**, and two runs measure a difference rather than a
+   distribution.
+6. **The union bound is an upper bound on F1 specifically.** The union was never run.
+7. **The positional family was sampled, not swept.** first-2, first-4 and last-4 were measured;
+   first-3, first-5, per-document-proportional and section-aware variants were not, so 0.5496 is a
+   *lower* bound on what a free heuristic reaches.
+8. **`recall_on_endpoint_lost` requires gold to compute**, so it measures a property of a run, not
+   a signal available at inference time.
 
 ### Reproducing this
 
@@ -2007,23 +1990,17 @@ predicate — so the counter and the drop cannot drift.
 # Free -- no credential, no API call. Downloads CDR_Data.zip on first run.
 uv run python -m biolit_evals.extract_eval --arm control
 
+# Free -- every baseline in the tables above, read from the committed run log.
+uv run python -m biolit_evals.baselines
+
 # Paid -- ~$2.48 per full run at Opus 5 list.
 uv run --env-file .env python -m biolit_evals.extract_eval --arm llm --effort low
-
-# Pilot shape, ~$0.10: writes a `bc5cdr_test500_limit20` line that cannot be
-# mistaken for a full run.
-uv run --env-file .env python -m biolit_evals.extract_eval --arm llm --limit 20 --effort low
 ```
-
-The rate-matched null is computed from the committed run log plus the corpus, with no API calls:
-select each sentence independently with p = (arm's selections) / 4885, score against
-`endpoint_lost_sentences` as persisted in the log, and repeat. 2000 trials give 0.4640 ± 0.0300.
 
 Six gates run on the real path: `assert_dataset_size`, `assert_papers_match_documents`,
 `assert_gold_sentence_regression_pin`, `assert_gold_relation_ceiling`,
-`assert_gold_sentence_recall_anchor`, and `assert_bucket_closure`. Five of those call sites were
-found **unpinned** during implementation — each gate was tested as a function while nothing proved
-the runner invoked it — and now have tests that fail when the **call** is removed. A second
-instance of the same shape was found in the final review, on the fields carrying the headline
-number itself; the generalized lesson is that a value computed in a runner needs a fixture where
-it *differs from its neighbours*, not merely one where it exists.
+`assert_gold_sentence_recall_anchor`, `assert_bucket_closure`. Five call sites were found
+**unpinned** during implementation — each gate tested as a function while nothing proved the runner
+invoked it — and a second instance of the same shape was found in final review, on the fields
+carrying the headline number itself. The generalized lesson: **a value computed in a runner needs a
+fixture where it differs from its neighbours**, not merely one where it exists.
