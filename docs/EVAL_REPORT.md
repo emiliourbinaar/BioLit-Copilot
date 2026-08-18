@@ -1783,8 +1783,13 @@ population it was credited with reaching.**
 Same budget, same corpus, no model. The positional baseline wins on **every one of 200 seeds**;
 its worst draw on the bottleneck metric is **0.5148**, still clear of the arm's 0.4704.
 
-**"First 2 sentences" — at 44% of the arm's budget — already matches its F1** (.3981 against
-.3054).
+**The result does not depend on the padding construct.** Padding is there to equalise the budget,
+and it *lowers* the baseline's precision (.3139 → .2969) rather than flattering it. Unpadded
+`first 4` — at n = 1985, **13% below the arm's budget** — still beats the arm on all four columns:
+P .3139/.2296, R .5441/.4559, F1 .3981/.3054, R@`endpoint_lost` .5000/.4704.
+
+**"First 2 sentences", at 44% of the arm's budget, beats its F1 by 30% relative** (.3981 against
+.3054). The title alone — `first 1`, 22% of the budget — scores F1 .3076, already above the arm.
 
 An arm that cannot beat the opening sentences of an abstract is not doing the task the eval was
 built to measure. That is a harder claim to argue around than a statistical one, and it does not
@@ -1874,14 +1879,26 @@ each was cheap to check:
    asserted its likely direction — that a selector exploiting "the tendency of abstracts to state
    findings late" might beat both the arm and the null — and declined to run it. **Fifteen seconds
    would have shown the direction was backwards**: `last 4` scores F1 .3220 against `first 4`'s
-   .3981, and gold's mean relative sentence position is 0.443, i.e. early. Sentence 0 — the title
-   — is gold at 22.1% against a 10.2% base rate.
+   .3981, and gold's mean relative sentence position is 0.443 against 0.5 under uniform, i.e.
+   early. **50.6% of titles are gold** (253 of 500) against a 23.4% corpus base rate — a 2.16×
+   enrichment at the very front of the document.
 
-The common structure: **a claim was stated in prose, sounded reasonable, and nothing in the
-pipeline required it to be true.** Every gate this branch has — anchors, mutation testing, closure
-checks, ADR-0014's operand triage — constrains *code*. None of them read a sentence in a report.
-The corrective is not more gates but a habit: **when a document asserts a comparison, check whether
-the comparison was run.**
+Three of those four share one structure: **a claim was stated in prose, sounded reasonable, and
+nothing in the pipeline required it to be true.** Item 3 is adjacent rather than identical — a
+wrong *estimator* inside a computed table, not an unmeasured narrative assertion — and is listed
+here because it shipped through the same gap, not because it is the same mistake. That
+distinction matters: this section would be worthless if it stretched to fit.
+
+Every gate this branch has — anchors, mutation testing, closure checks, ADR-0014's operand triage
+— constrains *code*. None of them read a sentence in a report. The corrective is not more gates
+but a habit: **when a document asserts a comparison, check whether the comparison was run.**
+
+A fifth instance was found in the review of this very section, and is left recorded rather than
+quietly fixed: the union paragraph above originally said the arm's 127 recoveries were **fewer**
+than a random selector delivers. They are 127 against ~126 expected — *more*, by the same
+z = +0.16 the section reports four paragraphs earlier. That was an overcorrection in the
+anti-arm direction, produced while writing the correction, and the cheapest possible check
+(127 against 0.4655 × 270) would have caught it.
 
 ### control-real's miss decomposition
 
@@ -1912,8 +1929,8 @@ monotone increasing in tp, so 0.5666 is the maximum, not an estimate.
 
 The bound is on F1 specifically; under F2 it does not rule the union out, which is a judgement
 about the arbiter rather than a defect in the arithmetic. And the 127 recoveries the recall gain
-rests on are **fewer than a random selector at the same rate delivers** (~126 expected), so that
-gain is not evidence of capability.
+rests on are **no more than a random selector at the same rate delivers** — ~126 expected, the
+arm's 127 being the z = +0.16 above — so that gain is not evidence of capability.
 
 ### Effort was chosen by measurement
 
