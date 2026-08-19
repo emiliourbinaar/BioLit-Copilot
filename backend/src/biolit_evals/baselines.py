@@ -74,6 +74,35 @@ def first_k(sentence_counts: Mapping[str, int], k: int) -> Selection:
     return {pmid: set(range(min(k, count))) for pmid, count in sentence_counts.items()}
 
 
+def first_fraction(sentence_counts: Mapping[str, int], fraction: float) -> Selection:
+    """The leading `fraction` of every document, rounded UP, so the window scales with length.
+
+    THE LENGTH-ADAPTIVE MEMBER of the positional family, and the reason it earns a row of its
+    own rather than being read off the `first_k` sweep. Test-500 documents run from 2 to 22
+    sentences against a median of 10, so `first 4` takes ALL of a short abstract and under a
+    fifth of a long one -- one label covering two different heuristics. A fraction takes the
+    same proportion everywhere, which makes it the positional analogue of the rate-matched
+    null: the same expected spend, distributed by document length instead of uniformly at
+    random.
+
+    CEIL, NOT FLOOR, and for the same reason `_reject_non_positive_k` exists. Flooring drops
+    every document short enough to round to zero -- silently, while the row still prints, so
+    the figure describes a sub-corpus that nothing in the table names. Rounding up cannot
+    remove a document from the scored population.
+    """
+    if not 0.0 < fraction <= 1.0:
+        raise ValueError(
+            f"first_fraction: fraction must be in (0, 1], got {fraction}. At 0 every document "
+            "selects nothing and the row scores P=R=F1=0 at n=0, which reads as a worthless "
+            "heuristic rather than as the bad argument it is; above 1 it claims sentence "
+            "indices no document has, inflating the count every rate-matched comparison here "
+            "is built on."
+        )
+    return {
+        pmid: set(range(math.ceil(fraction * count))) for pmid, count in sentence_counts.items()
+    }
+
+
 def last_k(sentence_counts: Mapping[str, int], k: int) -> Selection:
     """The last `k` sentences of every document, clamped at index 0.
 
@@ -205,6 +234,16 @@ def bernoulli_recall_moments(p: float, n_gold: int) -> Moments:
 
 
 MIN_SEEDS = 200
+
+# THE SWEPT LADDERS. `K_SWEEP` runs to 6 rather than stopping at the last affordable k so the
+# table crosses the budget boundary and shows it: on Test-500 `first 4` costs 1985 against a
+# 2274 budget and `first 5` costs 2449, so the boundary sits between them and a ladder ending
+# at 4 would hide why. `FRACTION_SWEEP` is the length-adaptive ladder -- see `first_fraction`.
+K_SWEEP = (1, 2, 3, 4, 5, 6)
+FRACTION_SWEEP = (0.1, 0.2, 0.3, 0.4, 0.5)
+# The row ADR-0015's published comparison is built on, named once so the sweep, the padded
+# field and the prose cannot drift onto three different values of k.
+HEADLINE_K = 4
 
 
 @dataclass(frozen=True)
@@ -421,6 +460,69 @@ def format_row(label: str, scores: Scores | ScoreDistribution) -> str:
 
 
 @dataclass(frozen=True)
+class SweptRow:
+    """One member of the positional family: what it costs, what it scored, and -- only if it
+    fits inside the arm's budget -- what it scores once padded up to that budget.
+
+    `padded is None` IS THE LOAD-BEARING STATE, not a missing value. A selector that spends
+    MORE than the arm cannot be padded up to it (`pad_to_budget` refuses to shrink), and it
+    must not be compared to the arm on recall either: recall is bought with volume, so a
+    row that outspent the arm and out-recalled it has demonstrated nothing about choosing
+    better sentences. Carrying `None` rather than omitting the row keeps the cost visible --
+    the reader sees WHY `first 5` has no budget-matched figure, instead of seeing a sweep
+    that mysteriously stops at 4.
+    """
+
+    label: str
+    scores: Scores
+    padded: ScoreDistribution | None
+
+    @property
+    def within_budget(self) -> bool:
+        return self.padded is not None
+
+
+def best_free_baseline(rows: Sequence[SweptRow]) -> tuple[SweptRow, ScoreDistribution]:
+    """The strongest BUDGET-COMPARABLE row and the budget-matched score it was chosen on.
+
+    RETURNS THE PAIR rather than the row alone, so no caller has to re-narrow `padded` away
+    from `None`. A `SweptRow` alone would leave every consumer -- the report field, the
+    renderer, the verdict -- writing a None branch that this function has already made
+    unreachable, which is the hollow guard ADR-0014's triage exists to prevent. The type
+    carries the guarantee instead.
+
+    SELECTED ON THE PADDED SCORE, NEVER THE RAW ONE. The raw column rewards spending more,
+    and the whole reason padding exists is to strip that advantage out; a bar taken from the
+    raw column would be set by whichever row bought the most sentences.
+
+    ON THE SELECTION EFFECT, recorded rather than left for a reader to notice: this is a
+    maximum over many noisy estimates, so it is biased slightly high as an estimate of the
+    best selector's true score. With `MIN_SEEDS` draws the SE of each mean is ~0.001 against
+    inter-row gaps an order of magnitude larger, so it does not move the verdict here -- but
+    the bar is a maximum-of-estimates and should be cited as one, and a future sweep with
+    many more rows or far fewer seeds would need to say so louder.
+    """
+    # Score and row are paired IN the comprehension rather than read back out in a `key=`
+    # closure, where the `is not None` narrowing would not reach and would need either a
+    # second None branch that cannot fire or an `assert` -- both of them the hollow guard
+    # ADR-0014's triage says to delete rather than write.
+    scored = [
+        (row.padded.recall_on_endpoint_lost.mean, row, row.padded)
+        for row in rows
+        if row.padded is not None
+    ]
+    if not scored:
+        raise ValueError(
+            "best_free_baseline: no swept row fits inside the arm's budget, so there is no "
+            "budget-matched comparator at all. Every row cost more than the arm, which means "
+            "the sweep's cheapest member is already over budget -- suspect a budget read from "
+            "a `--limit` pilot, or a family whose smallest k still outspends the arm."
+        )
+    _, row, padded = max(scored, key=lambda scored_row: scored_row[0])
+    return row, padded
+
+
+@dataclass(frozen=True)
 class LlmArm:
     """One logged LLM arm, and the bucket-(a) gold it was scored against.
 
@@ -546,7 +648,9 @@ class BaselineReport:
     budget_arm: LlmArm
     rate: float
     padded_base: Selection
-    positional: tuple[tuple[str, Scores], ...]
+    sweep: tuple[SweptRow, ...]
+    best: SweptRow
+    best_padded: ScoreDistribution
     padded: ScoreDistribution
     random_null: ScoreDistribution
     arms: tuple[LlmArm, ...]
@@ -598,17 +702,47 @@ def run_baselines(
             selection, gold=gold, endpoint_lost=endpoint_lost, n_sentences=n_sentences
         )
 
-    positional = [(f"first {k}", score(first_k(counts, k))) for k in (2, 4)]
-    positional.append(("last 4", score(last_k(counts, 4))))
+    # THE FAMILY, SWEPT RATHER THAN SAMPLED. ADR-0015 conceded that `first 2 / first 4 /
+    # last 4` was a sample, so its 0.5496 was a LOWER bound on what free heuristics reach and
+    # the revisit trigger it set could be cleared by an arm that still loses to an unmeasured
+    # neighbour. The ladder runs PAST the budget deliberately -- see `SweptRow.padded`.
+    family: list[tuple[str, Selection]] = [(f"first {k}", first_k(counts, k)) for k in K_SWEEP]
+    family += [(f"last {k}", last_k(counts, k)) for k in K_SWEEP]
+    family += [
+        (f"first {fraction:.0%}", first_fraction(counts, fraction)) for fraction in FRACTION_SWEEP
+    ]
 
-    base = first_k(counts, 4)
-    padded = score_over_seeds(
-        lambda rng: pad_to_budget(base, counts, budget, rng),
-        gold=gold,
-        endpoint_lost=endpoint_lost,
-        n_sentences=n_sentences,
-        seeds=seeds,
+    def padded_over_seeds(selection: Selection) -> ScoreDistribution | None:
+        # `selection` is bound as a PARAMETER rather than captured from a loop variable: a
+        # closure over the loop would pad every row from the last selection in the family and
+        # print seventeen identical budget-matched rows under seventeen different labels.
+        if n_selected(selection) > budget:
+            return None
+        return score_over_seeds(
+            lambda rng: pad_to_budget(selection, counts, budget, rng),
+            gold=gold,
+            endpoint_lost=endpoint_lost,
+            n_sentences=n_sentences,
+            seeds=seeds,
+        )
+
+    sweep = tuple(
+        SweptRow(label=label, scores=score(selection), padded=padded_over_seeds(selection))
+        for label, selection in family
     )
+
+    base = dict(family)[f"first {HEADLINE_K}"]
+    headline = next(row for row in sweep if row.label == f"first {HEADLINE_K}")
+    if headline.padded is None:
+        raise ValueError(
+            f"run_baselines: the headline row `first {HEADLINE_K}` costs "
+            f"{n_selected(base)} sentences, above the arm's budget of {budget}, so it has no "
+            "budget-matched score. This is the row ADR-0015's published comparison is built "
+            "on -- an arm selecting fewer sentences than `first 4` needs a new headline row "
+            "chosen deliberately, not a silently missing one."
+        )
+    padded = headline.padded
+    best, best_padded = best_free_baseline(sweep)
     random_null = score_over_seeds(
         lambda rng: select_at_rate(counts, rate, rng),
         gold=gold,
@@ -625,7 +759,9 @@ def run_baselines(
         budget_arm=arms[0],
         rate=rate,
         padded_base=base,
-        positional=tuple(positional),
+        sweep=sweep,
+        best=best,
+        best_padded=best_padded,
         padded=padded,
         random_null=random_null,
         arms=tuple(arms),
@@ -658,8 +794,8 @@ def render_report(report: BaselineReport) -> list[str]:
         "",
         HEADER,
     ]
-    lines.extend(format_row(label, scores) for label, scores in report.positional)
-    lines.append(format_row(f"first 4 + random pad to {report.budget}", report.padded))
+    lines.extend(format_row(row.label, row.scores) for row in report.sweep)
+    lines.append(format_row(f"first {HEADLINE_K} + random pad to {report.budget}", report.padded))
     lines.append(format_row(f"rate-matched random p={report.rate:.4f}", report.random_null))
     lines.extend(
         format_row(f"LLM {arm.effort} ({arm.timestamp[:16]})", arm.scores) for arm in report.arms
@@ -686,6 +822,51 @@ def render_report(report: BaselineReport) -> list[str]:
     lines.append(
         "  the empirical row above is a CHECK on the plumbing, not the source of the number."
     )
+
+    lines.append("")
+    lines.append(
+        f"EVERY FAMILY MEMBER PADDED TO THE SAME {report.budget}-SENTENCE BUDGET, on bucket (a)."
+    )
+    lines.append(
+        "  A row costing MORE than the budget has no entry: it cannot be padded down, and its"
+    )
+    lines.append(
+        "  unpadded recall is not comparable to the arm's, because recall is bought with volume."
+    )
+    for row in report.sweep:
+        if row.padded is None:
+            lines.append(
+                f"  {row.label:<22} -- costs {row.scores.n_selected}, above the "
+                f"{report.budget} budget"
+            )
+        else:
+            lines.append(f"  {row.label:<22} {row.padded.recall_on_endpoint_lost}")
+
+    best_recall = report.best_padded.recall_on_endpoint_lost
+    lines.append("")
+    lines.append("THE BAR FOR ADR-0015's CONDITIONAL REVISIT TRIGGER")
+    lines.append(
+        "  The trigger is a configuration beating THE BEST FREE BASELINE on bucket (a) -- not a"
+    )
+    lines.append("  rate-matched null, and not control-real's structural zero. That bar is:")
+    lines.append(f"    {report.best.label} padded to {report.budget}: {best_recall}")
+    lines.append(f"    worst of {best_recall.n_draws} draws: {best_recall.minimum:.4f}")
+    lines.append(
+        "  This is a MAXIMUM OVER ESTIMATES and biased slightly high as an estimate of the best"
+    )
+    lines.append(
+        "  selector's true score; cite it as the best OBSERVED free baseline over this family."
+    )
+    lines.append(
+        "  The family is a ladder, not the space -- see the report for what is still unswept."
+    )
+    for arm in report.arms:
+        arm_recall = arm.scores.recall_on_endpoint_lost
+        clears = arm_recall > best_recall.mean
+        lines.append(
+            f"    LLM {arm.effort} ({arm.timestamp[:16]}) at {arm_recall:.4f}: "
+            f"{'CLEARS' if clears else 'BELOW'} the bar"
+        )
 
     lines.append("")
     lines.append("IS THE POSITIONAL BASELINE'S WIN ON BUCKET (a) ROBUST ACROSS SEEDS?")

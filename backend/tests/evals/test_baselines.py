@@ -10,9 +10,14 @@ from biolit.ner.windowing import sentence_spans
 from biolit_evals.baselines import (
     MIN_SEEDS,
     BaselineReport,
+    ScoreDistribution,
+    Scores,
+    SweptRow,
     beats_on_every_seed,
     bernoulli_recall_moments,
+    best_free_baseline,
     distribution,
+    first_fraction,
     first_k,
     format_row,
     last_k,
@@ -68,6 +73,100 @@ def test_a_non_positive_k_is_rejected_rather_than_silently_selecting_nothing(sel
     # nothing useful" and blames the baseline for an argument error. The guard names `k`.
     with pytest.raises(ValueError, match="k must be >= 1"):
         selector(COUNTS, k)
+
+
+def test_first_fraction_scales_the_window_to_each_documents_own_length():
+    # The length-ADAPTIVE member of the positional family, and the reason it is worth
+    # measuring separately from `first_k`: a fixed k takes 4 of 4 sentences from a short
+    # abstract and 4 of 22 from a long one, so `first 4` is really two different heuristics
+    # depending on where it lands. A fraction takes the same PROPORTION everywhere.
+    # ceil(0.5*5)=3, ceil(0.5*3)=2, ceil(0.5*1)=1.
+    assert first_fraction(COUNTS, 0.5) == {"a": {0, 1, 2}, "b": {0, 1}, "c": {0}}
+
+
+def test_first_fraction_rounds_up_so_no_document_drops_out_of_the_corpus():
+    # CEIL, NOT FLOOR OR ROUND, and this is the louder/quieter argument again rather than a
+    # rounding preference. At f=0.1 flooring yields 0 sentences for all three documents and
+    # the row still prints -- a well-formed P=R=F1=0 line blamed on the heuristic. The worse
+    # case is a fraction where only SHORT documents floor to zero: they leave the scored
+    # corpus in silence while the long ones stay, so the row describes a sub-corpus that
+    # nothing in the table names. Rounding up cannot drop a document.
+    assert first_fraction(COUNTS, 0.1) == {"a": {0}, "b": {0}, "c": {0}}
+    # f=1.0 is IN range and takes everything -- the fraction family's top end has to reach the
+    # whole corpus, or the sweep cannot span the budget boundary it exists to locate.
+    assert first_fraction(COUNTS, 1.0) == {"a": {0, 1, 2, 3, 4}, "b": {0, 1, 2}, "c": {0}}
+
+
+@pytest.mark.parametrize("fraction", [0.0, -0.1, 1.5])
+def test_a_fraction_outside_zero_exclusive_to_one_is_rejected(fraction):
+    # BOTH SIDES, and they fail differently. f=0 is `first_k(k=0)` in another costume: an
+    # empty selection scoring 0 at n=0, blamed on the heuristic. f>1 over-runs every document
+    # and -- with no `min` clamp, unlike `first_k` -- emits indices no document has, which
+    # inflates the selection count that every rate-matched comparison here is built on. The
+    # interval is HALF-OPEN, so 1.0 is accepted and 0.0 is not.
+    with pytest.raises(ValueError, match="fraction must be"):
+        first_fraction(COUNTS, fraction)
+
+
+def _swept(label: str, *, n: int, unpadded: float, padded: float | None) -> SweptRow:
+    """A hand-built sweep row. `padded=None` is a row that costs MORE than the arm's budget."""
+    scores = Scores(
+        n_selected=n,
+        rate=0.0,
+        precision=0.0,
+        recall=0.0,
+        f1=0.0,
+        recall_on_endpoint_lost=unpadded,
+        tp_on_endpoint_lost=0,
+        n_endpoint_lost=2,
+    )
+    if padded is None:
+        return SweptRow(label=label, scores=scores, padded=None)
+    spread = distribution([padded] * MIN_SEEDS)
+    return SweptRow(
+        label=label,
+        scores=scores,
+        padded=ScoreDistribution(
+            n_selected=spread,
+            rate=spread,
+            precision=spread,
+            recall=spread,
+            f1=spread,
+            recall_on_endpoint_lost=spread,
+        ),
+    )
+
+
+def test_the_best_free_baseline_is_chosen_on_the_budget_matched_score_only():
+    # THE BAR ADR-0015's REVISIT TRIGGER NAMES, so what it selects on is the whole point. Two
+    # mutants are live here and the fixture separates both. (1) Selecting on the UNPADDED
+    # `recall_on_endpoint_lost` picks "first 5" at 0.95 -- a selector that simply spent more
+    # than the arm, which is the volume advantage padding exists to remove; a bar set there
+    # would be unclearable for reasons that have nothing to do with choosing better sentences.
+    # (2) Taking the max over ALL rows rather than the budget-comparable ones has to reckon
+    # with `padded=None` at all, and a mutant that forgets to raises rather than lying.
+    rows = (
+        _swept("first 2", n=6, unpadded=0.50, padded=0.83),
+        _swept("first 4", n=12, unpadded=0.50, padded=0.68),
+        _swept("first 5", n=15, unpadded=0.95, padded=None),
+    )
+    best, best_padded = best_free_baseline(rows)
+    assert best.label == "first 2"
+    # THE SCORE IS RETURNED BESIDE THE ROW, so no caller re-narrows `padded` away from None and
+    # writes the unreachable branch this function already rules out. It must be the winner's
+    # own score and not, say, the first comparable row's -- 0.83 is "first 2", 0.68 "first 4".
+    assert best_padded.recall_on_endpoint_lost.mean == pytest.approx(0.83)
+
+
+def test_a_sweep_with_no_budget_comparable_row_is_rejected_rather_than_returning_the_cheapest():
+    # The tempting fallback -- "no row fits, so return the cheapest one" -- would hand back a
+    # row whose score was never budget-matched and let it be printed as the bar. Every row
+    # costing more than the arm means the budget is wrong (a `--limit` pilot's `n_selected`
+    # read against the full corpus does exactly this), and quoting a bar off a broken budget
+    # is worse than having no bar.
+    rows = (_swept("first 5", n=15, unpadded=0.95, padded=None),)
+    with pytest.raises(ValueError, match="no swept row fits inside the arm's budget"):
+        best_free_baseline(rows)
 
 
 def test_n_selected_sums_across_documents_rather_than_counting_documents():
@@ -670,21 +769,86 @@ def test_the_padded_row_is_built_on_the_first_four_sentences_its_label_claims(tm
     assert report.padded.recall_on_endpoint_lost.mean == pytest.approx(0.68, abs=0.03)
 
 
-def test_the_positional_sweep_is_first_2_first_4_and_last_4_in_that_order(tmp_path):
-    # BOTH HALVES OF EVERY ROW ARE PINNED -- the label AND the score -- because the two mutants
-    # here fail differently. `for k in (2, 4)` -> `(2, 5)` renames the row as well as rescoring
-    # it; a `first_k(counts, k + 1)` would keep the label and change only the score, and a row
-    # whose label disagrees with its numbers is the worse of the two.
-    #
-    # Gold is sentences 1 and 2 of every document, so the three rows carry three different
-    # (n, recall) pairs and no neighbouring k reproduces any of them: `first 3` recalls 1.0 at
-    # n=9, `first 5` 1.0 at n=15, `last 3` 0.0 at n=9, `last 5` 1.0 at n=15.
+def test_the_sweep_spans_the_family_and_marks_the_rows_that_outspend_the_arm(tmp_path):
+    # THE SWEEP HAS TO CROSS THE BUDGET BOUNDARY, or it cannot show where the boundary is.
+    # The fixture budget is 14 of 18 sentences, and `first 5`/`last 5` cost 15 -- so the k
+    # ladder running only to 4 would produce a table in which every row happens to fit and
+    # `within_budget` is a constant, pinning nothing. Running past the boundary is what makes
+    # the flag mean something, and it is why the real sweep quotes `first 5` at 2449 against
+    # a 2274 budget rather than stopping at 4 and leaving the reader to wonder.
     report = _report(tmp_path)
-    assert [(label, scores.n_selected, scores.recall) for label, scores in report.positional] == [
-        ("first 2", 6, 0.5),
-        ("first 4", 12, 1.0),
-        ("last 4", 12, 0.5),
+    assert [row.label for row in report.sweep] == [
+        "first 1",
+        "first 2",
+        "first 3",
+        "first 4",
+        "first 5",
+        "first 6",
+        "last 1",
+        "last 2",
+        "last 3",
+        "last 4",
+        "last 5",
+        "last 6",
+        "first 10%",
+        "first 20%",
+        "first 30%",
+        "first 40%",
+        "first 50%",
     ]
+    assert [row.label for row in report.sweep if not row.within_budget] == [
+        "first 5",
+        "first 6",
+        "last 5",
+        "last 6",
+    ]
+    # The fraction rows all fit here (ceil(0.5*6)=3 per document, 9 of 14), which is the point
+    # of carrying them: on the real corpus `first 50%` costs 2443 against the same 2274 and
+    # does NOT fit, so the two corpora exercise both sides of the same branch.
+    assert all(row.within_budget for row in report.sweep if row.label.endswith("%"))
+
+
+def test_every_swept_row_is_scored_on_the_selection_its_label_claims(tmp_path):
+    # BOTH HALVES OF EVERY ROW ARE PINNED -- the label AND the score -- because the two mutants
+    # fail differently. An off-by-one in the ladder renames the row as well as rescoring it; a
+    # `first_k(counts, k + 1)` under the right label keeps the label and changes only the
+    # score, and a row whose label disagrees with its numbers is the worse of the two.
+    #
+    # Gold is sentences 1 and 2 of every six-sentence document, which is what makes the two
+    # ladders asymmetric: the leading window walks INTO gold and the trailing one walks away
+    # from it. `last 1`, `last 2` and `last 3` therefore all recall 0.0 and are told apart by
+    # their COUNT alone (3, 6, 9) -- so the `n_selected` half of each pair is load-bearing
+    # here, not decoration. `first 20%` and `first 30%` coincide (ceil(1.2) == ceil(1.8) == 2),
+    # a property of a 6-sentence document rather than of the selector, asserted not hidden.
+    rows = {row.label: row for row in _report(tmp_path).sweep}
+
+    def pair(label: str) -> tuple[int, float]:
+        return rows[label].scores.n_selected, rows[label].scores.recall
+
+    assert [pair(f"first {k}") for k in (1, 2, 3, 4)] == [(3, 0.0), (6, 0.5), (9, 1.0), (12, 1.0)]
+    assert [pair(f"last {k}") for k in (1, 2, 3, 4)] == [(3, 0.0), (6, 0.0), (9, 0.0), (12, 0.5)]
+    assert rows["first 20%"].scores.n_selected == rows["first 30%"].scores.n_selected == 6
+    assert rows["first 50%"].scores.n_selected == 9
+
+
+def test_the_reports_bar_is_the_strongest_budget_matched_row_and_not_the_headline_one(tmp_path):
+    # THE BAR IS NOT THE HEADLINE ROW, and this fixture is built so that it cannot be. `first 4`
+    # already holds bucket (a)'s d1 sentence, so padding it to 14 draws only 2 of 6 remaining
+    # sentences and reaches d2's index 5 a third of the time; the shorter bases leave more of
+    # the budget to the draw and reach it more often. So a `best` hard-wired to the padded
+    # headline row -- the obvious wrong implementation, since that is the row ADR-0015 quotes --
+    # disagrees with the computed maximum here.
+    report = _report(tmp_path)
+    comparable = [row for row in report.sweep if row.padded is not None]
+    assert report.best.label != f"first {4}"
+    assert report.best_padded.recall_on_endpoint_lost.mean == pytest.approx(
+        max(row.padded.recall_on_endpoint_lost.mean for row in comparable if row.padded)
+    )
+    # And the bar is genuinely ABOVE the row the published comparison used, which is the whole
+    # reason the sweep changes the trigger: a future arm clearing `first 4` need not clear this.
+    assert (
+        report.best_padded.recall_on_endpoint_lost.mean > report.padded.recall_on_endpoint_lost.mean
+    )
 
 
 def test_the_rendered_report_names_the_run_the_budget_was_taken_from(tmp_path):
@@ -697,6 +861,45 @@ def test_the_rendered_report_names_the_run_the_budget_was_taken_from(tmp_path):
     assert "  run 2026-08-17T00:59:11+00:00 at sha 3c029c0. No API call was made." in lines
     assert any(line.startswith("first 4 + random pad to 14") for line in lines)
     assert any(line.startswith("rate-matched random p=0.7778") for line in lines)
+
+
+def test_the_rendered_bar_names_its_row_and_says_which_arms_clear_it(tmp_path):
+    # THE BAR IS THE ONE LINE A FUTURE READER ACTS ON -- ADR-0015's trigger is stated in terms
+    # of it -- so it has to name the row it came from, not just the number. A bar printed
+    # anonymously invites the next arm to be compared against whichever row the reader assumes.
+    #
+    # THE LOG IS BUILT FOR THIS TEST because the standard two-arm fixture cannot exercise both
+    # branches: the bar lands near 0.87 and BOTH its arms (0.3333, 0.6667) fall below it, so a
+    # verdict hard-wired to "BELOW" would pass. The second arm here recalls bucket (a) in FULL,
+    # which no bar can exceed, so one line must read CLEARS and the other BELOW.
+    path = tmp_path / "one_arm_clears.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                _log_line(effort="low", n_selected_=14, lost=_LOST, lost_tp=1),
+                _log_line(
+                    effort="max",
+                    n_selected_=14,
+                    lost=_LOST,
+                    timestamp="2026-08-17T02:00:00+00:00",
+                    lost_tp=3,
+                ),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    report = _report(tmp_path, log_path=str(path))
+    lines = render_report(report)
+    bar = report.best_padded.recall_on_endpoint_lost
+    assert f"    {report.best.label} padded to 14: {bar}" in lines
+    assert [line for line in lines if line.endswith(" the bar")] == [
+        "    LLM low (2026-08-17T00:59) at 0.3333: BELOW the bar",
+        "    LLM max (2026-08-17T02:00) at 1.0000: CLEARS the bar",
+    ]
+    # A row that outspent the arm is shown WITH its cost rather than dropped, so the reader can
+    # see why it has no budget-matched figure instead of seeing a sweep that stops at 4.
+    assert "  first 5                -- costs 15, above the 14 budget" in lines
 
 
 def test_the_rendered_verdict_is_judged_against_every_arm_on_the_worst_draw(tmp_path):
