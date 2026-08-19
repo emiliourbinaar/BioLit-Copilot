@@ -1,5 +1,29 @@
 # BioLit Copilot — Architecture
 
+**Where this is.** Phases 1–4 are built and measured; Phase 5 (contradiction detection) is
+not started. The layers below run individually and each has an eval harness, but **nothing
+wires them into an end-to-end pipeline yet** — `PipelineState.clusters` has been a declared
+field since Phase 1 and is still populated by nothing. That gap is deliberate: the standing
+rule is no infrastructure without a demonstrated consumer, and the consumer for wired
+clusters is the Phase 5 Critic (ADR-0013).
+
+## Layer map
+
+```
+Paper ──► extract_entities ──► canonicalize ──► SameSentencePairing ──► group ──► [Phase 5]
+          biolit.ner           biolit.canon     biolit.cluster                     Critic
+          (Phase 2)            (Phase 3)        (Phase 3)                          (not built)
+
+                               biolit.extract   ── measured in Phase 4, NOT wired in:
+                               (Phase 4)           the LLM arm was rejected, the
+                                                   deterministic control ships
+```
+
+Every layer is paired with a module in `biolit_evals` that scores it against gold and appends
+one JSON line per run to a committed log. The eval packages are separate from `biolit` on
+purpose — production code carries no scoring logic — but both arms of every eval run the
+*production* path rather than a parallel gold-only implementation (ADR-0010).
+
 ## Phase 1 (Foundations)
 Backend-forward monorepo. `Paper` is the single normalization boundary for PubMed and
 bioRxiv/medRxiv. Full-text existence (`text_type`) and extraction rights (`license_tier`,
@@ -63,3 +87,50 @@ model and raise a tensor-size error (2.2% of real abstracts). Windows are packed
 sentences with a one-sentence overlap, and offsets are shifted back into document
 coordinates and de-duplicated, so `extract_entities` is safe on text of any length and
 every consumer inherits that.
+
+## Clustering layer (Phase 3)
+
+`biolit.cluster` decides which chemical pairs with which disease inside a paper, then groups
+papers by shared `(chemical, disease)` keys. `SameSentencePairing` is the strategy of record:
+it beats the full cross product on **every arm and every metric level** (paper-pair F1
+0.5484 → 0.6327 on the real pipeline) and roughly **halves the Critic's future workload** —
+460 → 279 distinct comparisons on Test-500, which is a direct cost result once every
+comparison becomes an LLM call.
+
+**A dedicated CID relation extractor was scoped and rejected** (ADR-0013). Three reasons in
+order of weight: 40.3% of gold relations lose an endpoint upstream, where no pairing strategy
+can reach them; the free heuristic already captures 77.0% of a precision-perfect ceiling; and
+part of same-sentence's recall is accidental co-clustering that a precision-oriented
+extractor would give up. The package lives in `biolit/` rather than `biolit_evals/` because
+the measurement's outcome was that it **wins** — the consumer rule turns on whether a
+module's value was contingent on the result, not on how many callers it currently has.
+
+## Extraction layer (Phase 4)
+
+`biolit.extract` selects the sentences of an abstract that state a finding. Two
+implementations behind one `Extractor` protocol:
+
+- `SameSentenceAsEntitiesExtractor` — deterministic, free, **F1 0.6238**. This is what ships.
+- `LlmExtractor` — one Claude call per abstract, **F1 0.3054**. **Not shipped, in any role.**
+
+The LLM arm over-selects (4.55 sentences per paper against 2.31) and pays for it in
+precision. Cost was not the reason it was rejected: a full run measured **$2.48** with zero
+refusals across ~1500 calls. It was rejected because a sweep of seventeen free positional
+heuristics found that **every budget-matched one of them beats it** — including `last 1`, the
+single closing sentence of each abstract plus random padding. An arm that cannot beat the
+opening sentences of an abstract is not doing the task the eval was built to measure
+(ADR-0015).
+
+`llm.py` nevertheless stays on `master` while ADR-0011's and ADR-0012's rejected mechanisms
+did not, for two reasons recorded in ADR-0015: it is the arm under measurement and the eval
+report's reproduction recipe runs it, so deleting it makes the published headline
+unreproducible; and it takes its client as `Any` without importing `anthropic`, so `biolit`
+gains no hard dependency from it. **What is rejected is the arm's use as an extractor, not
+the seam.**
+
+`biolit_evals.baselines` is the comparator harness that produced that verdict. It exists
+because `recall_on_endpoint_lost` is scored against a population *defined by the control's
+own misses*, so the control scores 0 there by construction — a claim was once shipped on that
+guaranteed-zero comparison and had to be retracted. Everything in it is deterministic given a
+seed, reads the arms from the committed run log rather than re-running them, and needs no
+credential.
