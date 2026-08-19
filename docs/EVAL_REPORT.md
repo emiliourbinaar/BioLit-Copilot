@@ -1995,11 +1995,61 @@ finding for a biomedical product, where a non-zero rate would be an operational 
 5. **One `high` run against two `low` runs**, and two runs measure a difference rather than a
    distribution.
 6. **The union bound is an upper bound on F1 specifically.** The union was never run.
-7. **The positional family was sampled, not swept.** first-2, first-4 and last-4 were measured;
-   first-3, first-5, per-document-proportional and section-aware variants were not, so 0.5496 is a
-   *lower* bound on what a free heuristic reaches.
+7. ~~**The positional family was sampled, not swept.**~~ **DISCHARGED 2026-08-18 — see "The swept
+   positional family" below.** Seventeen members measured; the bar moved 0.5496 → **0.5544**, and
+   every budget-comparable member beats every arm. **Section-aware remains unmeasured**, now with a
+   number attached: an uppercase section marker appears in only 128 of 500 BC5CDR abstracts.
 8. **`recall_on_endpoint_lost` requires gold to compute**, so it measures a property of a run, not
    a signal available at inference time.
+
+### The swept positional family (2026-08-18)
+
+Limitation 7 said the positional comparison rested on three sampled members, so 0.5496 was a
+*lower* bound. Seventeen were then measured — `first k` and `last k` for k = 1…6, plus a
+length-adaptive `first f%` ladder — and the sweep changes the finding in a way worth stating
+carefully, because it is **not** mainly that the bar moved.
+
+**Only twelve of the seventeen are budget-comparable, and the boundary is a real constraint
+rather than a presentational choice.** The arm selected 2274 of 4885 sentences. `first 4` costs
+1985 and can be padded *up* to 2274; `first 5` costs 2449 and cannot be padded *down*. A selector
+that outspends the arm and out-recalls it has demonstrated nothing — recall is bought with volume,
+which is the entire reason the padding construct exists. The five over-budget rows are therefore
+shown with their cost and excluded from the bar.
+
+Recall on bucket (a), padded to the arm's 2274-sentence budget. Closed form; 200 draws agree
+within 0.001 on every row.
+
+| selector | cost | R@endpoint_lost (padded) | | selector | cost | R@endpoint_lost (padded) |
+|---|---:|---:|---|---|---:|---:|
+| `first 1` | 500 | 0.5325 ± 0.0258 | | `last 1` | 500 | **0.4972** ± 0.0267 |
+| `first 2` | 1000 | **0.5544** ± 0.0227 | | `last 2` | 1000 | 0.5171 ± 0.0236 |
+| `first 3` | 1499 | 0.5402 ± 0.0193 | | `last 3` | 1499 | 0.5231 ± 0.0196 |
+| `first 4` | 1985 | 0.5498 ± 0.0126 | | `last 4` | 1985 | 0.5232 ± 0.0129 |
+| `first 10%` | 710 | 0.5367 ± 0.0247 | | `first 30%` | 1694 | 0.5272 ± 0.0174 |
+| `first 20%` | 1176 | 0.5437 ± 0.0218 | | `first 40%` | 2151 | 0.5013 ± 0.0089 |
+| *over budget* | | | | `first 5` 2449 · `first 6` 2881 · `last 5` 2449 · `last 6` 2881 · `first 50%` 2569 |
+
+**The headline is the range, not the maximum.** Every one of the twelve spans **0.4972–0.5544**
+against the best arm's **0.4704**. The weakest free heuristic measured — `last 1`, one closing
+sentence per abstract plus random padding — beats the arm by 0.027. So the claim is no longer "the
+arm loses to the opening sentences", which invites the reply that `first 4` was a lucky choice; it
+is **"there is no member of this family the arm beats."**
+
+**The bar is exact, and that mattered.** Padding samples without replacement, so bucket-(a) hits
+are Hypergeometric and the moments are closed-form. Selecting the bar on Monte-Carlo means made it
+a maximum over twelve estimates — biased high, and the top two rows (`first 2` at 0.5549, `first 4`
+at 0.5496) sat within two of their own SDs, so *which row was the bar* depended on the seed range.
+The closed form settles the ordering: **`first 2` at 0.5544**, and `first 4` at 0.5498 genuinely
+second. The empirical rows now do what they are actually good for — checking that the formula
+describes the sampler, and supplying the worst *observed* draw, which no closed form provides.
+
+**What is still unswept, with a number rather than a shrug.** Section-aware selection is the one
+member of the original caveat that remains unmeasured. BC5CDR ships unstructured abstracts: an
+uppercase section marker (`RESULTS:` 113, `METHODS:` 85, `CONCLUSIONS:` 71, …) appears in **128 of
+500** documents, so such a selector falls back to positional on the other 372 and its reachable
+upside is bounded by a quarter of the corpus. That is a reason to defer it, not to call the family
+complete — **the bar can only rise, and a future arm must clear the best free baseline measured
+when it runs, not the number printed here.**
 
 ### Reproducing this
 
