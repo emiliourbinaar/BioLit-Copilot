@@ -10,6 +10,8 @@ from biolit.ner.windowing import sentence_spans
 from biolit_evals.baselines import (
     MIN_SEEDS,
     BaselineReport,
+    BudgetMatched,
+    Moments,
     ScoreDistribution,
     Scores,
     SweptRow,
@@ -24,12 +26,14 @@ from biolit_evals.baselines import (
     load_llm_arms,
     n_selected,
     pad_to_budget,
+    padded_recall_moments,
     render_report,
     run_baselines,
     score_over_seeds,
     score_selection,
     select_at_rate,
 )
+from biolit_evals.extract_eval import sentence_metrics
 from biolit_evals.mesh_gold import GoldDocument, GoldMention
 
 # Three documents of DIFFERENT lengths, so a selector that ignored the per-document count
@@ -108,8 +112,63 @@ def test_a_fraction_outside_zero_exclusive_to_one_is_rejected(fraction):
         first_fraction(COUNTS, fraction)
 
 
+def test_padding_moments_are_exact_at_the_two_ends_where_the_answer_needs_no_formula():
+    # ANCHORED ON CASES WITH A KNOWN ANSWER rather than on numbers re-derived from the same
+    # expression the test is meant to pin -- that would only check my arithmetic against
+    # itself. Both ends are forced and both have zero spread, so a formula that is wrong in
+    # the middle still has to pass through these two points.
+    #
+    # (1) A budget EQUAL to the base draws nothing, so recall is exactly what the base
+    # captured, with no randomness left to vary.
+    assert padded_recall_moments(
+        captured=135, n_base=1985, budget=1985, n_gold=270, n_corpus=4885
+    ) == Moments(mean=0.5, sd=0.0)
+    # (2) A budget equal to the WHOLE corpus selects every sentence, so recall is exactly 1.0
+    # -- and the hypergeometric spread must collapse to 0 there too, which is the half a
+    # binomial approximation gets wrong: sampling WITHOUT replacement from a pool you exhaust
+    # has no variance left, while Binomial(n, p) would still report some.
+    assert padded_recall_moments(
+        captured=135, n_base=1985, budget=4885, n_gold=270, n_corpus=4885
+    ) == Moments(mean=1.0, sd=0.0)
+
+
+def test_the_closed_form_padding_moments_agree_with_actually_drawing_the_padding():
+    # THE ANCHORS ABOVE PIN THE TWO ENDS; this pins the MIDDLE, where the formula is doing
+    # real work -- and it does so against an independent computation rather than against more
+    # of my arithmetic. `pad_to_budget` + `sentence_metrics` know nothing about
+    # hypergeometrics; they shuffle sentences and count. If the two agree over 200 seeds, the
+    # closed form describes the sampler that is actually running.
+    #
+    # A BINOMIAL SD WOULD ALSO PASS A MEAN-ONLY CHECK, so the SD is compared too: sampling
+    # without replacement is narrower, and at this budget the difference is ~5% of the SD.
+    counts = {f"d{index}": 6 for index in range(40)}
+    n_corpus = sum(counts.values())
+    base = first_k(counts, 2)
+    n_base = n_selected(base)
+    # Gold sits at index 2 of every document -- OUTSIDE the base, so every gold sentence is
+    # reached only by the padding and the drawn count is what the whole spread depends on.
+    gold = {pmid: {2} for pmid in counts}
+    budget = 160
+
+    drawn = [
+        sentence_metrics(pad_to_budget(base, counts, budget, random.Random(seed)), gold).recall
+        for seed in range(MIN_SEEDS)
+    ]
+    empirical = distribution(drawn)
+    exact = padded_recall_moments(
+        captured=0, n_base=n_base, budget=budget, n_gold=len(gold), n_corpus=n_corpus
+    )
+    assert exact.mean == pytest.approx(empirical.mean, abs=4 * empirical.sd / math.sqrt(MIN_SEEDS))
+    assert exact.sd == pytest.approx(empirical.sd, rel=0.15)
+
+
 def _swept(label: str, *, n: int, unpadded: float, padded: float | None) -> SweptRow:
-    """A hand-built sweep row. `padded=None` is a row that costs MORE than the arm's budget."""
+    """A hand-built sweep row. `padded=None` is a row that costs MORE than the arm's budget.
+
+    The empirical spread is set to the SAME value as the exact mean, so a mutant selecting on
+    the draws instead of the closed form would still agree here -- that distinction is pinned
+    against the real sampler in the `run_baselines` tests, where the two genuinely differ.
+    """
     scores = Scores(
         n_selected=n,
         rate=0.0,
@@ -121,18 +180,21 @@ def _swept(label: str, *, n: int, unpadded: float, padded: float | None) -> Swep
         n_endpoint_lost=2,
     )
     if padded is None:
-        return SweptRow(label=label, scores=scores, padded=None)
+        return SweptRow(label=label, scores=scores, budget_matched=None)
     spread = distribution([padded] * MIN_SEEDS)
     return SweptRow(
         label=label,
         scores=scores,
-        padded=ScoreDistribution(
-            n_selected=spread,
-            rate=spread,
-            precision=spread,
-            recall=spread,
-            f1=spread,
-            recall_on_endpoint_lost=spread,
+        budget_matched=BudgetMatched(
+            exact=Moments(mean=padded, sd=0.0),
+            empirical=ScoreDistribution(
+                n_selected=spread,
+                rate=spread,
+                precision=spread,
+                recall=spread,
+                f1=spread,
+                recall_on_endpoint_lost=spread,
+            ),
         ),
     )
 
@@ -150,12 +212,12 @@ def test_the_best_free_baseline_is_chosen_on_the_budget_matched_score_only():
         _swept("first 4", n=12, unpadded=0.50, padded=0.68),
         _swept("first 5", n=15, unpadded=0.95, padded=None),
     )
-    best, best_padded = best_free_baseline(rows)
+    best, best_matched = best_free_baseline(rows)
     assert best.label == "first 2"
     # THE SCORE IS RETURNED BESIDE THE ROW, so no caller re-narrows `padded` away from None and
     # writes the unreachable branch this function already rules out. It must be the winner's
     # own score and not, say, the first comparable row's -- 0.83 is "first 2", 0.68 "first 4".
-    assert best_padded.recall_on_endpoint_lost.mean == pytest.approx(0.83)
+    assert best_matched.exact.mean == pytest.approx(0.83)
 
 
 def test_a_sweep_with_no_budget_comparable_row_is_rejected_rather_than_returning_the_cheapest():
@@ -839,16 +901,40 @@ def test_the_reports_bar_is_the_strongest_budget_matched_row_and_not_the_headlin
     # headline row -- the obvious wrong implementation, since that is the row ADR-0015 quotes --
     # disagrees with the computed maximum here.
     report = _report(tmp_path)
-    comparable = [row for row in report.sweep if row.padded is not None]
+    comparable = [row.budget_matched for row in report.sweep if row.budget_matched]
     assert report.best.label != f"first {4}"
-    assert report.best_padded.recall_on_endpoint_lost.mean == pytest.approx(
-        max(row.padded.recall_on_endpoint_lost.mean for row in comparable if row.padded)
+    assert report.best_matched.exact.mean == pytest.approx(
+        max(matched.exact.mean for matched in comparable)
     )
     # And the bar is genuinely ABOVE the row the published comparison used, which is the whole
     # reason the sweep changes the trigger: a future arm clearing `first 4` need not clear this.
-    assert (
-        report.best_padded.recall_on_endpoint_lost.mean > report.padded.recall_on_endpoint_lost.mean
-    )
+    assert report.best_matched.exact.mean > report.padded.recall_on_endpoint_lost.mean
+
+
+def test_the_bar_is_picked_on_the_exact_moments_and_the_draws_only_check_the_plumbing(tmp_path):
+    # THE BAR IS A MAXIMUM OVER TWELVE ROWS on the real corpus, so picking it on Monte-Carlo
+    # means makes it a max-of-estimates -- biased high, and capable of reordering two rows
+    # that sit within each other's noise. `padded_recall_moments` is exact, so the ordering is
+    # exact and the seeds go back to being a check on the plumbing.
+    #
+    # On this fixture `last 1` wins outright: it is the only base holding bucket (a)'s d2:[5]
+    # sentence, and it leaves the most budget for the draw to reach d1:[1] -- exactly
+    # (1 + 11/15) / 2. The runner-up `first 2` is (1 + 8/12) / 2, a clear 0.033 below, so the
+    # assertion does not rest on two rows separated by less than their own spread.
+    report = _report(tmp_path)
+    matched = [(row.label, row.budget_matched) for row in report.sweep if row.budget_matched]
+    assert report.best.label == "last 1"
+    assert report.best_matched.exact.mean == pytest.approx((1 + 11 / 15) / 2)
+    assert report.best_matched.exact.mean == max(bm.exact.mean for _, bm in matched)
+
+    # EVERY comparable row's closed form is checked against its own draws, not just the
+    # winner's: a formula right for one base and wrong for another would still name the right
+    # winner here while every other number in the table was off.
+    for label, bm in matched:
+        tolerance = 4 * bm.empirical.recall_on_endpoint_lost.sd / math.sqrt(MIN_SEEDS)
+        assert bm.exact.mean == pytest.approx(
+            bm.empirical.recall_on_endpoint_lost.mean, abs=max(tolerance, 1e-9)
+        ), label
 
 
 def test_the_rendered_report_names_the_run_the_budget_was_taken_from(tmp_path):
@@ -891,8 +977,8 @@ def test_the_rendered_bar_names_its_row_and_says_which_arms_clear_it(tmp_path):
     )
     report = _report(tmp_path, log_path=str(path))
     lines = render_report(report)
-    bar = report.best_padded.recall_on_endpoint_lost
-    assert f"    {report.best.label} padded to 14: {bar}" in lines
+    bar = report.best_matched.exact
+    assert f"    {report.best.label} padded to 14: {bar} (exact)" in lines
     assert [line for line in lines if line.endswith(" the bar")] == [
         "    LLM low (2026-08-17T00:59) at 0.3333: BELOW the bar",
         "    LLM max (2026-08-17T02:00) at 1.0000: CLEARS the bar",

@@ -233,6 +233,41 @@ def bernoulli_recall_moments(p: float, n_gold: int) -> Moments:
     return Moments(mean=p, sd=math.sqrt(p * (1.0 - p) / n_gold))
 
 
+def padded_recall_moments(
+    *, captured: int, n_base: int, budget: int, n_gold: int, n_corpus: int
+) -> Moments:
+    """Exact recall moments of `pad_to_budget` on a gold subset -- no simulation needed.
+
+    THE SAME ARGUMENT AS `bernoulli_recall_moments`, one level up. The padded rows are the
+    ones the report's bar is read off, and quoting a bar as a maximum over twelve noisy
+    Monte-Carlo means is exactly the "best of many estimates" shape that reads as a
+    measurement and is not quite one. Here the answer is closed-form, so the ordering of the
+    family is exact and the empirical rows go back to being a check on the plumbing.
+
+    `pad_to_budget` draws `budget - n_base` sentences from the `n_corpus - n_base` the base
+    left, WITHOUT replacement, so the number of bucket-(a) sentences it picks up is
+    Hypergeometric -- not Binomial. The distinction is not pedantic at this budget: the
+    finite-population correction `(N - n) / (N - 1)` takes `first 4`'s SD from 0.0132 to
+    0.0126, and at the top end it is the whole answer, since padding to the entire corpus has
+    to give recall 1.0 with ZERO spread while a binomial would still report some.
+
+    NO GUARDS, on ADR-0014's triage and for the same reasons recorded in
+    `bernoulli_recall_moments`: every bad argument already raises before returning.
+    `n_gold == 0` and a base filling the corpus (`n_corpus - n_base == 1`) divide by zero;
+    `budget < n_base` makes the drawn count negative, the variance negative, and `math.sqrt`
+    raises. A guard would improve the message without changing the loudness.
+    """
+    pool = n_corpus - n_base
+    drawn = budget - n_base
+    remaining_gold = n_gold - captured
+    share = remaining_gold / pool
+    expected_hits = drawn * share
+    # The finite-population correction is `(pool - drawn) / (pool - 1)`, which is exactly 0
+    # when the padding exhausts the pool -- the case that forces SD to 0 at full budget.
+    variance = expected_hits * (1.0 - share) * (pool - drawn) / (pool - 1)
+    return Moments(mean=(captured + expected_hits) / n_gold, sd=math.sqrt(variance) / n_gold)
+
+
 MIN_SEEDS = 200
 
 # THE SWEPT LADDERS. `K_SWEEP` runs to 6 rather than stopping at the last affordable k so the
@@ -460,14 +495,34 @@ def format_row(label: str, scores: Scores | ScoreDistribution) -> str:
 
 
 @dataclass(frozen=True)
+class BudgetMatched:
+    """What a row scores once padded to the arm's exact budget, both ways of knowing it.
+
+    THE TWO FIELDS ANSWER DIFFERENT QUESTIONS and neither replaces the other. `exact` is the
+    closed form, so the ORDERING of the family -- which row is the bar -- carries no
+    Monte-Carlo noise and no max-of-estimates bias. `empirical` is 200 actual draws, which is
+    what makes `exact` a checkable claim about the sampler rather than an assertion about a
+    formula, and it is the only source of the WORST-draw figure the robustness verdict needs;
+    a closed-form mean and SD cannot tell you the minimum over the seeds actually run.
+
+    THEY ARE ONE FIELD RATHER THAN TWO OPTIONALS on `SweptRow` because they are present under
+    exactly the same condition -- the row fits inside the budget. Two parallel `| None` fields
+    that must be None together is an invariant nothing enforces; one optional cannot drift.
+    """
+
+    exact: Moments
+    empirical: ScoreDistribution
+
+
+@dataclass(frozen=True)
 class SweptRow:
     """One member of the positional family: what it costs, what it scored, and -- only if it
     fits inside the arm's budget -- what it scores once padded up to that budget.
 
-    `padded is None` IS THE LOAD-BEARING STATE, not a missing value. A selector that spends
-    MORE than the arm cannot be padded up to it (`pad_to_budget` refuses to shrink), and it
-    must not be compared to the arm on recall either: recall is bought with volume, so a
-    row that outspent the arm and out-recalled it has demonstrated nothing about choosing
+    `budget_matched is None` IS THE LOAD-BEARING STATE, not a missing value. A selector that
+    spends MORE than the arm cannot be padded up to it (`pad_to_budget` refuses to shrink),
+    and it must not be compared to the arm on recall either: recall is bought with volume, so
+    a row that outspent the arm and out-recalled it has demonstrated nothing about choosing
     better sentences. Carrying `None` rather than omitting the row keeps the cost visible --
     the reader sees WHY `first 5` has no budget-matched figure, instead of seeing a sweep
     that mysteriously stops at 4.
@@ -475,41 +530,41 @@ class SweptRow:
 
     label: str
     scores: Scores
-    padded: ScoreDistribution | None
+    budget_matched: BudgetMatched | None
 
     @property
     def within_budget(self) -> bool:
-        return self.padded is not None
+        return self.budget_matched is not None
 
 
-def best_free_baseline(rows: Sequence[SweptRow]) -> tuple[SweptRow, ScoreDistribution]:
+def best_free_baseline(rows: Sequence[SweptRow]) -> tuple[SweptRow, BudgetMatched]:
     """The strongest BUDGET-COMPARABLE row and the budget-matched score it was chosen on.
 
-    RETURNS THE PAIR rather than the row alone, so no caller has to re-narrow `padded` away
-    from `None`. A `SweptRow` alone would leave every consumer -- the report field, the
-    renderer, the verdict -- writing a None branch that this function has already made
-    unreachable, which is the hollow guard ADR-0014's triage exists to prevent. The type
-    carries the guarantee instead.
+    RETURNS THE PAIR rather than the row alone, so no caller has to re-narrow
+    `budget_matched` away from `None`. A `SweptRow` alone would leave every consumer -- the
+    report field, the renderer, the verdict -- writing a None branch that this function has
+    already made unreachable, which is the hollow guard ADR-0014's triage exists to prevent.
+    The type carries the guarantee instead.
 
     SELECTED ON THE PADDED SCORE, NEVER THE RAW ONE. The raw column rewards spending more,
     and the whole reason padding exists is to strip that advantage out; a bar taken from the
     raw column would be set by whichever row bought the most sentences.
 
-    ON THE SELECTION EFFECT, recorded rather than left for a reader to notice: this is a
-    maximum over many noisy estimates, so it is biased slightly high as an estimate of the
-    best selector's true score. With `MIN_SEEDS` draws the SE of each mean is ~0.001 against
-    inter-row gaps an order of magnitude larger, so it does not move the verdict here -- but
-    the bar is a maximum-of-estimates and should be cited as one, and a future sweep with
-    many more rows or far fewer seeds would need to say so louder.
+    AND SELECTED ON THE EXACT MOMENTS, NOT THE DRAWS. This is a maximum over twelve rows on
+    the real corpus; taken over Monte-Carlo means it would be a max-of-estimates -- biased
+    high, and able to reorder two rows sitting inside each other's noise. The closed form
+    removes both problems, so the bar is a number rather than an estimate of one, and the
+    empirical rows stay what they are best at: a check that the formula describes the sampler
+    actually running, and the only source of a worst-observed-draw.
     """
     # Score and row are paired IN the comprehension rather than read back out in a `key=`
     # closure, where the `is not None` narrowing would not reach and would need either a
     # second None branch that cannot fire or an `assert` -- both of them the hollow guard
     # ADR-0014's triage says to delete rather than write.
     scored = [
-        (row.padded.recall_on_endpoint_lost.mean, row, row.padded)
+        (row.budget_matched.exact.mean, row, row.budget_matched)
         for row in rows
-        if row.padded is not None
+        if row.budget_matched is not None
     ]
     if not scored:
         raise ValueError(
@@ -518,8 +573,8 @@ def best_free_baseline(rows: Sequence[SweptRow]) -> tuple[SweptRow, ScoreDistrib
             "the sweep's cheapest member is already over budget -- suspect a budget read from "
             "a `--limit` pilot, or a family whose smallest k still outspends the arm."
         )
-    _, row, padded = max(scored, key=lambda scored_row: scored_row[0])
-    return row, padded
+    _, row, matched = max(scored, key=lambda scored_row: scored_row[0])
+    return row, matched
 
 
 @dataclass(frozen=True)
@@ -650,7 +705,7 @@ class BaselineReport:
     padded_base: Selection
     sweep: tuple[SweptRow, ...]
     best: SweptRow
-    best_padded: ScoreDistribution
+    best_matched: BudgetMatched
     padded: ScoreDistribution
     random_null: ScoreDistribution
     arms: tuple[LlmArm, ...]
@@ -712,28 +767,44 @@ def run_baselines(
         (f"first {fraction:.0%}", first_fraction(counts, fraction)) for fraction in FRACTION_SWEEP
     ]
 
-    def padded_over_seeds(selection: Selection) -> ScoreDistribution | None:
+    def match_to_budget(selection: Selection, scores: Scores) -> BudgetMatched | None:
         # `selection` is bound as a PARAMETER rather than captured from a loop variable: a
         # closure over the loop would pad every row from the last selection in the family and
         # print seventeen identical budget-matched rows under seventeen different labels.
-        if n_selected(selection) > budget:
+        n_base = n_selected(selection)
+        if n_base > budget:
             return None
-        return score_over_seeds(
-            lambda rng: pad_to_budget(selection, counts, budget, rng),
-            gold=gold,
-            endpoint_lost=endpoint_lost,
-            n_sentences=n_sentences,
-            seeds=seeds,
+        return BudgetMatched(
+            # `captured` is the base's OWN bucket-(a) hits, read off the score just computed
+            # rather than recounted, so the closed form and the raw row cannot disagree about
+            # what the base caught before any padding was drawn.
+            exact=padded_recall_moments(
+                captured=scores.tp_on_endpoint_lost,
+                n_base=n_base,
+                budget=budget,
+                n_gold=n_lost,
+                n_corpus=n_sentences,
+            ),
+            empirical=score_over_seeds(
+                lambda rng: pad_to_budget(selection, counts, budget, rng),
+                gold=gold,
+                endpoint_lost=endpoint_lost,
+                n_sentences=n_sentences,
+                seeds=seeds,
+            ),
         )
 
-    sweep = tuple(
-        SweptRow(label=label, scores=score(selection), padded=padded_over_seeds(selection))
-        for label, selection in family
-    )
+    def swept(label: str, selection: Selection) -> SweptRow:
+        scores = score(selection)
+        return SweptRow(
+            label=label, scores=scores, budget_matched=match_to_budget(selection, scores)
+        )
+
+    sweep = tuple(swept(label, selection) for label, selection in family)
 
     base = dict(family)[f"first {HEADLINE_K}"]
     headline = next(row for row in sweep if row.label == f"first {HEADLINE_K}")
-    if headline.padded is None:
+    if headline.budget_matched is None:
         raise ValueError(
             f"run_baselines: the headline row `first {HEADLINE_K}` costs "
             f"{n_selected(base)} sentences, above the arm's budget of {budget}, so it has no "
@@ -741,8 +812,8 @@ def run_baselines(
             "on -- an arm selecting fewer sentences than `first 4` needs a new headline row "
             "chosen deliberately, not a silently missing one."
         )
-    padded = headline.padded
-    best, best_padded = best_free_baseline(sweep)
+    padded = headline.budget_matched.empirical
+    best, best_matched = best_free_baseline(sweep)
     random_null = score_over_seeds(
         lambda rng: select_at_rate(counts, rate, rng),
         gold=gold,
@@ -761,7 +832,7 @@ def run_baselines(
         padded_base=base,
         sweep=sweep,
         best=best,
-        best_padded=best_padded,
+        best_matched=best_matched,
         padded=padded,
         random_null=random_null,
         arms=tuple(arms),
@@ -834,35 +905,40 @@ def render_report(report: BaselineReport) -> list[str]:
         "  unpadded recall is not comparable to the arm's, because recall is bought with volume."
     )
     for row in report.sweep:
-        if row.padded is None:
+        if row.budget_matched is None:
             lines.append(
                 f"  {row.label:<22} -- costs {row.scores.n_selected}, above the "
                 f"{report.budget} budget"
             )
         else:
-            lines.append(f"  {row.label:<22} {row.padded.recall_on_endpoint_lost}")
+            lines.append(
+                f"  {row.label:<22} exact {row.budget_matched.exact}   "
+                f"drawn {row.budget_matched.empirical.recall_on_endpoint_lost}"
+            )
 
-    best_recall = report.best_padded.recall_on_endpoint_lost
+    best_exact = report.best_matched.exact
+    best_drawn = report.best_matched.empirical.recall_on_endpoint_lost
     lines.append("")
     lines.append("THE BAR FOR ADR-0015's CONDITIONAL REVISIT TRIGGER")
     lines.append(
         "  The trigger is a configuration beating THE BEST FREE BASELINE on bucket (a) -- not a"
     )
     lines.append("  rate-matched null, and not control-real's structural zero. That bar is:")
-    lines.append(f"    {report.best.label} padded to {report.budget}: {best_recall}")
-    lines.append(f"    worst of {best_recall.n_draws} draws: {best_recall.minimum:.4f}")
+    lines.append(f"    {report.best.label} padded to {report.budget}: {best_exact} (exact)")
+    lines.append(f"    {best_drawn.n_draws} draws agree: {best_drawn}")
     lines.append(
-        "  This is a MAXIMUM OVER ESTIMATES and biased slightly high as an estimate of the best"
+        "  The bar is the CLOSED FORM, so the ordering of the family carries no Monte-Carlo"
     )
     lines.append(
-        "  selector's true score; cite it as the best OBSERVED free baseline over this family."
+        "  noise and is not a maximum over estimates; the draws are a check on the sampler."
     )
     lines.append(
-        "  The family is a ladder, not the space -- see the report for what is still unswept."
+        "  The family is a ladder, not the space -- see the report for what is still unswept,"
     )
+    lines.append("  so this bar can only rise.")
     for arm in report.arms:
         arm_recall = arm.scores.recall_on_endpoint_lost
-        clears = arm_recall > best_recall.mean
+        clears = arm_recall > best_exact.mean
         lines.append(
             f"    LLM {arm.effort} ({arm.timestamp[:16]}) at {arm_recall:.4f}: "
             f"{'CLEARS' if clears else 'BELOW'} the bar"
