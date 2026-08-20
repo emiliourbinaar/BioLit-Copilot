@@ -283,11 +283,41 @@ nothing anchors on an arm's answers.
 not padding — without them there is no way to distinguish a genuinely high π from a protocol
 that rubber-stamps whatever it is shown.
 
-**Staged, with a tractability gate:** a first batch of ~30 mixed across classes is annotated
-to confirm the blind protocol is workable before the remaining ~7 hours are committed.
-Annotation may stop early if the time budget does not stretch; **whatever N is reached is
-documented exactly as the drop-rate rule documents a smaller-than-target class.** The
-achieved N and its interval are reported, never a target N.
+**Staged, with two gates on the first batch.** The first batch is **30 pairs, composed as 15
+contradiction + 15 spread across the other two classes** — deliberately weighted, because the
+second gate needs contradiction pairs specifically and an even three-way split would yield
+only ~10.
+
+**Gate 1 — tractability.** Confirm the blind protocol is workable at all: that the abstracts
+carry enough information to judge, and that `cant_tell` is not swallowing most of the batch.
+A `cant_tell` rate above ~1/3 means the protocol needs revision before more time is spent,
+not that the Critic's task is impossible.
+
+**Gate 2 — the proxy's validity, with a numeric threshold.** Let *g* be the count of the 15
+contradiction pairs the annotator judges to be genuine disagreements.
+
+| Observed | Reading | Action |
+|---|---|---|
+| **g ≤ 7** (≤ 50%) | π is trending materially below the 0.5–0.6 floor | **STOP. Reconsider the gold-source strategy before committing the remaining ~7 hours.** |
+| 8 ≤ g ≤ 10 | π plausibly in the 0.55–0.70 band | Continue, but flag π as likely low; expect the ceiling to bind hard on every reported number |
+| **g ≥ 11** (≥ 73%) | π consistent with the 0.8 the design hopes for | Continue as planned |
+
+**Why 7 is the cut, and what it can and cannot support.** Under a true π = 0.8, observing
+g ≤ 7 of 15 has probability **0.0042**; under π = 0.7, **0.0500**. So the rule is a genuinely
+strong signal *against* π ≥ 0.7 and fires rarely when the proxy is sound. It is **weak against
+π = 0.6** (probability 0.2131), which is why the threshold is set at the 0.5–0.6 floor rather
+than at 0.8 — it detects a proxy that is failing badly, not one that is merely mediocre.
+
+**What this gate is not:** a measurement of π. At 15 pairs the 95% interval is roughly ±0.25,
+so a batch reading 0.6 cannot be distinguished from one reading 0.8. It is a **stop rule**,
+deliberately asymmetric: cheap to pass, and firing only on evidence strong enough to justify
+abandoning the gold-source strategy before the expensive annotation is bought.
+
+**Stopping early for budget reasons is separate and always permitted.** Annotation may stop
+at any point if the time budget does not stretch; **whatever N is reached is documented
+exactly as the drop-rate rule documents a smaller-than-target class.** The achieved N and its
+interval are reported, never a target N. A stop under Gate 2 is recorded as a **finding about
+the gold source**, not as an incomplete annotation.
 
 Interval on π at various sizes (at π ≈ 0.8):
 
@@ -512,12 +542,17 @@ authorization bound, so a systematic error cannot run away across 3,600 calls.
 | 1 | Corpus builder, manifest, anchors | free |
 | 2 | Abstract fetch; drop rate by class | free |
 | 3 | Free baselines, metrics, run log | free |
-| 4 | Human annotation, first batch (~30, mixed) | annotator time |
+| 4 | Human annotation, first batch (30 = 15 contradiction + 15 other) — **Gates 1 & 2** | annotator time |
 | 5 | **Pilot** (120 calls) | smallest paid step — **requires authorization** |
 | 6 | **Authorization gate** — measured tokens, bound, refusal rate, baseline scores | — |
 | 7 | Full run | **requires authorization** |
 | 8 | Human annotation to target N | annotator time |
 | 9 | Report and ADR | free |
+
+**Step 4's Gate 2 may retire the whole design.** If the first annotation batch reads g ≤ 7,
+the CTD proxy is failing badly enough that steps 5–8 are not worth buying, and the correct
+response is to reconsider the gold source rather than proceed with a known-weak ceiling. This
+gate sits before every paid step deliberately.
 
 **Step 3 may retire step 7's premise.** If the direction-lexicon baseline scores near-ceiling
 — which §3 pre-registers as likely — the paid run's purpose changes *before* it is bought,
@@ -556,11 +591,27 @@ baselines' scores — never on a figure written in advance.
 7. **`insufficient_overlap` gold is negative evidence.** It asserts CTD curates no relation
    between two papers, which is not the same as no relation existing. Curation gaps
    contribute an unmeasured share.
+8. **The zero-finding rate may differ by class, confounding the input-mode comparison.**
+   Parallel to limitation 5, and for the same reason: it is a nuisance variable that may
+   correlate with the label. The findings arm receives empty text whenever the entity-gated
+   extractor returns nothing, so **if that rate is class-correlated, the abstract-vs-findings
+   comparison is confounded for the affected class** — the arms would differ there partly
+   because one saw nothing, not because extraction changed the judgment. Concretely plausible
+   in one direction: if therapeutic-direction abstracts name drugs and diseases more
+   explicitly, the extractor fires more often on them and the findings arm looks better on
+   `agreement` for reasons unrelated to judging agreement. Measured per class in §3 and
+   reported regardless of outcome; **the per-class rates must be read alongside any per-class
+   arm difference**, and a materially divergent rate makes that class's comparison
+   uninterpretable rather than merely noisy. Mitigated by measurement and disclosure, not
+   eliminated — the no-fallback policy is what keeps it *visible*, since a fallback would
+   hide the same confound inside an apparently complete arm.
 
 ---
 
 ## §6 — Open items for the implementation plan
 
 - Per-class abstract availability (§1) — measured in step 2, feeds the drop-rate rule.
-- Achieved annotation N (§2) — determined by the staged protocol.
+- π and the achieved annotation N (§2) — Gate 2 fires or clears on the first batch; the final
+  N is determined by the staged protocol and the time budget.
+- Per-class zero-finding rate (§3) — measured in step 3, feeds limitation 8.
 - Per-call token distributions (§4) — measured by the pilot, feeds the authorization bound.
