@@ -1,6 +1,7 @@
 import itertools
+import random
 from collections import defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 
@@ -116,4 +117,40 @@ def build_candidates(
 
     out.extend(hard_negatives(by_chemical, is_chemical=True))
     out.extend(hard_negatives(by_disease, is_chemical=False))
+    return out
+
+
+def sample_pairs(
+    candidates: Sequence[GoldPair], *, per_class: int, rng: random.Random
+) -> list[GoldPair]:
+    """Draw up to `per_class` pairs per label under two hard constraints.
+
+    ONE PAIR PER KEY, so no single drug dominates the eval (the design's answer to ADR-0013's
+    top5_pair_share of 0.503 on same-sentence clusters).
+
+    NO PAPER IN TWO PAIRS, which is what makes the pairs independent trials. Every binomial
+    confidence interval in the report depends on it; with shared papers they are understated.
+    Measured feasible at 2759 disjoint pairs against the 300 required.
+
+    Candidates are shuffled with the injected rng, so the manifest's order IS the sample
+    order and `--limit N` on a pilot is a valid random subsample rather than a key-ordered one.
+    """
+    shuffled = list(candidates)
+    rng.shuffle(shuffled)
+    taken: dict[ContradictionLabel, int] = defaultdict(int)
+    used_papers: set[str] = set()
+    used_keys: set[tuple[str | None, str | None]] = set()
+    out: list[GoldPair] = []
+    for pair in shuffled:
+        key = (pair.chemical_id, pair.disease_id)
+        if taken[pair.label] >= per_class:
+            continue
+        if pair.paper_id_a in used_papers or pair.paper_id_b in used_papers:
+            continue
+        if key in used_keys:
+            continue
+        used_papers.update((pair.paper_id_a, pair.paper_id_b))
+        used_keys.add(key)
+        taken[pair.label] += 1
+        out.append(pair)
     return out

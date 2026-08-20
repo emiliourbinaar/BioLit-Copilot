@@ -1,5 +1,12 @@
+import random
+
 from biolit.domain.records import ContradictionLabel
-from biolit_evals.contradiction_gold import build_candidates, label_for_directions
+from biolit_evals.contradiction_gold import (
+    GoldPair,
+    build_candidates,
+    label_for_directions,
+    sample_pairs,
+)
 from biolit_evals.ctd_directions import Direction
 
 _MM = frozenset({Direction.marker_mechanism})
@@ -90,3 +97,111 @@ def test_build_candidates_is_deterministic():
     first = build_candidates(directions, excluded=set())
     second = build_candidates(directions, excluded=set())
     assert first == second
+
+
+def test_no_paper_appears_in_two_sampled_pairs():
+    """Load-bearing for the statistics: shared papers make the trials dependent, and every
+    binomial interval in the report would then be understated."""
+    candidates = [
+        GoldPair(
+            f"p{i}",
+            "SHARED",
+            f"C{i:06d}",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+        for i in range(7, 0, -1)  # 7 elements, reverse-inserted
+    ]
+    sampled = sample_pairs(candidates, per_class=7, rng=random.Random(0))
+    assert len(sampled) == 1
+
+
+def test_only_one_pair_per_key_is_drawn():
+    candidates = [
+        GoldPair(
+            f"a{i}",
+            f"b{i}",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+        for i in range(7, 0, -1)
+    ]
+    assert len(sample_pairs(candidates, per_class=7, rng=random.Random(0))) == 1
+
+
+def test_reuse_of_paper_b_alone_is_also_rejected():
+    """`a in used or b in used` -- the b-side operand. Without it, a candidate reusing only
+    its second paper is admitted and the trials stop being independent."""
+    candidates = [
+        GoldPair(
+            "a1",
+            "shared",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+        GoldPair(
+            "a2",
+            "shared",
+            "C000002",
+            "D000002",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+    ]
+    assert len(sample_pairs(candidates, per_class=2, rng=random.Random(0))) == 1
+
+
+def test_reuse_of_paper_a_alone_is_also_rejected():
+    """`a in used or b in used` -- the a-side operand. Without it, a candidate reusing only
+    its first paper is admitted and the trials stop being independent. The brief's own fixture
+    for `test_no_paper_appears_in_two_sampled_pairs` only shares paper_id_b across candidates,
+    so it cannot exercise this operand; this test mirrors it on the a-side."""
+    candidates = [
+        GoldPair(
+            "shared",
+            "b1",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+        GoldPair(
+            "shared",
+            "b2",
+            "C000002",
+            "D000002",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+    ]
+    assert len(sample_pairs(candidates, per_class=2, rng=random.Random(0))) == 1
+
+
+def test_sampling_is_deterministic_given_a_seed():
+    candidates = [
+        GoldPair(
+            f"a{i}",
+            f"b{i}",
+            f"C{i:06d}",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+        for i in range(7, 0, -1)
+    ]
+    first = sample_pairs(candidates, per_class=7, rng=random.Random(11))
+    second = sample_pairs(candidates, per_class=7, rng=random.Random(11))
+    assert [p.paper_id_a for p in first] == [p.paper_id_a for p in second]
+    assert [p.paper_id_a for p in first] != [p.paper_id_a for p in candidates]
