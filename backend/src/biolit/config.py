@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     mesh_artifact_path: str = "data/canon/mesh_aliases.json.gz"
     ctd_chemicals_url: str = "https://ctdbase.org/reports/CTD_chemicals.tsv.gz"
     ctd_diseases_url: str = "https://ctdbase.org/reports/CTD_diseases.tsv.gz"
+    ctd_chemicals_diseases_url: str = "https://ctdbase.org/reports/CTD_chemicals_diseases.tsv.gz"
     bc5cdr_cdr_zip_url: str = (
         "https://huggingface.co/datasets/bigbio/bc5cdr/resolve/main/CDR_Data.zip"
     )
