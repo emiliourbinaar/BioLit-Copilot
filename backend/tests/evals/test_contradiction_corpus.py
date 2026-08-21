@@ -87,3 +87,47 @@ def test_drop_report_drops_a_pair_missing_only_its_first_abstract():
     ]
     report = drop_report(pairs, {"2": "only b"})
     assert report.per_class["contradiction"] == (0, 1)
+
+
+def test_year_by_class_records_only_pmids_present_in_years_without_crashing():
+    """`if years and pmid in years` -- both operands. `years` truthy (a real mapping was
+    passed) is exercised by paper "1" being recorded at all; `pmid in years` is exercised by
+    paper "2" being absent from `years` yet not crashing and not appearing in the output.
+    Limitation 5's confound check depends on this field: an unpopulated or crashing
+    year_by_class would silently hide a class-correlated availability skew."""
+    pairs = [
+        GoldPair(
+            "1",
+            "2",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+    ]
+    abstracts = {"1": "a", "2": "bb"}
+    years = {"1": 1990}  # paper "2" deliberately absent from years
+    report = drop_report(pairs, abstracts, years)
+    assert report.year_by_class["contradiction"] == [1990]
+
+
+def test_length_by_class_records_kept_pairs_abstract_lengths():
+    """length_by_class is populated on every drop_report run (no injected `years` needed to
+    exercise it) but no prior test asserted on it -- only per_class was checked. Limitation
+    5's confound check depends on this field just as much as year_by_class: a length skew by
+    class is the same kind of availability confound a year skew is."""
+    pairs = [
+        GoldPair(
+            "1",
+            "2",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+    ]
+    abstracts = {"1": "abc", "2": "de"}
+    report = drop_report(pairs, abstracts)
+    assert report.length_by_class["contradiction"] == [3, 2]
