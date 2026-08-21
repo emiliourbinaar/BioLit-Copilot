@@ -1,3 +1,4 @@
+import json
 import random
 
 import pytest
@@ -11,6 +12,7 @@ from biolit_evals.contradiction_gold import (
     assert_papers_disjoint,
     build_candidates,
     label_for_directions,
+    manifest_hash,
     read_manifest,
     sample_pairs,
     write_manifest,
@@ -306,6 +308,49 @@ def test_labels_rederive_anchor_fires_when_direction_a_is_missing():
         assert_labels_rederive(bad)
 
 
+def test_manifest_hash_is_stable_over_content_not_file_bytes(tmp_path):
+    """manifest_hash is documented to be stable over CONTENT, not file bytes -- a run-log
+    line pins a corpus by this hash, and CTD is a living database, so a re-serialization
+    (or writing the same content to a different path) must never change it. Written to two
+    different paths and reloaded, the same logical content must hash identically both to
+    each other and to the original in-memory list."""
+    pairs = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+    ]
+    path_a = tmp_path / "a.jsonl"
+    path_b = tmp_path / "nested" / "b.jsonl"
+    write_manifest(pairs, path_a)
+    write_manifest(pairs, path_b)
+    assert manifest_hash(pairs) == manifest_hash(read_manifest(path_a))
+    assert manifest_hash(read_manifest(path_a)) == manifest_hash(read_manifest(path_b))
+
+    # Same logical content, hand-written with a different raw key order -- if the hash ever
+    # depended on the file's actual bytes rather than the re-serialized loaded content,
+    # this would diverge from the two above.
+    reordered_path = tmp_path / "reordered.jsonl"
+    reordered_line = json.dumps(
+        {
+            "direction_b": "therapeutic",
+            "label": "contradiction",
+            "paper_id_a": "11",
+            "chemical_id": "C000001",
+            "disease_id": "D000001",
+            "paper_id_b": "22",
+            "direction_a": "marker/mechanism",
+        }
+    )
+    reordered_path.write_text(reordered_line + "\n", encoding="utf-8")
+    assert manifest_hash(read_manifest(reordered_path)) == manifest_hash(pairs)
+
+
 def test_disjointness_anchor_fires_on_a_reused_paper():
     pairs = [
         GoldPair(
@@ -370,6 +415,35 @@ def test_one_pair_per_key_anchor_fires_on_a_reused_key():
     ]
     with pytest.raises(AssertionError, match="contributes 2 pairs"):
         assert_one_pair_per_key(pairs)
+
+
+def test_labels_rederive_passes_silently_on_a_valid_insufficient_overlap_pair():
+    """Positive control for the `insufficient_overlap` skip. The real corpus always contains
+    such pairs (both directions are None BY CONSTRUCTION -- see build_candidates), so if the
+    skip ever regressed, this anchor would fire on every perfectly healthy corpus. A positive
+    control that cries wolf is worse than none: the first response would be to distrust the
+    corpus rather than the anchor."""
+    pairs = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            None,
+            ContradictionLabel.insufficient_overlap,
+            None,
+            None,
+        ),
+        GoldPair(
+            "33",
+            "44",
+            "C000002",
+            "D000002",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+    ]
+    assert_labels_rederive(pairs)  # must not raise
 
 
 def test_labels_rederive_anchor_fires_when_direction_b_is_missing():

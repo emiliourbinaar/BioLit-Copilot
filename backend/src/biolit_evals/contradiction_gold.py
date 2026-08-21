@@ -185,6 +185,13 @@ def read_manifest(path: str | Path) -> list[GoldPair]:
 
 def manifest_hash(pairs: Sequence[GoldPair]) -> str:
     """Stable over content, not over file bytes, so a re-serialization cannot change it."""
+    # sort_keys=True is load-bearing, not cosmetic: without it, json.dumps emits each dict's
+    # keys in GoldPair's field-DECLARATION order. Reordering the dataclass's fields then
+    # changes every manifest hash even though corpus content is byte-identical -- silently
+    # invalidating the corpus pin in every historical run-log line. Measured directly: hashing
+    # the same content through GoldPair vs. a field-reordered stand-in dataclass gave
+    # 5306ab933571c1b6 == 5306ab933571c1b6 (equal) with sort_keys=True, but bcf4a42b2605954d
+    # != 8b020d200c3aa5b3 (unequal) with it removed. Do not delete this argument.
     payload = json.dumps([asdict(p) for p in pairs], sort_keys=True).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
 
