@@ -1,9 +1,12 @@
+import hashlib
 import itertools
+import json
 import random
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from biolit.domain.records import ContradictionLabel
 from biolit_evals.ctd_directions import Direction
@@ -154,3 +157,88 @@ def sample_pairs(
         taken[pair.label] += 1
         out.append(pair)
     return out
+
+
+def write_manifest(pairs: Sequence[GoldPair], path: str | Path) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        for pair in pairs:
+            fh.write(json.dumps(asdict(pair)) + "\n")
+
+
+def read_manifest(path: str | Path) -> list[GoldPair]:
+    """`label` is coerced back to `ContradictionLabel`; JSON round-trips it as a plain str,
+    which passes `==` (ContradictionLabel is a StrEnum) but fails `is` comparisons -- and
+    `assert_labels_rederive` compares with `is`. Without the coercion, every manifest loaded
+    from disk would fail that anchor even when its labels are perfectly correct.
+    """
+    out = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            record["label"] = ContradictionLabel(record["label"])
+            out.append(GoldPair(**record))
+    return out
+
+
+def manifest_hash(pairs: Sequence[GoldPair]) -> str:
+    """Stable over content, not over file bytes, so a re-serialization cannot change it."""
+    payload = json.dumps([asdict(p) for p in pairs], sort_keys=True).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]
+
+
+def assert_labels_rederive(pairs: Sequence[GoldPair]) -> None:
+    """THE POSITIVE CONTROL. Every stored label must follow from its stored directions.
+
+    This is the anchor that fires if ID normalization ever regresses. Without it a broken
+    join produces an empty or mislabelled corpus and the run reports a plausible-looking
+    negative result instead of an error.
+    """
+    for pair in pairs:
+        if pair.label is ContradictionLabel.insufficient_overlap:
+            continue
+        if pair.direction_a is None or pair.direction_b is None:
+            raise AssertionError(
+                f"assert_labels_rederive: {pair.paper_id_a}/{pair.paper_id_b} is labelled "
+                f"{pair.label} but carries no recorded directions."
+            )
+        rederived = label_for_directions(
+            frozenset({Direction(pair.direction_a)}), frozenset({Direction(pair.direction_b)})
+        )
+        if rederived is not pair.label:
+            raise AssertionError(
+                f"assert_labels_rederive: {pair.paper_id_a}/{pair.paper_id_b} stores "
+                f"{pair.label} but its directions re-derive {rederived}."
+            )
+
+
+def assert_papers_disjoint(pairs: Sequence[GoldPair]) -> None:
+    counts = Counter(p for pair in pairs for p in (pair.paper_id_a, pair.paper_id_b))
+    repeated = {pmid: n for pmid, n in counts.items() if n > 1}
+    if repeated:
+        first, n = next(iter(repeated.items()))
+        raise AssertionError(
+            f"assert_papers_disjoint: {len(repeated)} paper(s) reused; {first} appears in "
+            f"{n} pairs. Pairs must be independent trials -- see the spec's sampling section."
+        )
+
+
+def assert_no_bc5cdr_pmids(pairs: Sequence[GoldPair], excluded: AbstractSet[str]) -> None:
+    hit = {p for pair in pairs for p in (pair.paper_id_a, pair.paper_id_b) if p in excluded}
+    if hit:
+        raise AssertionError(
+            f"assert_no_bc5cdr_pmids: {len(hit)} sampled pmid(s) are in BC5CDR, e.g. "
+            f"{sorted(hit)[0]}. The NER checkpoint was fine-tuned on that corpus."
+        )
+
+
+def assert_one_pair_per_key(pairs: Sequence[GoldPair]) -> None:
+    counts = Counter((pair.chemical_id, pair.disease_id) for pair in pairs)
+    repeated = {key: n for key, n in counts.items() if n > 1}
+    if repeated:
+        key, n = next(iter(repeated.items()))
+        raise AssertionError(
+            f"assert_one_pair_per_key: key {key} contributes {n} pairs; one is the cap."
+        )

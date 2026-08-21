@@ -1,11 +1,19 @@
 import random
 
+import pytest
+
 from biolit.domain.records import ContradictionLabel
 from biolit_evals.contradiction_gold import (
     GoldPair,
+    assert_labels_rederive,
+    assert_no_bc5cdr_pmids,
+    assert_one_pair_per_key,
+    assert_papers_disjoint,
     build_candidates,
     label_for_directions,
+    read_manifest,
     sample_pairs,
+    write_manifest,
 )
 from biolit_evals.ctd_directions import Direction
 
@@ -224,3 +232,160 @@ def test_sampling_is_deterministic_given_a_seed():
     second = sample_pairs(candidates, per_class=7, rng=random.Random(11))
     assert [p.paper_id_a for p in first] == [p.paper_id_a for p in second]
     assert [p.paper_id_a for p in first] != [p.paper_id_a for p in candidates]
+
+
+def test_manifest_round_trips(tmp_path):
+    pairs = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+    ]
+    path = tmp_path / "m.jsonl"
+    write_manifest(pairs, path)
+    assert read_manifest(path) == pairs
+
+
+def test_manifest_round_trip_preserves_enum_identity_not_just_equality(tmp_path):
+    """`==` is True for a plain str because ContradictionLabel is a StrEnum, so an equality
+    round-trip test passes while `is` comparisons break. assert_labels_rederive uses `is`."""
+    pairs = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        )
+    ]
+    path = tmp_path / "m.jsonl"
+    write_manifest(pairs, path)
+    loaded = read_manifest(path)
+    assert loaded[0].label is ContradictionLabel.contradiction
+
+
+def test_labels_rederive_anchor_fires_on_a_mislabelled_pair():
+    bad = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.agreement,
+            "marker/mechanism",
+            "therapeutic",
+        )
+    ]
+    with pytest.raises(AssertionError, match="re-derive"):
+        assert_labels_rederive(bad)
+
+
+def test_labels_rederive_anchor_fires_when_direction_a_is_missing():
+    """`direction_a is None or direction_b is None` -- the a-side operand. A pair labelled
+    contradiction/agreement must carry both directions; a missing a-side must fire on its
+    own, not merely when b is also missing."""
+    bad = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            None,
+            "therapeutic",
+        )
+    ]
+    with pytest.raises(AssertionError, match="no recorded directions"):
+        assert_labels_rederive(bad)
+
+
+def test_disjointness_anchor_fires_on_a_reused_paper():
+    pairs = [
+        GoldPair(
+            "a",
+            "shared",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+        GoldPair(
+            "b",
+            "shared",
+            "C000002",
+            "D000002",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+    ]
+    with pytest.raises(AssertionError, match="appears in 2 pairs"):
+        assert_papers_disjoint(pairs)
+
+
+def test_bc5cdr_anchor_fires_on_an_excluded_pmid():
+    pairs = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+    ]
+    with pytest.raises(AssertionError, match="BC5CDR"):
+        assert_no_bc5cdr_pmids(pairs, excluded={"11"})
+
+
+def test_one_pair_per_key_anchor_fires_on_a_reused_key():
+    pairs = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+        GoldPair(
+            "33",
+            "44",
+            "C000001",
+            "D000001",
+            ContradictionLabel.agreement,
+            "marker/mechanism",
+            "marker/mechanism",
+        ),
+    ]
+    with pytest.raises(AssertionError, match="contributes 2 pairs"):
+        assert_one_pair_per_key(pairs)
+
+
+def test_labels_rederive_anchor_fires_when_direction_b_is_missing():
+    """`direction_a is None or direction_b is None` -- the b-side operand. Without it a pair
+    missing only its second direction is admitted and label re-derivation is skipped
+    silently."""
+    bad = [
+        GoldPair(
+            "11",
+            "22",
+            "C000001",
+            "D000001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            None,
+        )
+    ]
+    with pytest.raises(AssertionError, match="no recorded directions"):
+        assert_labels_rederive(bad)
