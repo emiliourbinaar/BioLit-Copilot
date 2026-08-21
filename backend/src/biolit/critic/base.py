@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Protocol
 
-from biolit.domain.records import ContradictionFinding
+from biolit.domain.records import ContradictionFinding, ContradictionLabel
 
 
 @dataclass(frozen=True)
@@ -31,3 +32,25 @@ class Critic(Protocol):
     """
 
     def judge(self, pair: CriticPair) -> ContradictionFinding: ...
+
+
+class PaperDirection(StrEnum):
+    causes = "causes"
+    treats = "treats"
+    neither = "neither"
+
+
+def compose(a: PaperDirection, b: PaperDirection) -> ContradictionLabel:
+    """Pair label from two per-paper directions.
+
+    `neither` on EITHER side yields insufficient_overlap: a paper that takes no position on
+    the relationship cannot disagree with one that does. Two-sided case -- test both sides.
+
+    SHARED ON PURPOSE. Both the free direction-lexicon baseline and the LLM direction arm
+    compose two per-paper directions into a pair label. If they composed by different rules
+    the two arms would not be comparable, and comparing them is the entire point of the eval.
+    One shared function makes the rule identical by construction rather than by coincidence.
+    """
+    if a is PaperDirection.neither or b is PaperDirection.neither:
+        return ContradictionLabel.insufficient_overlap
+    return ContradictionLabel.agreement if a is b else ContradictionLabel.contradiction
