@@ -99,6 +99,25 @@ def test_build_candidates_is_deterministic():
     assert first == second
 
 
+def test_build_candidates_output_is_in_ascending_lexicographic_order():
+    """Insertion order is adversarial (descending) at both the key level and the pmid-within-
+    key level, so this only passes if `sorted()` is actually doing the ordering -- not because
+    the input happened to already be sorted. Canonical order is what makes the seeded shuffle
+    in `sample_pairs` reproducible across processes and hash seeds."""
+    directions = {
+        "p9": {("C2", "D2"): _MM},
+        "p8": {("C2", "D2"): _MM},
+        "p4": {("C1", "D1"): _MM},
+        "p3": {("C1", "D1"): _MM},
+    }
+    candidates = build_candidates(directions, excluded=set())
+    assert len(candidates) == 2
+    assert (candidates[0].chemical_id, candidates[0].disease_id) == ("C1", "D1")
+    assert (candidates[0].paper_id_a, candidates[0].paper_id_b) == ("p3", "p4")
+    assert (candidates[1].chemical_id, candidates[1].disease_id) == ("C2", "D2")
+    assert (candidates[1].paper_id_a, candidates[1].paper_id_b) == ("p8", "p9")
+
+
 def test_no_paper_appears_in_two_sampled_pairs():
     """Load-bearing for the statistics: shared papers make the trials dependent, and every
     binomial interval in the report would then be understated."""
