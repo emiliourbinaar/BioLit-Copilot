@@ -145,8 +145,12 @@ def mcnemar(correct_a: Sequence[bool], correct_b: Sequence[bool]) -> McNemarResu
     where the comparison matters most.
 
     Only discordant pairs carry information -- concordant pairs (both arms right, or both
-    wrong, on the same unit) cancel and are not counted. `b == c == 0` returns `p_value = 1.0`
-    rather than dividing by zero: no discordant pairs means no information to test.
+    wrong, on the same unit) cancel and are not counted. `b == c == 0` returns `p_value = 1.0`:
+    no discordant pairs means no information to test. The branch is NOT required to avoid a
+    division by zero -- `2**n` is never zero for n >= 0, and the general formula returns this
+    exact value at n = 0 anyway. It is kept as an explicit, documented statement of the
+    no-discordance case, and is provably equivalent to falling through (ADR-0014 category (c):
+    flagged, deliberately untested, deliberately not deleted).
     """
     if len(correct_a) != len(correct_b):
         raise ValueError(

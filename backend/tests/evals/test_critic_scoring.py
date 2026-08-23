@@ -141,7 +141,8 @@ def test_mcnemar_ignores_pairs_the_arms_agree_on():
     b = [False, False, False, True, True, True, True]
     result = mcnemar(a, b)
     assert (result.b, result.c) == (3, 0)
-    assert result.p_value < 0.30
+    # n = 3, min(b, c) = 0: one-sided tail = C(3,0)/2**3 = 1/8; doubled = 0.25 exactly.
+    assert result.p_value == pytest.approx(0.25)
 
 
 def test_identical_arms_are_not_distinguishable():
