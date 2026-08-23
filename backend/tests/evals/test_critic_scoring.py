@@ -108,9 +108,28 @@ def test_projection_is_zero_not_error_when_sensitivity_and_specificity_predict_n
     assert project_to_prevalence(0.0, 1.0, 0.0252) == 0.0
 
 
-def test_wilson_lower_bound_guard_is_load_bearing_at_n_where_the_general_formula_does_not_cancel():
-    """At n=10 the general Wilson formula happens to land on exact 0.0 for k=0 by
-    floating-point coincidence, so that fixture alone cannot prove the k==0 guard is doing
-    anything. At n=3 it does not cancel exactly (drifts to ~4.9e-17), so this fixture is the
-    one that actually exercises the guard."""
-    assert wilson_interval(0, 3)[0] == 0.0
+@pytest.mark.parametrize("n", [3, 7])
+def test_wilson_lower_bound_guard_is_load_bearing_at_n_where_the_general_formula_does_not_cancel(
+    n,
+):
+    """At phat = 0, `center` and `margin` are mathematically identical (both reduce to
+    z^2 / (2n)), so `center - margin` cancels to exactly 0.0 for EVERY n in real arithmetic --
+    the k==0 guard is not needed by the mathematics. What this test actually proves is
+    narrower: that under THIS module's specific operation order (division for `center`'s
+    term vs. sqrt-then-multiply for `margin`'s), rounding does NOT cancel bit-for-bit at these
+    particular n, so the guard is load-bearing against a mutant that deletes it -- for this
+    formula's rounding behaviour, not for every algebraically equivalent rewrite of it. A swept
+    check (n = 3, 7, 11, 23, 97) found only 3 and 7 leave a nonzero residue here; 11, 23, and 97
+    cancel exactly under this ordering too and would not distinguish the mutant, so they are not
+    used as witnesses. A future reordering of this formula could silently make even n=3 and n=7
+    stop proving anything, with no failing test to signal the loss -- this is a known limit of
+    pinning floating-point rounding behaviour rather than the underlying mathematics."""
+    assert wilson_interval(0, n)[0] == 0.0
+
+
+def test_score_rejects_gold_and_pred_of_different_lengths():
+    with pytest.raises(ValueError, match="same length"):
+        score(
+            [ContradictionLabel.agreement],
+            [ContradictionLabel.agreement, ContradictionLabel.agreement],
+        )

@@ -60,6 +60,11 @@ def score(gold: Sequence[ContradictionLabel], pred: Sequence[ContradictionLabel]
     precision / recall / f1 / specificity each return 0.0 rather than raising when their
     denominator is zero (e.g. a class with no predicted or no gold instances at all).
     """
+    if len(gold) != len(pred):
+        raise ValueError(
+            f"score: gold and pred must be the same length, got {len(gold)} and "
+            f"{len(pred)}. Scoring against misaligned gold is meaningless."
+        )
     confusion: dict[ContradictionLabel, dict[ContradictionLabel, int]] = {
         label: dict.fromkeys(ContradictionLabel, 0) for label in ContradictionLabel
     }
