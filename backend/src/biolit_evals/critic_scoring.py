@@ -13,7 +13,7 @@ outside [0, 1] exactly there.
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from math import sqrt
+from math import comb, sqrt
 
 from biolit.domain.records import ContradictionLabel
 
@@ -116,6 +116,50 @@ def project_to_prevalence(sensitivity: float, specificity: float, prevalence: fl
     tp = sensitivity * prevalence
     fp = (1.0 - specificity) * (1.0 - prevalence)
     return tp / (tp + fp) if tp + fp else 0.0
+
+
+@dataclass(frozen=True)
+class McNemarResult:
+    """Outcome of a paired `mcnemar()` comparison. `b` and `c` are the two discordant-pair
+    counts (arm-a-only-correct, arm-b-only-correct); `statistic` is |b - c|."""
+
+    b: int
+    c: int
+    statistic: float
+    p_value: float
+
+
+def mcnemar(correct_a: Sequence[bool], correct_b: Sequence[bool]) -> McNemarResult:
+    """Paired comparison of two arms over the SAME units.
+
+    VALID FOR EVERY ARM PAIR IN THIS EVAL -- both LLM input modes, the direction arm, and the
+    three baselines -- because each emits a label for every one of the same pairs. The
+    direction arm's per-paper calls are composed into pair labels BEFORE scoring, so once
+    composed it is the same units as everything else.
+
+    NOT valid for the direction arm's per-paper diagnostics, whose unit is a paper rather than
+    a pair. Those are reported on their own terms.
+
+    EXACT BINOMIAL, not the chi-square approximation: with b+c often under 25 on the
+    contradiction class and on the human-labelled subsample, chi-square is unreliable exactly
+    where the comparison matters most.
+
+    Only discordant pairs carry information -- concordant pairs (both arms right, or both
+    wrong, on the same unit) cancel and are not counted. `b == c == 0` returns `p_value = 1.0`
+    rather than dividing by zero: no discordant pairs means no information to test.
+    """
+    if len(correct_a) != len(correct_b):
+        raise ValueError(
+            f"mcnemar: correct_a and correct_b must be the same length, got {len(correct_a)} "
+            f"and {len(correct_b)}. A paired test over misaligned arms is meaningless."
+        )
+    b = sum(1 for x, y in zip(correct_a, correct_b, strict=True) if x and not y)
+    c = sum(1 for x, y in zip(correct_a, correct_b, strict=True) if y and not x)
+    n = b + c
+    if n == 0:
+        return McNemarResult(b=0, c=0, statistic=0.0, p_value=1.0)
+    tail = sum(comb(n, i) for i in range(min(b, c) + 1)) / (2**n)
+    return McNemarResult(b=b, c=c, statistic=float(abs(b - c)), p_value=min(1.0, 2 * tail))
 
 
 def wilson_interval(k: int, n: int) -> tuple[float, float]:

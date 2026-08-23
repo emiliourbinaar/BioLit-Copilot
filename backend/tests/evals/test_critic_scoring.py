@@ -1,7 +1,7 @@
 import pytest
 
 from biolit.domain.records import ContradictionLabel
-from biolit_evals.critic_scoring import project_to_prevalence, score, wilson_interval
+from biolit_evals.critic_scoring import mcnemar, project_to_prevalence, score, wilson_interval
 
 
 def test_macro_f1_averages_classes_not_instances():
@@ -133,3 +133,54 @@ def test_score_rejects_gold_and_pred_of_different_lengths():
             [ContradictionLabel.agreement],
             [ContradictionLabel.agreement, ContradictionLabel.agreement],
         )
+
+
+def test_mcnemar_ignores_pairs_the_arms_agree_on():
+    """Only discordant pairs carry information; agreements cancel. Seven elements."""
+    a = [True, True, True, True, True, True, True]
+    b = [False, False, False, True, True, True, True]
+    result = mcnemar(a, b)
+    assert (result.b, result.c) == (3, 0)
+    assert result.p_value < 0.30
+
+
+def test_identical_arms_are_not_distinguishable():
+    """No discordant pairs at all -- b == c == 0 -- returns p_value 1.0 rather than dividing by
+    zero. Seven elements, mixing True/False so this also exercises the x-and-not-y /
+    y-and-not-x conditions with x == y == False present, not just x == y == True."""
+    same = [True, False, True, True, False, True, False]
+    result = mcnemar(same, list(same))
+    assert (result.b, result.c) == (0, 0)
+    assert result.p_value == 1.0
+
+
+def test_mcnemar_rejects_arms_over_different_unit_counts():
+    """Controller ruling (carried from Task 8's review): mcnemar's length guard must match
+    score's shape -- same structure, same style of message, naming both lengths and why they
+    must match. Matched here on the same real substring `score`'s own test matches on."""
+    with pytest.raises(ValueError, match="same length"):
+        mcnemar([True, False], [True])
+
+
+def test_mcnemar_counts_discordant_pairs_in_both_directions():
+    """ADR-0014: the two compound conditions (`x and not y` feeding b, `y and not x` feeding
+    c) each need both operands independently exercised. Earlier fixtures never produced a
+    discordant pair favouring arm b (x False, y True), so a bug that always returned c == 0
+    would have passed every prior test undetected. Seven elements, b != c so the two counts
+    cannot be swapped without the assertion catching it."""
+    a = [True, True, False, False, True, True, False]
+    b = [False, False, True, True, True, False, False]
+    result = mcnemar(a, b)
+    assert (result.b, result.c) == (3, 2)
+
+
+def test_mcnemar_p_value_is_capped_at_one_when_doubling_the_tail_overshoots():
+    """Design point: doubling a one-sided tail can exceed 1.0 when b == c > 0 (unlike the
+    b == c == 0 case, which is handled by its own early return). b == c cannot distinguish the
+    b/c formulas from each other -- that is covered by the other fixtures above -- but this
+    fixture is testing the min(1.0, ...) cap, not which array is which."""
+    a = [True, True, False, True, True, True, True]
+    b = [False, True, True, True, True, True, True]
+    result = mcnemar(a, b)
+    assert (result.b, result.c) == (1, 1)
+    assert result.p_value == 1.0
