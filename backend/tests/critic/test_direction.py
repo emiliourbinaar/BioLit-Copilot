@@ -136,30 +136,6 @@ def test_no_parse_failures_counter():
     assert not hasattr(critic, "parse_failures")
 
 
-def test_cache_reuses_a_direction_when_the_same_paper_id_and_text_recur():
-    """The cache's only legitimate hit scenario: the SAME paper_id with the SAME text seen
-    again. `assert_papers_disjoint` forbids this from ever happening across pairs -- it even
-    forbids `paper_id_a == paper_id_b` within one pair -- so this test exercises it directly via
-    a hand-built degenerate `CriticPair`, the only way it can be observed at all."""
-    client = _RecordingClient([{"direction": "causes"}])
-    critic = DirectionCritic(client, model="m")
-    finding = critic.judge(CriticPair("1", "1", "same text", "same text", "C1", "D1"))
-    assert len(client.systems) == 1
-    assert finding.label is ContradictionLabel.agreement
-
-
-def test_cache_asserts_rather_than_silently_reuses_when_paper_id_recurs_with_different_text():
-    """If a `paper_id` recurs (across two `judge()` calls, or on the same instance) with
-    DIFFERENT text, the disjointness invariant the cache depends on has been violated -- this
-    must fail loudly (ADR-0014's standing preference), not silently serve a direction computed
-    for the wrong text."""
-    client = _RecordingClient([{"direction": "causes"}, {"direction": "treats"}])
-    critic = DirectionCritic(client, model="m")
-    critic.judge(CriticPair("1", "2", "text-x", "b", "C1", "D1"))
-    with pytest.raises(AssertionError, match="paper_id '1'"):
-        critic.judge(CriticPair("1", "3", "text-y", "c", "C1", "D1"))
-
-
 def test_max_tokens_16000_actually_reaches_the_client_on_both_calls():
     """Same rationale as `LlmCritic`'s equivalent test: what is actually SENT must be pinned,
     not just declared in a comment a future refactor could silently drop or shrink."""

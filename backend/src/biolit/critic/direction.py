@@ -91,28 +91,27 @@ class DirectionCritic:
     diffing around each `judge()` call, same convention as `LlmCritic`. Deliberately NO
     `parse_failures` counter, for the same reason `LlmCritic` has none.
 
-    CACHE, keyed by `paper_id`: `assert_papers_disjoint` (the eval's own halting anchor) forbids
-    any paper id from appearing in more than one pair, counting `paper_id_a` and `paper_id_b`
-    together -- so it ALSO forbids `paper_id_a == paper_id_b` within a single pair, since that
-    alone would already make one id appear twice. Under `run_critic_eval`, the only caller this
-    arm has, a cache keyed by `paper_id` can therefore NEVER register a hit: not across pairs
-    (forbidden across the whole corpus) and not within one pair (forbidden by the same anchor
-    applied to one pair's own two ids). It is kept anyway, scoped as a plain instance dict, but
-    every lookup ASSERTS the invariant it depends on -- that a repeated `paper_id` always carries
-    the same text -- rather than silently trusting it, so a caller that bypasses the anchor (a
-    hand-built `CriticPair` in a test, or a future caller of this class outside the eval runner)
-    fails loudly instead of silently reusing a direction computed for different text.
+    NO PAPER-ID CACHE, DELIBERATELY. A cluster-scale caller that compared every pair within a
+    k-paper cluster would want one -- the same paper's direction, computed once, reused across
+    every pair it appears in. But `run_critic_eval`, the only caller this arm has, cannot ever
+    produce that hit: `assert_papers_disjoint` (the eval's own halting anchor) forbids any paper
+    id from appearing in more than one pair, counting `paper_id_a` and `paper_id_b` together --
+    so it ALSO forbids `paper_id_a == paper_id_b` within a single pair, since that alone would
+    already make one id appear twice. A cache here would therefore be correctness-under-a-
+    hypothetical this branch cannot exercise, not a real saving -- and the k(k-1)/2 -> k saving
+    the decomposition is often pitched for is an ARITHMETIC property of composing two per-paper
+    calls instead of one pair call, not something a cache would deliver on top of that. Do not
+    re-add one without a caller that actually reuses a paper id.
     """
 
     def __init__(self, client: Any, *, model: str, effort: str = "low") -> None:
         self._client, self.model, self.effort = client, model, effort
         self.usage: Counter[str] = Counter(dict.fromkeys(USAGE_FIELDS, 0))
         self.refusals = 0
-        self._cache: dict[str, tuple[str, PaperDirection]] = {}
 
     def judge(self, pair: CriticPair) -> ContradictionFinding:
-        direction_a = self._direction_for(pair.paper_id_a, pair.text_a, pair)
-        direction_b = self._direction_for(pair.paper_id_b, pair.text_b, pair)
+        direction_a = self._direction_for(pair.text_a, pair)
+        direction_b = self._direction_for(pair.text_b, pair)
         label: ContradictionLabel = compose(direction_a, direction_b)
         return ContradictionFinding(
             paper_id_a=pair.paper_id_a,
@@ -121,17 +120,7 @@ class DirectionCritic:
             rationale=f"direction decomposition: a={direction_a.value}, b={direction_b.value}",
         )
 
-    def _direction_for(self, paper_id: str, text: str, pair: CriticPair) -> PaperDirection:
-        if paper_id in self._cache:
-            cached_text, cached_direction = self._cache[paper_id]
-            assert cached_text == text, (
-                f"DirectionCritic cache: paper_id {paper_id!r} seen twice with different text. "
-                "Papers are supposed to be disjoint across pairs (assert_papers_disjoint's own "
-                "invariant) -- this critic will not silently reuse a direction computed for "
-                "different text under the same id."
-            )
-            return cached_direction
-
+    def _direction_for(self, text: str, pair: CriticPair) -> PaperDirection:
         response = self._client.messages.create(
             model=self.model,
             max_tokens=_MAX_TOKENS,
@@ -159,9 +148,7 @@ class DirectionCritic:
             # claim the paper takes no position, but a record that this call could not say what
             # it does. `compose` already treats `neither` as "cannot be compared", which is
             # exactly what a refused call is.
-            direction = PaperDirection.neither
-            self._cache[paper_id] = (text, direction)
-            return direction
+            return PaperDirection.neither
 
         # The first content block is a thinking block on a live call, not the answer.
         payload = next((block.text for block in response.content if block.type == "text"), "")
@@ -171,5 +158,4 @@ class DirectionCritic:
         except Exception as exc:
             raise CriticParseError(f"could not parse direction response: {exc}") from exc
 
-        self._cache[paper_id] = (text, direction)
         return direction
