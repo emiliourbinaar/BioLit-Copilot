@@ -15,9 +15,17 @@ increase as "this pair was refused", which gives per-pair granularity (needed fo
 macro-F1 split below) without requiring a shared exception type that would make `biolit.critic`
 depend on this eval-only module, or vice versa. A critic with no `refusals` attribute at all --
 every arm wired in this task -- never refuses, by the same structural-zero convention
-`extract_eval.py`'s `_diagnostics` already uses. `parse_failures` is read the same way but only
-in aggregate (`getattr` once, no per-pair diff): no dual scoring is specified for it, so no
-per-pair identity is needed.
+`extract_eval.py`'s `_diagnostics` already uses.
+
+`parse_failures` is counted TWO WAYS, aggregate only (no dual scoring is specified for it, so
+no `_excluding_parse_failures` macro-F1 exists): via the same counter-diffing convention as
+`refusals`, AND by catching any exception `judge()` raises. The second path exists because
+Task 11's `LlmCritic` raises a typed `CriticParseError` -- not a counter -- on unparseable
+output, precisely so a mid-corpus parse failure costs one pair instead of aborting the whole
+run and producing zero log lines. A pair whose `judge()` call raised has no `ContradictionFinding`
+to score, so it is treated exactly like a refusal for scoring purposes (excluded from
+`macro_f1_excluding_refusals`, forced wrong in the primary/`_refusals_wrong` figures) even
+though it is counted under `parse_failures`, not `refusals`.
 """
 
 import json
@@ -29,7 +37,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from biolit.critic.base import Critic, CriticPair
-from biolit.domain.records import ContradictionLabel
+from biolit.domain.records import ContradictionFinding, ContradictionLabel
 from biolit.extract.llm import USAGE_FIELDS
 from biolit_evals._meta import git_sha
 from biolit_evals.contradiction_gold import (
@@ -93,6 +101,13 @@ def run_critic_eval(
     those are the corpus-level report, not the scoring path). It is passed through with empty
     text instead, which is exactly what makes `zero_finding_rate` a measurement of what the
     runner actually received rather than a filter silently applied ahead of it.
+
+    `excluded_pmids_count` IS LOGGED, NOT JUST CHECKED. `excluded` defaults to empty, and every
+    caller without a real BC5CDR pmid list (this task's CLI included -- no download is wired
+    into it) leaves `assert_no_bc5cdr_pmids` a structural no-op. Without a count in the line, a
+    reader of `evals/critic_runs.jsonl` cannot tell an armed check from a silent pass-through,
+    and the NER checkpoint being fine-tuned on BC5CDR makes that distinction a correctness
+    question, not a cosmetic one.
     """
     scored = list(pairs) if limit is None else list(pairs)[:limit]
 
@@ -128,17 +143,39 @@ def run_critic_eval(
         )
         refusals_before = getattr(critic, "refusals", 0)
         parse_failures_before = getattr(critic, "parse_failures", 0)
-        finding = critic.judge(critic_pair)
+        # UNGUARDED CALLER TRUST WOULD BREAK TASK 11. None of the three free arms wired in
+        # this task ever raises, but `LlmCritic.judge()` raises a typed `CriticParseError` on
+        # unparseable output SPECIFICALLY so this runner can count it -- left unguarded, the
+        # first bad LLM response aborts the whole corpus mid-run and produces ZERO log lines,
+        # the opposite of what a `parse_failures` counter is for. Catching `Exception` broadly
+        # costs nothing today (nothing here raises) and needs no import of a type that does not
+        # exist yet on this branch.
+        try:
+            finding: ContradictionFinding | None = critic.judge(critic_pair)
+        except Exception:
+            finding = None
         refused = getattr(critic, "refusals", 0) > refusals_before
-        failed = getattr(critic, "parse_failures", 0) > parse_failures_before
+        # A raised exception IS a parse failure by definition (see above), on top of whatever
+        # `parse_failures` counter-diffing already catches for a critic that flags one without
+        # raising.
+        failed = finding is None or getattr(critic, "parse_failures", 0) > parse_failures_before
         refusals += int(refused)
         parse_failures += int(failed)
 
+        # A refusal or an unparseable response both mean NO USABLE ANSWER for this pair: neither
+        # can be trusted as a real prediction, and `_ALWAYS_WRONG` is what keeps `finding.label`
+        # for a refusal from being read at all (see the module docstring). Branched on
+        # `finding is None` FIRST -- rather than a combined `refused or finding is None` flag --
+        # so every `finding.label` read below is inside a branch where `finding` is narrowed to
+        # non-`None`, not merely believed to be by a boolean this branch does not check itself.
         gold.append(pair.label)
-        pred_refusals_wrong.append(_ALWAYS_WRONG[pair.label] if refused else finding.label)
-        if not refused:
-            gold_excluding_refusals.append(pair.label)
-            pred_excluding_refusals.append(finding.label)
+        if finding is None:
+            pred_refusals_wrong.append(_ALWAYS_WRONG[pair.label])
+        else:
+            pred_refusals_wrong.append(_ALWAYS_WRONG[pair.label] if refused else finding.label)
+            if not refused:
+                gold_excluding_refusals.append(pair.label)
+                pred_excluding_refusals.append(finding.label)
 
     scores = score(gold, pred_refusals_wrong)
     scores_excluding_refusals = score(gold_excluding_refusals, pred_excluding_refusals)
@@ -162,6 +199,7 @@ def run_critic_eval(
         "n_per_class": dict(Counter(str(pair.label) for pair in scored)),
         "manifest_hash": manifest_hash(pairs),
         "ctd_release": ctd_release,
+        "excluded_pmids_count": len(excluded),
         "macro_f1": scores.macro_f1,
         "macro_f1_excluding_refusals": scores_excluding_refusals.macro_f1,
         "macro_f1_refusals_wrong": scores.macro_f1,
@@ -239,6 +277,18 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Optional path to a text file of BC5CDR pmids (one per line) for the halting anchor.",
     )
+    parser.add_argument(
+        "--concepts",
+        default=None,
+        help=(
+            "Path to a JSON {paper_id: [concept_id, ...]} file, REQUIRED for --arm overlap. "
+            "There is no manifest-derived fallback: a pair's two papers share exactly one "
+            "curated key by construction and no paper repeats across pairs, so a set built "
+            "from the manifest's own chemical_id/disease_id fields is always IDENTICAL between "
+            "the two papers, and ConceptOverlapCritic would answer `agreement` on every pair "
+            "-- a degenerate baseline, not a real one."
+        ),
+    )
     args = parser.parse_args(argv)
 
     pairs = read_manifest(args.manifest)
@@ -255,15 +305,25 @@ def main(argv: list[str] | None = None) -> None:
     elif args.arm == "lexicon":
         critic = DirectionLexiconCritic()
     else:
-        # `overlap` needs a paper -> concept-id map. No entity-linking pipeline is wired into
-        # this free-arm CLI, so this uses the manifest's OWN keyed endpoints as each paper's
-        # concept set -- honest about what it is (the pair's own chemical_id/disease_id, not a
-        # real linker's output), and enough to exercise the baseline offline.
-        concepts_by_paper: dict[str, set[str]] = {}
-        for pair in pairs:
-            ids = {cid for cid in (pair.chemical_id, pair.disease_id) if cid is not None}
-            concepts_by_paper.setdefault(pair.paper_id_a, set()).update(ids)
-            concepts_by_paper.setdefault(pair.paper_id_b, set()).update(ids)
+        # `overlap` needs a REAL paper -> concept-id map, and there is no manifest-derived
+        # fallback for it: every pair's two papers share exactly one curated key by
+        # construction (`assert_one_pair_per_key`) and no paper repeats across pairs
+        # (`assert_papers_disjoint`), so a set built from `chemical_id`/`disease_id` alone is
+        # ALWAYS IDENTICAL between a pair's two papers. `ConceptOverlapCritic` would then answer
+        # `agreement` on every single pair -- a baseline that silently sets ADR-0015's "beat the
+        # best free baseline" bar to nothing, disguised as a real one in the run log. Failing
+        # loudly here is louder, not quieter (ADR-0014's standing preference), and cheaper than
+        # someone trusting a `overlap` log line that was never a real comparison.
+        if args.concepts is None:
+            parser.error(
+                "--arm overlap requires --concepts. A manifest-derived concept set is always "
+                "identical between a pair's two papers (they share one curated key, and no "
+                "paper repeats across pairs), so ConceptOverlapCritic would answer `agreement` "
+                "on every pair -- a degenerate baseline, not a real one. Supply a real "
+                "paper_id -> concept_ids mapping, e.g. from entity linking over the abstracts."
+            )
+        with open(args.concepts, encoding="utf-8") as fh:
+            concepts_by_paper = {pid: set(ids) for pid, ids in json.load(fh).items()}
         critic = ConceptOverlapCritic(concepts_by_paper)
 
     line = run_critic_eval(

@@ -80,6 +80,25 @@ class _ParseFailingCritic:
         )
 
 
+@dataclass
+class _RaisingCritic:
+    """Raises on a configured set of paper ids, mirroring the shape Task 11's `LlmCritic` uses
+    for `CriticParseError` -- proving the runner survives an unguarded `judge()` call instead of
+    aborting the whole corpus and producing zero log lines."""
+
+    raise_on: set[str]
+
+    def judge(self, pair: CriticPair) -> ContradictionFinding:
+        if pair.paper_id_a in self.raise_on or pair.paper_id_b in self.raise_on:
+            raise ValueError("simulated parse failure")
+        return ContradictionFinding(
+            paper_id_a=pair.paper_id_a,
+            paper_id_b=pair.paper_id_b,
+            label=ContradictionLabel.agreement,
+            rationale="ok",
+        )
+
+
 def test_run_appends_one_line_carrying_the_manifest_hash_and_ctd_stamp(tmp_path):
     """A run log line that cannot be tied to the corpus that produced it is not
     reproducible -- CTD is a living database."""
@@ -237,3 +256,54 @@ def test_parse_failures_are_counted_independently_of_refusals(tmp_path):
     )
     assert line["parse_failures"] == 1
     assert line["refusals"] == 0
+
+
+def test_excluded_pmids_count_reflects_the_set_actually_passed(tmp_path):
+    """A log line cannot say whether its BC5CDR contamination check was armed or a silent
+    empty-set pass-through unless the size of `excluded` is itself in the line."""
+    line = run_critic_eval(
+        pairs=_PAIRS,
+        abstracts=_ABSTRACTS,
+        critic=MajorityCritic(ContradictionLabel.agreement),
+        arm="majority",
+        ctd_release="x",
+        log_path=tmp_path / "critic_runs.jsonl",
+        excluded={"99", "100", "101"},
+    )
+    assert line["excluded_pmids_count"] == 3
+
+
+def test_manifest_hash_under_limit_covers_the_full_pairs_not_the_scored_subset(tmp_path):
+    """`manifest_hash` identifies the corpus artifact this run drew from -- the same way
+    `git_sha` names the code -- not the subset a `--limit`ed pilot actually scored. `pilot`
+    and `n_pairs` already say how much of that artifact this line scored."""
+    line = run_critic_eval(
+        pairs=_PAIRS,
+        abstracts=_ABSTRACTS,
+        critic=MajorityCritic(ContradictionLabel.agreement),
+        arm="majority",
+        ctd_release="x",
+        log_path=tmp_path / "critic_runs.jsonl",
+        limit=2,
+    )
+    assert line["manifest_hash"] == manifest_hash(_PAIRS)
+    assert line["manifest_hash"] != manifest_hash(_PAIRS[:2])
+
+
+def test_an_unguarded_judge_exception_is_counted_as_a_parse_failure_not_a_crash(tmp_path):
+    """Task 11's LlmCritic raises CriticParseError on unparseable output SPECIFICALLY so the
+    runner can count it in parse_failures. An unguarded call would abort the corpus mid-run and
+    produce zero log lines -- the opposite of the intent -- so the run must still complete."""
+    critic = _RaisingCritic(raise_on={"3"})
+    log = tmp_path / "critic_runs.jsonl"
+    line = run_critic_eval(
+        pairs=_PAIRS,
+        abstracts=_ABSTRACTS,
+        critic=critic,
+        arm="lexicon",
+        ctd_release="x",
+        log_path=log,
+    )
+    assert line["parse_failures"] == 1
+    assert line["n_pairs"] == 3
+    assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1
