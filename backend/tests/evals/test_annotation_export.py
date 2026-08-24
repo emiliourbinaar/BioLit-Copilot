@@ -1,8 +1,11 @@
 import random
 
+import pytest
+
 from biolit.domain.records import ContradictionLabel
-from biolit_evals.annotation_export import evaluate_gate2, export_blind_sheet
+from biolit_evals.annotation_export import evaluate_gate1, evaluate_gate2, export_blind_sheet
 from biolit_evals.contradiction_gold import GoldPair
+from biolit_evals.critic_scoring import wilson_interval
 
 _PAIRS = [
     GoldPair(
@@ -118,3 +121,40 @@ def test_gate2_reports_a_wide_interval_it_does_not_hide():
     gate = evaluate_gate2(genuine=9, n=15)
     lo, hi = gate.interval
     assert (hi - lo) > 0.4
+
+
+def test_evaluate_gate2_refuses_an_uncalibrated_n():
+    """The verdict bands are literal counts derived from binomial tail probabilities computed
+    at n=15, not a proportional rule -- a Gate2 built for n=30 (the whole first batch, which
+    is Gate 1's domain) or any other n would present with exactly as much apparent authority
+    as a correct one, so evaluate_gate2 must refuse rather than silently mis-band it."""
+    with pytest.raises(ValueError, match="n=15"):
+        evaluate_gate2(genuine=10, n=30)
+    with pytest.raises(ValueError, match="n=15"):
+        evaluate_gate2(genuine=50, n=100)
+
+
+def test_evaluate_gate2_rejects_a_genuine_count_out_of_range():
+    """A mis-transcribed count is a smaller version of the same silent-wrong-answer risk as
+    an uncalibrated n, and cheap to catch. Both directions checked: negative, and above n."""
+    with pytest.raises(ValueError, match="genuine"):
+        evaluate_gate2(genuine=-1, n=15)
+    with pytest.raises(ValueError, match="genuine"):
+        evaluate_gate2(genuine=16, n=15)
+
+
+def test_gate1_boundary_ten_of_thirty_is_tractable_and_eleven_revises():
+    """Gate 1 is a tractability check over the WHOLE first batch (all 30 pairs across all
+    three classes) -- unlike Gate 2, which runs over the 15 contradiction pairs only; the two
+    gates have different n by design. A cant_tell rate above ~1/3 means the protocol needs
+    revision before more time is spent. At n=30, 10 cant_tell is exactly 1/3 and passes; 11
+    exceeds it and fails -- mutation-verifies `>` vs `>=`."""
+    assert evaluate_gate1(cant_tell=10, n=30).verdict == "TRACTABLE"
+    assert evaluate_gate1(cant_tell=11, n=30).verdict == "REVISE_PROTOCOL"
+
+
+def test_gate1_interval_is_the_wilson_interval_of_the_cant_tell_rate():
+    """Guards against a hardcoded/disconnected interval -- Gate 1 mirrors Gate 2's shape,
+    including reporting a real Wilson interval on its own rate, not a stand-in constant."""
+    gate = evaluate_gate1(cant_tell=6, n=30)
+    assert gate.interval == wilson_interval(6, 30)
