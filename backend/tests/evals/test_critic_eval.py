@@ -1,11 +1,14 @@
+from collections import Counter
 from dataclasses import dataclass, field
 
 import pytest
 
 from biolit.critic.base import CriticPair
 from biolit.domain.records import ContradictionFinding, ContradictionLabel
+from biolit.extract.llm import USAGE_FIELDS
 from biolit_evals.contradiction_gold import GoldPair, manifest_hash
 from biolit_evals.critic_baselines import MajorityCritic
+from biolit_evals.critic_cost import BudgetExceeded, KillSwitch
 from biolit_evals.critic_eval import run_critic_eval
 
 # Three disjoint pairs, one per gold class, satisfying every Task 4 anchor:
@@ -288,6 +291,50 @@ def test_manifest_hash_under_limit_covers_the_full_pairs_not_the_scored_subset(t
     )
     assert line["manifest_hash"] == manifest_hash(_PAIRS)
     assert line["manifest_hash"] != manifest_hash(_PAIRS[:2])
+
+
+@dataclass
+class _CostlyCritic:
+    """A minimal Critic whose `usage` grows by a fixed amount every `judge()` call, for
+    pricing the kill switch. Mirrors `LlmCritic`'s convention: `usage` is a `Counter` seeded
+    from `USAGE_FIELDS`, incremented before the pair is answered."""
+
+    per_call_tokens: int
+    usage: Counter[str] = field(default_factory=lambda: Counter(dict.fromkeys(USAGE_FIELDS, 0)))
+
+    def judge(self, pair: CriticPair) -> ContradictionFinding:
+        self.usage["input_tokens"] += self.per_call_tokens
+        return ContradictionFinding(
+            paper_id_a=pair.paper_id_a,
+            paper_id_b=pair.paper_id_b,
+            label=ContradictionLabel.agreement,
+            rationale="ok",
+        )
+
+
+def test_budget_exceeded_propagates_and_is_not_counted_as_a_parse_failure(tmp_path):
+    """`BudgetExceeded` is the one documented spend safeguard (spec §4): it must ABORT the
+    run, not be swallowed by the runner's broad `except Exception` around `judge()`. If it
+    were swallowed, the run would complete normally with this pair counted as a parse
+    failure -- turning the safety mechanism into a silently-counted failure, worse than not
+    having it. `pytest.raises` here proves both halves at once: a swallowed
+    `BudgetExceeded` would let `run_critic_eval` return a completed line instead of raising."""
+    critic = _CostlyCritic(per_call_tokens=1000)
+    kill_switch = KillSwitch(limit=0.001)
+    prices: dict[str, float] = dict.fromkeys(USAGE_FIELDS, 1.0)  # $1/token -- trips on call 1
+    log = tmp_path / "critic_runs.jsonl"
+    with pytest.raises(BudgetExceeded):
+        run_critic_eval(
+            pairs=_PAIRS,
+            abstracts=_ABSTRACTS,
+            critic=critic,
+            arm="abstract",
+            ctd_release="x",
+            log_path=log,
+            kill_switch=kill_switch,
+            prices=prices,
+        )
+    assert not log.exists()
 
 
 def test_an_unguarded_judge_exception_is_counted_as_a_parse_failure_not_a_crash(tmp_path):

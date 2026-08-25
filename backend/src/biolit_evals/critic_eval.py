@@ -48,6 +48,7 @@ from biolit_evals.contradiction_gold import (
     assert_papers_disjoint,
     manifest_hash,
 )
+from biolit_evals.critic_cost import KillSwitch, cost_of
 from biolit_evals.critic_scoring import project_to_prevalence, score
 
 DEFAULT_LOG = "evals/critic_runs.jsonl"
@@ -78,6 +79,8 @@ def run_critic_eval(
     log_path: str | Path,
     excluded: AbstractSet[str] = frozenset(),
     limit: int | None = None,
+    kill_switch: KillSwitch | None = None,
+    prices: Mapping[str, float] | None = None,
 ) -> dict:
     """Score one Critic arm over `pairs` and append one JSON line to `log_path`.
 
@@ -108,6 +111,17 @@ def run_critic_eval(
     reader of `evals/critic_runs.jsonl` cannot tell an armed check from a silent pass-through,
     and the NER checkpoint being fine-tuned on BC5CDR makes that distinction a correctness
     question, not a cosmetic one.
+
+    `kill_switch`/`prices` ARE THE SPEND SAFEGUARD (spec §4), BOTH OPTIONAL AND BOTH DEFAULT
+    `None` so every existing caller and free-arm run is unaffected. When either is `None`,
+    nothing is priced or recorded -- the free arms have no cost and must not be burdened by
+    it. When both are supplied, the critic's `usage` counter is diffed around each `judge()`
+    call (the same convention `refusals` already uses), the INCREMENTAL usage is priced with
+    `cost_of`, and `kill_switch.record(...)` is called. That call sits AFTER the try/except
+    that guards `judge()`, never inside it: `BudgetExceeded` must propagate out of this
+    function and abort the run, not be caught by the broad `except Exception` that counts
+    parse failures -- swallowing it would turn the one documented spend safeguard into a
+    silently-counted parse failure, which is worse than not having it at all.
     """
     scored = list(pairs) if limit is None else list(pairs)[:limit]
 
@@ -126,6 +140,7 @@ def run_critic_eval(
     zero_empty = 0
     zero_total_by_class: Counter[str] = Counter()
     zero_empty_by_class: Counter[str] = Counter()
+    measured_cost = 0.0
 
     for pair in scored:
         label = str(pair.label)
@@ -143,6 +158,7 @@ def run_critic_eval(
         )
         refusals_before = getattr(critic, "refusals", 0)
         parse_failures_before = getattr(critic, "parse_failures", 0)
+        usage_before = dict(getattr(critic, "usage", {}))
         # UNGUARDED CALLER TRUST WOULD BREAK TASK 11. None of the three free arms wired in
         # this task ever raises, but `LlmCritic.judge()` raises a typed `CriticParseError` on
         # unparseable output SPECIFICALLY so this runner can count it -- left unguarded, the
@@ -154,6 +170,23 @@ def run_critic_eval(
             finding: ContradictionFinding | None = critic.judge(critic_pair)
         except Exception:
             finding = None
+        # KILL-SWITCH ACCOUNTING SITS HERE, DELIBERATELY OUTSIDE THE `try/except` ABOVE.
+        # `usage` is accumulated by the critic BEFORE it raises or refuses (see `LlmCritic`/
+        # `DirectionCritic`), so the incremental usage is measured the same way regardless of
+        # how this call ended. `kill_switch.record(...)` is called unguarded so a
+        # `BudgetExceeded` it raises propagates straight out of this function -- placing it
+        # inside the `except Exception` above (or wrapping it in one of its own) would count a
+        # budget overrun as an ordinary parse failure and let the run continue, which is
+        # exactly the failure mode this safeguard exists to prevent.
+        if kill_switch is not None and prices is not None:
+            usage_after = getattr(critic, "usage", {})
+            incremental_usage = {
+                field: usage_after.get(field, 0) - usage_before.get(field, 0)
+                for field in usage_after
+            }
+            incremental_cost = cost_of(incremental_usage, prices)
+            kill_switch.record(incremental_cost)
+            measured_cost += incremental_cost
         refused = getattr(critic, "refusals", 0) > refusals_before
         # A raised exception IS a parse failure by definition (see above), on top of whatever
         # `parse_failures` counter-diffing already catches for a critic that flags one without
@@ -215,6 +248,10 @@ def run_critic_eval(
         "zero_finding_rate": zero_finding_rate,
         "zero_finding_by_class": zero_finding_by_class,
         "usage": {field: getattr(critic, "usage", {}).get(field, 0) for field in USAGE_FIELDS},
+        # 0.0 whenever `kill_switch`/`prices` are not both supplied -- the same structural-zero
+        # convention `usage` already uses for a critic with no cost. This is INCREMENTAL cost
+        # summed over the run, priced from `usage` diffs the same way `kill_switch.record` was.
+        "measured_cost": measured_cost,
         "pilot": limit is not None,
     }
 
@@ -226,20 +263,32 @@ def run_critic_eval(
 
 
 def main(argv: list[str] | None = None) -> None:
-    """CLI for the three free arms -- `lexicon`, `majority`, `overlap`. No credential needed.
+    """CLI for all six arms -- the three free baselines and the three paid LLM arms.
 
-    `abstract`, `findings` and `direction` are Tasks 11/12's paid LLM arms and are not wired
-    here; adding them is a branch each on the if/elif below plus a new `--arm` choice, without
-    touching `run_critic_eval` at all.
+    `abstract` and `findings` both construct `LlmCritic` (`biolit.critic.llm`) -- they differ
+    ONLY IN THE TEXT handed to it, never in code, which is the whole point of the two-mode
+    comparison (spec §3). `direction` constructs `DirectionCritic` (`biolit.critic.direction`)
+    and, like `abstract`, is scored over `--abstracts`: it is a decomposition strategy, not a
+    third input mode, and the spec's pricing table (§4) lists it as a single arm rather than an
+    abstract/findings pair.
 
-    Every input is a local file: a manifest (`--manifest`, `read_manifest`'s own format) and an
-    abstracts cache (`--abstracts`, a JSON object `{pmid: text}`). Nothing here makes a network
-    call, so no import here needs to be heavy -- there is no `httpx`/`anthropic` client to build
-    for a free arm. `argparse` is still function-local, matching every other `main()` in this
-    package, so importing this module for scoring alone stays cheap.
+    `findings` has NO FALLBACK to `--abstracts` when `--findings` is not supplied: it fails
+    loudly via `parser.error` instead. A silent fallback would convert the findings arm into
+    the abstract arm on exactly the papers where extraction failed -- the failure mode the
+    spec's "zero-finding policy" section names explicitly and rules out.
+
+    The client injection mirrors `extract_eval.py`'s `main()` exactly: `anthropic` is imported
+    here, function-local (the documented E402 exception, matching every other `main()` in this
+    package), and `anthropic.Anthropic(max_retries=5)` is handed to the critic. The three free
+    arms build no client and need no credential -- this function never reads
+    `ANTHROPIC_API_KEY` itself; only the SDK client (once constructed) does that internally.
     """
     import argparse
 
+    import anthropic
+
+    from biolit.critic.direction import DirectionCritic
+    from biolit.critic.llm import LlmCritic
     from biolit_evals.contradiction_gold import read_manifest
     from biolit_evals.critic_baselines import (
         ConceptOverlapCritic,
@@ -248,17 +297,38 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     parser = argparse.ArgumentParser(
-        description="Score a free Critic baseline against the contradiction-detection manifest."
+        description="Score a Critic arm against the contradiction-detection manifest."
     )
     parser.add_argument(
         "--arm",
-        choices=["lexicon", "majority", "overlap"],
+        choices=["abstract", "findings", "direction", "lexicon", "majority", "overlap"],
         required=True,
-        help="Which free baseline to run.",
+        help="Which Critic arm to run.",
     )
     parser.add_argument("--manifest", required=True, help="Path to the gold manifest.")
     parser.add_argument(
         "--abstracts", required=True, help="Path to a JSON {paper_id: abstract text} file."
+    )
+    parser.add_argument(
+        "--findings",
+        default=None,
+        help=(
+            "Path to a JSON {paper_id: extracted finding-sentence text} file, REQUIRED for "
+            "--arm findings. There is no fallback to --abstracts: silently substituting the "
+            "abstract on a paper where extraction failed would convert the findings arm into "
+            "the abstract arm on exactly the papers most likely to flatter it."
+        ),
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Model name for --arm abstract/findings/direction. REQUIRED for those three arms.",
+    )
+    parser.add_argument(
+        "--effort",
+        choices=["low", "medium", "high", "xhigh", "max"],
+        default="low",
+        help="Reasoning effort for --arm abstract/findings/direction (default: low).",
     )
     parser.add_argument(
         "--ctd-release", required=True, help="CTD release stamp for the manifest being scored."
@@ -300,8 +370,37 @@ def main(argv: list[str] | None = None) -> None:
         with open(args.excluded_pmids, encoding="utf-8") as fh:
             excluded = frozenset(line.strip() for line in fh if line.strip())
 
-    if args.arm == "majority":
-        critic: Critic = MajorityCritic(ContradictionLabel(args.majority_label))
+    text_source = abstracts
+    if args.arm in ("abstract", "findings", "direction"):
+        # THE THREE PAID ARMS. `model` has no sensible default -- an eval log line must name
+        # the model that produced it -- so it is required here rather than defaulted, loudly,
+        # the same way `--concepts` is required for `--arm overlap` below.
+        if args.model is None:
+            parser.error(f"--arm {args.arm} requires --model.")
+        client = anthropic.Anthropic(max_retries=5)
+        if args.arm == "direction":
+            # NOT a third input mode: `direction` is a decomposition strategy scored over the
+            # same full-abstract text as `--arm abstract` (spec Section 4's pricing table lists
+            # it as one arm, not an abstract/findings pair).
+            critic: Critic = DirectionCritic(client, model=args.model, effort=args.effort)
+        else:
+            critic = LlmCritic(client, model=args.model, effort=args.effort)
+            if args.arm == "findings":
+                # NO FALLBACK TO --abstracts. A silent fallback would convert this arm into
+                # the abstract arm on exactly the papers where extraction failed -- the
+                # spec's "zero-finding policy" section rules this out explicitly.
+                if args.findings is None:
+                    parser.error(
+                        "--arm findings requires --findings, a JSON {paper_id: extracted "
+                        "finding-sentence text} file. There is no fallback to --abstracts: "
+                        "silently substituting the abstract on a paper where extraction "
+                        "failed would convert the findings arm into the abstract arm on "
+                        "exactly the papers most likely to flatter it."
+                    )
+                with open(args.findings, encoding="utf-8") as fh:
+                    text_source = json.load(fh)
+    elif args.arm == "majority":
+        critic = MajorityCritic(ContradictionLabel(args.majority_label))
     elif args.arm == "lexicon":
         critic = DirectionLexiconCritic()
     else:
@@ -328,7 +427,7 @@ def main(argv: list[str] | None = None) -> None:
 
     line = run_critic_eval(
         pairs=pairs,
-        abstracts=abstracts,
+        abstracts=text_source,
         critic=critic,
         arm=args.arm,
         ctd_release=args.ctd_release,
