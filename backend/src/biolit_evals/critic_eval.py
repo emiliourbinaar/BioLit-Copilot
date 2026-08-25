@@ -282,11 +282,24 @@ def main(argv: list[str] | None = None) -> None:
     package), and `anthropic.Anthropic(max_retries=5)` is handed to the critic. The three free
     arms build no client and need no credential -- this function never reads
     `ANTHROPIC_API_KEY` itself; only the SDK client (once constructed) does that internally.
+
+    `--budget-usd` ARMS THE SPEND GUARD (spec §4) FOR THE THREE PAID ARMS, AND ONLY THOSE.
+    Without it, a paid arm launched from this CLI would run with no live cost accounting at
+    all -- `run_critic_eval`'s `kill_switch`/`prices` parameters would simply stay `None`, and
+    `BudgetExceeded` could never fire. That is the exact unguarded state this flag exists to
+    close, so it is REQUIRED (via a loud `parser.error`, not a silent default) for
+    `--arm abstract/findings/direction`, and the three free arms must neither require nor
+    accept it being meaningful (they are always called with `kill_switch=None, prices=None`).
+    The per-token price map comes from `biolit.config.critic_prices_per_token(args.model)`,
+    which returns `None` for a model with no hand-verified entry in
+    `biolit.config.CRITIC_PRICES_PER_MTOK` -- and this function refuses to run that arm rather
+    than fall back to a default price, exactly as it already refuses a missing `--model`.
     """
     import argparse
 
     import anthropic
 
+    from biolit.config import critic_prices_per_token
     from biolit.critic.direction import DirectionCritic
     from biolit.critic.llm import LlmCritic
     from biolit_evals.contradiction_gold import read_manifest
@@ -331,6 +344,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Reasoning effort for --arm abstract/findings/direction (default: low).",
     )
     parser.add_argument(
+        "--budget-usd",
+        type=float,
+        default=None,
+        help=(
+            "Dollar budget limit for --arm abstract/findings/direction, REQUIRED for those "
+            "three arms -- arms KillSwitch (biolit_evals.critic_cost), which aborts the run "
+            "once cumulative recorded spend exceeds 1.25x this limit. The three free arms are "
+            "unaffected and must not pass it."
+        ),
+    )
+    parser.add_argument(
         "--ctd-release", required=True, help="CTD release stamp for the manifest being scored."
     )
     parser.add_argument(
@@ -371,12 +395,36 @@ def main(argv: list[str] | None = None) -> None:
             excluded = frozenset(line.strip() for line in fh if line.strip())
 
     text_source = abstracts
+    kill_switch: KillSwitch | None = None
+    prices: dict[str, float] | None = None
     if args.arm in ("abstract", "findings", "direction"):
         # THE THREE PAID ARMS. `model` has no sensible default -- an eval log line must name
         # the model that produced it -- so it is required here rather than defaulted, loudly,
         # the same way `--concepts` is required for `--arm overlap` below.
         if args.model is None:
             parser.error(f"--arm {args.arm} requires --model.")
+        # THE SPEND GUARD IS ARMED HERE, BEFORE ANY CLIENT IS CONSTRUCTED. A paid arm launched
+        # with no `--budget-usd` would run `run_critic_eval` with `kill_switch=None,
+        # prices=None` -- the exact unguarded state this flag exists to close -- so it fails
+        # loudly via `parser.error` rather than silently defaulting to unguarded.
+        if args.budget_usd is None:
+            parser.error(
+                f"--arm {args.arm} requires --budget-usd. Running a paid arm with no spend "
+                "guard armed is the exact unguarded state this flag exists to prevent -- there "
+                "is no default budget."
+            )
+        # THE PRICE TABLE LOOKUP CAN ALSO REFUSE. `critic_prices_per_token` returns `None` for
+        # a model with no hand-verified entry in `biolit.config.CRITIC_PRICES_PER_MTOK`, and
+        # this function refuses to run that arm rather than fall back to a default price --
+        # you cannot run a model whose cost you cannot price.
+        prices = critic_prices_per_token(args.model)
+        if prices is None:
+            parser.error(
+                f"--model {args.model!r} has no hand-verified price table entry in "
+                "biolit.config.CRITIC_PRICES_PER_MTOK; its rates have not been verified, so "
+                "this eval refuses to run it as a paid arm rather than guess a price."
+            )
+        kill_switch = KillSwitch(limit=args.budget_usd)
         client = anthropic.Anthropic(max_retries=5)
         if args.arm == "direction":
             # NOT a third input mode: `direction` is a decomposition strategy scored over the
@@ -434,6 +482,8 @@ def main(argv: list[str] | None = None) -> None:
         log_path=DEFAULT_LOG,
         excluded=excluded,
         limit=args.limit,
+        kill_switch=kill_switch,
+        prices=prices,
     )
 
     print(f"arm={line['arm']} n_pairs={line['n_pairs']} sha={line['git_sha']}")

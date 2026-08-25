@@ -9,7 +9,7 @@ from biolit.extract.llm import USAGE_FIELDS
 from biolit_evals.contradiction_gold import GoldPair, manifest_hash
 from biolit_evals.critic_baselines import MajorityCritic
 from biolit_evals.critic_cost import BudgetExceeded, KillSwitch
-from biolit_evals.critic_eval import run_critic_eval
+from biolit_evals.critic_eval import main, run_critic_eval
 
 # Three disjoint pairs, one per gold class, satisfying every Task 4 anchor:
 #   - papers disjoint (six distinct paper ids)
@@ -354,3 +354,63 @@ def test_an_unguarded_judge_exception_is_counted_as_a_parse_failure_not_a_crash(
     assert line["parse_failures"] == 1
     assert line["n_pairs"] == 3
     assert len(log.read_text(encoding="utf-8").strip().splitlines()) == 1
+
+
+def test_main_refuses_a_paid_arm_with_no_budget_usd(tmp_path, capsys):
+    """`--budget-usd` is what ARMS the spend guard (spec §4) for a paid arm -- omitting it must
+    fail loudly via `parser.error`, not silently run the arm with no cost accounting at all,
+    which is the exact unguarded state this flag exists to close. This must fire BEFORE any
+    Anthropic client is constructed, so the test needs no credential and makes no network call.
+    `argparse.ArgumentParser.error` prints its message to stderr and exits with status 2 --
+    the `SystemExit` itself carries only that status code, not the text -- so `capsys` is what
+    pins the refusal to the budget check specifically rather than the pre-existing `--model`
+    check (both raise the same `SystemExit(2)`)."""
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text("", encoding="utf-8")
+    abstracts = tmp_path / "abstracts.json"
+    abstracts.write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--arm",
+                "abstract",
+                "--manifest",
+                str(manifest),
+                "--abstracts",
+                str(abstracts),
+                "--model",
+                "claude-sonnet-5",
+                "--ctd-release",
+                "x",
+            ]
+        )
+    assert "--budget-usd" in capsys.readouterr().err
+
+
+def test_main_refuses_a_paid_arm_against_an_unpriced_model(tmp_path, capsys):
+    """A model absent from `biolit.config.CRITIC_PRICES_PER_MTOK` has no hand-verified rate --
+    `critic_prices_per_token` returns `None` for it, and `main` must refuse rather than fall
+    back to a default price. Fires before any Anthropic client is constructed (same reasoning
+    as the budget-usd refusal above), so this needs no credential and makes no network call."""
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text("", encoding="utf-8")
+    abstracts = tmp_path / "abstracts.json"
+    abstracts.write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--arm",
+                "abstract",
+                "--manifest",
+                str(manifest),
+                "--abstracts",
+                str(abstracts),
+                "--model",
+                "gpt-4o",
+                "--budget-usd",
+                "5.0",
+                "--ctd-release",
+                "x",
+            ]
+        )
+    assert "gpt-4o" in capsys.readouterr().err
