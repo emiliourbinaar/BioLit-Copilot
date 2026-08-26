@@ -241,6 +241,25 @@ def assert_no_bc5cdr_pmids(pairs: Sequence[GoldPair], excluded: AbstractSet[str]
         )
 
 
+def assert_pool_anchors(pairs: Sequence[GoldPair], *, excluded: AbstractSet[str]) -> None:
+    """Every halt-the-run anchor the spec attaches to the corpus, in one call.
+
+    A corpus must never be written without these. Bundling them is what makes that
+    enforceable at a single call site instead of four that a later builder can forget one of.
+
+    None of them can fire on a pool this project's own builder produced -- `build_candidates`
+    drops excluded pmids before pairing, and `sample_pairs` enforces disjointness and
+    one-pair-per-key by construction. They are kept anyway because of what they are guarding
+    against: the spec's point is that a regression in ID normalization yields an empty or
+    mislabelled corpus, and the run then reports a plausible-looking negative result rather
+    than failing. That already happened twice during design probing.
+    """
+    assert_labels_rederive(pairs)
+    assert_papers_disjoint(pairs)
+    assert_no_bc5cdr_pmids(pairs, excluded)
+    assert_one_pair_per_key(pairs)
+
+
 def assert_one_pair_per_key(pairs: Sequence[GoldPair]) -> None:
     counts = Counter((pair.chemical_id, pair.disease_id) for pair in pairs)
     repeated = {key: n for key, n in counts.items() if n > 1}

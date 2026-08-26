@@ -10,6 +10,7 @@ from biolit_evals.contradiction_gold import (
     assert_no_bc5cdr_pmids,
     assert_one_pair_per_key,
     assert_papers_disjoint,
+    assert_pool_anchors,
     build_candidates,
     label_for_directions,
     manifest_hash,
@@ -463,3 +464,58 @@ def test_labels_rederive_anchor_fires_when_direction_b_is_missing():
     ]
     with pytest.raises(AssertionError, match="no recorded directions"):
         assert_labels_rederive(bad)
+
+
+def _pair(a, b, key, label, dir_a, dir_b):
+    return GoldPair(a, b, f"C{key}", f"D{key}", label, dir_a, dir_b)
+
+
+_AGREE = (ContradictionLabel.agreement, "therapeutic", "therapeutic")
+
+
+@pytest.mark.parametrize(
+    ("pool", "excluded", "expected_anchor"),
+    [
+        (
+            [_pair("1", "2", "k1", ContradictionLabel.contradiction, *_AGREE[1:])],
+            frozenset(),
+            "assert_labels_rederive",
+        ),
+        (
+            [_pair("1", "2", "k1", *_AGREE), _pair("2", "3", "k2", *_AGREE)],
+            frozenset(),
+            "assert_papers_disjoint",
+        ),
+        (
+            [_pair("1", "2", "k1", *_AGREE)],
+            frozenset({"1"}),
+            "assert_no_bc5cdr_pmids",
+        ),
+        (
+            [_pair("1", "2", "k1", *_AGREE), _pair("3", "4", "k1", *_AGREE)],
+            frozenset(),
+            "assert_one_pair_per_key",
+        ),
+    ],
+)
+def test_the_pool_anchor_bundle_delegates_to_every_one_of_the_four_anchors(
+    pool, excluded, expected_anchor
+):
+    """The spec lists four halt-the-run anchors for the corpus builder. Bundling them means
+    a single call site can silently lose one: dropping any one delegation leaves the bundle
+    passing on every pool that does not violate exactly that anchor, which is most pools.
+
+    Each case here violates ONE anchor and satisfies the other three, and matches on the
+    anchor's own message prefix -- so the test pins WHICH anchor fired, not merely that
+    something raised. A bundle that raised the wrong error for the wrong reason would
+    otherwise look identical.
+
+    These anchors cannot fire on a pool that `build_pool` itself produced: `build_candidates`
+    already drops excluded pmids, and `sample_pairs` enforces disjointness and one-pair-per-key
+    by construction. That is exactly why they are tested here against hand-built violating
+    pools rather than through the builder -- a test driving them through `build_pool` would be
+    a check that cannot run (ADR-0016, rule 4). They are defence against a future change to
+    those two functions, and they are worth keeping for the reason the spec gives: a broken
+    join reports a plausible-looking negative result rather than an error."""
+    with pytest.raises(AssertionError, match=expected_anchor):
+        assert_pool_anchors(pool, excluded=excluded)
