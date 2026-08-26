@@ -241,6 +241,31 @@ def assert_no_bc5cdr_pmids(pairs: Sequence[GoldPair], excluded: AbstractSet[str]
         )
 
 
+def build_pool(
+    directions: Mapping[str, Mapping[tuple[str, str], frozenset[Direction]]],
+    *,
+    excluded: AbstractSet[str],
+    per_class: int,
+    seed: int,
+) -> list[GoldPair]:
+    """Draw the seeded, pre-ordered candidate pool, and refuse to return one that fails an
+    anchor.
+
+    `per_class` is the POOL size, drawn at a multiple of the target (3x in the spec) BEFORE
+    any abstract is fetched. `compose_corpus` later consumes this list in order, so that
+    unmeasured abstract availability is absorbed by taking more of a fixed draw rather than
+    by re-drawing against what turned out to be fetchable.
+
+    The draw is a pure function of (directions, excluded, per_class, seed): CTD is republished
+    continuously, so the committed manifest -- not CTD -- is this eval's frozen artifact, and
+    a rebuild from a newer CTD is an explicit act producing a new manifest.
+    """
+    candidates = build_candidates(directions, excluded=excluded)
+    pool = sample_pairs(candidates, per_class=per_class, rng=random.Random(seed))
+    assert_pool_anchors(pool, excluded=excluded)
+    return pool
+
+
 def assert_pool_anchors(pairs: Sequence[GoldPair], *, excluded: AbstractSet[str]) -> None:
     """Every halt-the-run anchor the spec attaches to the corpus, in one call.
 

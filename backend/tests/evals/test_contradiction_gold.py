@@ -12,6 +12,7 @@ from biolit_evals.contradiction_gold import (
     assert_papers_disjoint,
     assert_pool_anchors,
     build_candidates,
+    build_pool,
     label_for_directions,
     manifest_hash,
     read_manifest,
@@ -519,3 +520,35 @@ def test_the_pool_anchor_bundle_delegates_to_every_one_of_the_four_anchors(
     join reports a plausible-looking negative result rather than an error."""
     with pytest.raises(AssertionError, match=expected_anchor):
         assert_pool_anchors(pool, excluded=excluded)
+
+
+def test_build_pool_is_reproducible_under_its_seed_and_actually_consumes_it():
+    """The manifest -- not CTD -- is this eval's frozen artifact, because CTD is republished
+    continuously and a later rebuild would otherwise silently resample. That only holds if the
+    draw is a pure function of (directions, seed).
+
+    Both halves are needed. Reproducibility alone passes for an implementation that ignores
+    the seed entirely and returns candidates in sorted order, which would be deterministic and
+    completely unshuffled -- and the shuffle is what makes the manifest's order the sample
+    order, so that a pilot's `--limit N` is a random subsample rather than a key-ordered one.
+    The differing-seed half is what pins that the seed reaches the rng.
+
+    7 keys, reverse-inserted, per this project's determinism-fixture convention: 2 elements
+    can coincide under two different seeds often enough to make the second assertion flaky."""
+    directions = {}
+    for k in range(6, -1, -1):
+        directions[f"a{k}"] = {(f"C{k}", f"D{k}"): _MM}
+        directions[f"b{k}"] = {(f"C{k}", f"D{k}"): _MM}
+
+    first = build_pool(directions, excluded=frozenset(), per_class=7, seed=1)
+    again = build_pool(directions, excluded=frozenset(), per_class=7, seed=1)
+    other = build_pool(directions, excluded=frozenset(), per_class=7, seed=2)
+
+    assert first == again
+    assert len(first) == 7
+    assert [(p.paper_id_a, p.paper_id_b) for p in first] != [
+        (p.paper_id_a, p.paper_id_b) for p in other
+    ]
+    assert {(p.paper_id_a, p.paper_id_b) for p in first} == {
+        (p.paper_id_a, p.paper_id_b) for p in other
+    }
