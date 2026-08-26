@@ -4,10 +4,12 @@ A multi-agent biomedical literature research assistant, built as a **measurement
 project: every layer is priced against a free baseline before it is allowed to ship, and
 three of the mechanisms that looked most promising were rejected on their own numbers.
 
-**Status — Phases 1–4 complete, Phase 5 (contradiction detection) not started.** There is no
-runnable end-to-end pipeline yet and `frontend/` is empty; what exists is the NER →
-canonicalization → clustering → extraction stack, each with its own eval harness, plus 15
-architecture decisions recording what was measured and what was rejected.
+**Status — Phases 1–4 complete; Phase 5's contradiction-detection harness is built and merged,
+and has not yet been run.** There is no runnable end-to-end pipeline yet and `frontend/` is
+empty; what exists is the NER → canonicalization → clustering → extraction stack, each with
+its own eval harness, plus a contradiction-detection harness whose corpus has not been built
+and whose paid arms have never been called. 16 architecture decisions record what was measured
+and what was rejected.
 
 ## What is actually here
 
@@ -17,11 +19,12 @@ architecture decisions recording what was measured and what was rejected.
 | **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** |
 | **Clustering / pairing** (Phase 3) | `biolit.cluster` | same-sentence pairing F1 **0.6327**, ~halving downstream LLM calls |
 | **Sentence extraction** (Phase 4) | `biolit.extract` | deterministic control F1 **0.6238** — the LLM arm scored **0.3054** and was **not shipped** |
-| **Eval harness** | `biolit_evals` | 337 tests; every run appended to a committed JSONL log |
+| **Contradiction detection** (Phase 5) | `biolit.critic` | harness built, six arms wired, spend guard armed — **no result yet; no paid call has ever been made** |
+| **Eval harness** | `biolit_evals` | 460 tests; every run appended to a committed JSONL log |
 
 ## The part worth reading
 
-The eval harness is the point of this project, not the pipeline. Three findings shaped it:
+The eval harness is the point of this project, not the pipeline. Four findings shaped it:
 
 **Upstream entity loss dominates, and it is unrecoverable downstream.** Measured twice: 1679
 gold mentions whose spans NER got exactly right but which linked to nothing (worth +0.0821
@@ -44,6 +47,17 @@ second arm's zero is a tautology, and only a baseline matched on the first arm's
 the claim.* Two such baselines overturned it; a later sweep of seventeen free positional
 heuristics found **every budget-matched one of them beats the LLM arm.**
 
+**The same trap was caught the second time before anything was built.** Phase 5 needed
+contradiction gold, and BC5CDR was the obvious source. It cannot supply it: BC5CDR annotates
+chemical-*induced*-disease relations only, so every gold key is `marker/mechanism` and
+disagreement is impossible by construction — **0 opposed pairs across all three splits**,
+against 650 agreeing ones. Same fixed-outcome shape as the retraction above, found by checking
+the corpus first rather than by reporting a number out of it. Gold derives from CTD's
+direction field instead, and because that label *is* a direction flip, the design reports the
+blind-annotation agreement rate as a **ceiling and never as a correction factor** — a critic
+that merely detects direction flips would score near 1.0, so high recall against this proxy is
+evidence of mimicry rather than quality.
+
 ## Development
 
 ```bash
@@ -65,6 +79,8 @@ uv run python -m biolit_evals.baselines
 ## Reading order
 
 - `docs/EVAL_REPORT.md` — every number, its methodology, and its limitations
-- `docs/DECISIONS.md` — 15 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing findings
+- `docs/DECISIONS.md` — 16 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
+  findings, and ADR-0016 records why a passing test is not evidence the suite would notice a
+  regression
 - `docs/ARCHITECTURE.md` — how the layers fit together
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-phase specs and plans
