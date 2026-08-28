@@ -1,9 +1,35 @@
+import zipfile
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 
 from biolit_evals.contradiction_gold import GoldPair
+from biolit_evals.mesh_gold import parse_pubtator_documents
+from biolit_evals.mesh_gold_download import (
+    DEVELOPMENT_MEMBER,
+    TEST_MEMBER,
+    TRAINING_MEMBER,
+)
+
+# ALL THREE splits. The NER checkpoint was fine-tuned on BC5CDR, so a paper from any split is
+# contaminated -- not just the test split, which is what every other consumer of CDR_Data.zip
+# in this project defaults to.
+BC5CDR_MEMBERS = (TRAINING_MEMBER, DEVELOPMENT_MEMBER, TEST_MEMBER)
+
+
+def bc5cdr_pmids_from_zip(path: str | Path) -> frozenset[str]:
+    """Every pmid in BC5CDR (1,500 across the three splits), for use as the exclusion set.
+
+    A too-small exclusion set does not fail loudly: `assert_no_bc5cdr_pmids` checks the pool
+    against whatever set it is handed, so an exclusion covering only the test split leaves
+    1,000 contaminated pmids eligible AND leaves the anchor passing. The anchor would be
+    agreeing with itself.
+    """
+    with zipfile.ZipFile(path) as zf:
+        texts = [zf.read(member).decode("utf-8") for member in BC5CDR_MEMBERS]
+    return frozenset(doc.pmid for text in texts for doc in parse_pubtator_documents(text))
 
 
 @dataclass(frozen=True)
@@ -123,3 +149,76 @@ def drop_report(
         year_by_class=dict(year_by_class),
         length_by_class=dict(length_by_class),
     )
+
+
+DEFAULT_MANIFEST = "evals/gold/contradiction_pairs.jsonl"
+DEFAULT_LOG = "evals/contradiction_corpus_runs.jsonl"
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Build the seeded candidate pool and write it as the committed manifest.
+
+    `--seed` is REQUIRED, not defaulted. The seed plus the CTD release fixes which corpus
+    exists; a default would let a rebuild against a newer CTD produce a different corpus while
+    looking like the same reproducible command. Both are written into the run log alongside
+    the manifest hash, so a later reader can say exactly which draw produced which numbers.
+    """
+    # Heavy imports local to main, same pattern as cluster_eval.main.
+    import argparse
+    import gzip
+    import json
+    from datetime import UTC, datetime
+
+    from biolit_evals._meta import git_sha
+    from biolit_evals.contradiction_gold import build_pool, manifest_hash, write_manifest
+    from biolit_evals.ctd_directions import ctd_release_stamp, parse_ctd_directions
+
+    parser = argparse.ArgumentParser(description="Build the Phase 5 contradiction gold pool.")
+    parser.add_argument("--ctd", required=True, help="Path to CTD_chemicals_diseases.tsv.gz.")
+    parser.add_argument("--bc5cdr-zip", required=True, help="Path to CDR_Data.zip.")
+    parser.add_argument(
+        "--seed",
+        type=int,
+        required=True,
+        help="Shuffle seed. Required: it fixes which corpus exists and is recorded in the log.",
+    )
+    parser.add_argument(
+        "--per-class",
+        type=int,
+        default=900,
+        help="Pool size per class (3x the 300 target, per the spec's topping-up rule).",
+    )
+    parser.add_argument("--out", default=DEFAULT_MANIFEST)
+    parser.add_argument("--log", default=DEFAULT_LOG)
+    args = parser.parse_args(argv)
+
+    # Two passes over the gzip: the stamp scan stops at the first data row, so it is cheap.
+    with gzip.open(args.ctd, "rt", encoding="utf-8") as fh:
+        release = ctd_release_stamp(fh)
+    with gzip.open(args.ctd, "rt", encoding="utf-8") as fh:
+        directions = parse_ctd_directions(fh)
+
+    excluded = bc5cdr_pmids_from_zip(args.bc5cdr_zip)
+    pool = build_pool(directions, excluded=excluded, per_class=args.per_class, seed=args.seed)
+    write_manifest(pool, args.out)
+
+    line = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "git_sha": git_sha(),
+        "seed": args.seed,
+        "per_class": args.per_class,
+        "ctd_release": release,
+        "manifest": str(args.out),
+        "manifest_hash": manifest_hash(pool),
+        "pool_by_class": dict(sorted(Counter(str(p.label) for p in pool).items())),
+        "n_pmids_in_ctd_direct_evidence": len(directions),
+        "excluded_pmids_count": len(excluded),
+    }
+    Path(args.log).parent.mkdir(parents=True, exist_ok=True)
+    with open(args.log, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+    print(json.dumps(line, indent=2))
+
+
+if __name__ == "__main__":
+    main()

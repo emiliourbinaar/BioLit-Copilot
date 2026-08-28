@@ -1,13 +1,21 @@
+import zipfile
+
 import pytest
 
 from biolit.domain.records import ContradictionLabel
 from biolit_evals.contradiction_corpus import (
     ClassOutcome,
+    bc5cdr_pmids_from_zip,
     compose_corpus,
     drop_report,
     usable_pairs,
 )
 from biolit_evals.contradiction_gold import GoldPair
+from biolit_evals.mesh_gold_download import (
+    DEVELOPMENT_MEMBER,
+    TEST_MEMBER,
+    TRAINING_MEMBER,
+)
 
 
 def _contradiction(a: str, b: str) -> GoldPair:
@@ -273,9 +281,37 @@ def test_a_class_wiped_out_entirely_reports_zero_rather_than_vanishing():
 
     A KeyError at the point of use would at least be loud. The quiet reading is worse: code
     that iterates the report and finds every class it contains at or above the floor
-    concludes the corpus is fine."""
+    concludes the corpus is fine.
+
+    Mutation-verified: seeding the counter from the survivors (`Counter()`) instead of the
+    pool raises KeyError here and leaves the other 12 tests green."""
     pairs = [_contradiction("1", "2"), _agreement("3", "4")]
     abstracts = {"1": "text", "2": "text"}  # the agreement pair loses both abstracts
     composed = compose_corpus(pairs, abstracts, per_class=1, floor=1)
     assert composed.n_by_class["agreement"] == 0
     assert composed.outcome_by_class["agreement"] is ClassOutcome.below_floor
+
+
+def test_excluded_pmids_come_from_ALL_THREE_bc5cdr_splits_not_only_test(tmp_path):
+    """The anchor says no sampled PMID may appear in BC5CDR's 1,500 -- because the NER
+    checkpoint was fine-tuned on that corpus, so a paper from ANY split is contaminated, not
+    just the test split.
+
+    Reading only CDR_TestSet is the natural mistake: every other consumer of CDR_Data.zip in
+    this project defaults to the test member, and mesh_gold_download's three loaders all take
+    `member=TEST_MEMBER` by default. That would exclude 500 pmids and leave 1,000 contaminated
+    ones eligible for sampling -- and the anchor would still pass, because it checks the pool
+    against whatever set it was given. A too-small exclusion set makes the anchor agree with
+    itself, which is ADR-0016 rule 4's "a check that cannot run" wearing a different hat.
+
+    Each split here contributes exactly one document, so a loader reading one member returns
+    one pmid and a loader reading all three returns three."""
+    zip_path = tmp_path / "CDR_Data.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for member, pmid in (
+            (TRAINING_MEMBER, "111"),
+            (DEVELOPMENT_MEMBER, "222"),
+            (TEST_MEMBER, "333"),
+        ):
+            zf.writestr(member, f"{pmid}|t|Title here\n{pmid}|a|Abstract here.\n\n")
+    assert bc5cdr_pmids_from_zip(zip_path) == frozenset({"111", "222", "333"})
