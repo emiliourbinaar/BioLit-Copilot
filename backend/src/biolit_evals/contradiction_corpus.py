@@ -167,6 +167,7 @@ def drop_report(
 
 
 DEFAULT_MANIFEST = "evals/gold/contradiction_pairs.jsonl"
+DEFAULT_EXCLUDED = "data/bc5cdr_pmids.txt"
 DEFAULT_LOG = "evals/contradiction_corpus_runs.jsonl"
 
 
@@ -204,6 +205,15 @@ def main(argv: list[str] | None = None) -> None:
         help="Pool size per class (3x the 300 target, per the spec's topping-up rule).",
     )
     parser.add_argument("--out", default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        "--excluded-out",
+        default=DEFAULT_EXCLUDED,
+        help=(
+            "Where to write the BC5CDR pmids, one per line, for the scoring CLI's "
+            "--excluded-pmids. Written here rather than regenerated later so the set that "
+            "guarded the draw is the same set the halting anchor re-checks."
+        ),
+    )
     parser.add_argument("--log", default=DEFAULT_LOG)
     args = parser.parse_args(argv)
 
@@ -216,6 +226,10 @@ def main(argv: list[str] | None = None) -> None:
     excluded = bc5cdr_pmids_from_zip(args.bc5cdr_zip)
     pool = build_pool(directions, excluded=excluded, per_class=args.per_class, seed=args.seed)
     write_manifest(pool, args.out)
+
+    excluded_path = Path(args.excluded_out)
+    excluded_path.parent.mkdir(parents=True, exist_ok=True)
+    excluded_path.write_text("\n".join(sorted(excluded)) + "\n", encoding="utf-8")
 
     line = {
         "timestamp": datetime.now(UTC).isoformat(),

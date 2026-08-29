@@ -13,6 +13,7 @@ unit test. Every piece of logic it depends on is tested elsewhere: `available_ab
 DEFAULT_POOL = "evals/gold/contradiction_pairs.jsonl"
 DEFAULT_CORPUS = "evals/gold/contradiction_corpus.jsonl"
 DEFAULT_CACHE = "data/contradiction_abstracts.json"
+DEFAULT_TEXTS = "data/contradiction_abstract_texts.json"
 DEFAULT_LOG = "evals/contradiction_corpus_runs.jsonl"
 
 # NCBI allows 3 requests/second without an API key. efetch takes many ids per call, so the
@@ -46,6 +47,15 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--pool", default=DEFAULT_POOL)
     parser.add_argument("--out", default=DEFAULT_CORPUS)
     parser.add_argument("--cache", default=DEFAULT_CACHE)
+    parser.add_argument(
+        "--texts",
+        default=DEFAULT_TEXTS,
+        help=(
+            "Where to write the flat {paper_id: abstract text} file the scoring CLI takes as "
+            "--abstracts. Written from the same filtered mapping used to compose the corpus, "
+            "so the texts scored are by construction the texts the drop rule saw."
+        ),
+    )
     parser.add_argument("--log", default=DEFAULT_LOG)
     parser.add_argument(
         "--per-class",
@@ -105,6 +115,12 @@ def main(argv: list[str] | None = None) -> None:
     report = drop_report(pool, abstracts, years)
     composed = compose_corpus(pool, abstracts, per_class=args.per_class, floor=args.floor)
     write_manifest(composed.pairs, args.out)
+
+    # Written from `abstracts`, the same filtered mapping compose_corpus consumed, so the text
+    # the Critic is scored on cannot drift from the text the drop rule judged available.
+    texts_path = Path(args.texts)
+    texts_path.parent.mkdir(parents=True, exist_ok=True)
+    texts_path.write_text(json.dumps(abstracts, ensure_ascii=False), encoding="utf-8")
 
     def _summary(values: list[int]) -> dict[str, float] | None:
         if not values:
