@@ -240,14 +240,17 @@ def test_which_endpoint_is_shown_varies_so_the_concept_NAME_cannot_re_leak_the_c
     fixed choice still yields one concept per row, identically shaped. Only this test fails."""
     pairs = [
         GoldPair(
-            f"a{i}", f"b{i}", f"C{i:03d}", f"D{i:03d}", ContradictionLabel.contradiction,
-            "marker/mechanism", "therapeutic",
+            f"a{i}",
+            f"b{i}",
+            f"C{i:03d}",
+            f"D{i:03d}",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
         )
         for i in range(10)
     ]
     abstracts = {p: "Abstract." for pair in pairs for p in (pair.paper_id_a, pair.paper_id_b)}
-    rows = export_blind_sheet(
-        pairs, abstracts, n_contradiction=10, n_other=0, rng=random.Random(0)
-    )
+    rows = export_blind_sheet(pairs, abstracts, n_contradiction=10, n_other=0, rng=random.Random(0))
     shown = {row["shared_concept_id"][0] for row in rows}
     assert shown == {"C", "D"}, f"endpoint choice did not vary: only {shown} appeared"
