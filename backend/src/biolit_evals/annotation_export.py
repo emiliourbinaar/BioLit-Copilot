@@ -39,6 +39,7 @@ def export_blind_sheet(
     n_contradiction: int,
     n_other: int,
     rng: random.Random,
+    concept_names: Mapping[str, str] | None = None,
 ) -> list[dict]:
     """Build the annotator-facing sheet: `n_contradiction` contradiction pairs plus
     `n_other` pairs spread as evenly as possible across whichever non-contradiction labels
@@ -53,11 +54,31 @@ def export_blind_sheet(
     passing raw candidates sorted by endpoint (e.g. `build_candidates`'s output directly)
     would get a systematically biased sample instead of a random one.
 
-    Each row carries exactly `{"pair_id", "chemical_id", "disease_id", "abstract_a",
-    "abstract_b"}` -- no `label`, no `direction_a`/`direction_b`. That is the entire blind
-    protocol: nothing in the row lets the annotator recover the gold answer they are meant
-    to be checking. `pair_id` is `f"{paper_id_a}_{paper_id_b}"`, which is unambiguous only
-    because PMIDs are purely numeric and never contain `_`.
+    Each row carries exactly `{"pair_id", "shared_concept_id", "shared_concept_name",
+    "abstract_a", "abstract_b"}` -- no `label`, no `direction_a`/`direction_b`, and crucially
+    exactly ONE concept on every row regardless of class. `pair_id` is
+    `f"{paper_id_a}_{paper_id_b}"`, which is unambiguous only because PMIDs are purely numeric
+    and never contain `_`.
+
+    ONE CONCEPT, NOT THE KEY, AND THE REASON IS THE WHOLE POINT. Emitting `chemical_id` and
+    `disease_id` leaks the gold answer for a third of the corpus: `insufficient_overlap` is
+    DEFINED as sharing a single endpoint rather than a curated key, so its pairs are the only
+    ones carrying a null slot. Measured on the real 900-pair corpus, 300/300
+    insufficient_overlap pairs have a null endpoint against 0/600 of the other two classes --
+    a null slot identified the class with certainty. An annotator who can rule that class out
+    on sight chooses between two labels instead of three, which can only push pi UP, and pi is
+    the ceiling every other number in this eval is compared against.
+
+    WHICH endpoint is shown, when both exist, is chosen with `rng` rather than fixed. That is
+    not arbitrary: MeSH ids do not reveal whether they denote a chemical or a disease (in this
+    corpus chemicals are 641 `D`- and 170 `C`-prefixed, diseases 687 `D`- and 2 `C`-prefixed),
+    but `shared_concept_name` plainly does -- a reader knows "Vitamin D" from "Nausea". Always
+    showing the chemical for two-endpoint pairs would therefore make any disease-NAMED concept
+    a fresh tell for insufficient_overlap, which shares its disease in 89 of 300 cases.
+    Choosing at random leaves no row classifiable with certainty.
+
+    `concept_names` is optional; a missing name renders empty rather than omitting the field,
+    so every row keeps an identical key set.
     """
     by_label: dict[ContradictionLabel, list[GoldPair]] = {}
     for pair in pairs:
@@ -75,16 +96,21 @@ def export_blind_sheet(
 
     rng.shuffle(selected)
 
-    return [
-        {
-            "pair_id": f"{pair.paper_id_a}_{pair.paper_id_b}",
-            "chemical_id": pair.chemical_id,
-            "disease_id": pair.disease_id,
-            "abstract_a": abstracts[pair.paper_id_a],
-            "abstract_b": abstracts[pair.paper_id_b],
-        }
-        for pair in selected
-    ]
+    names = concept_names or {}
+    rows: list[dict] = []
+    for pair in selected:
+        endpoints = [e for e in (pair.chemical_id, pair.disease_id) if e]
+        concept = endpoints[0] if len(endpoints) == 1 else rng.choice(endpoints)
+        rows.append(
+            {
+                "pair_id": f"{pair.paper_id_a}_{pair.paper_id_b}",
+                "shared_concept_id": concept,
+                "shared_concept_name": names.get(concept, ""),
+                "abstract_a": abstracts[pair.paper_id_a],
+                "abstract_b": abstracts[pair.paper_id_b],
+            }
+        )
+    return rows
 
 
 @dataclass(frozen=True)

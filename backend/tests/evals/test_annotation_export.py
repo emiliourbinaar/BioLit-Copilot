@@ -31,14 +31,27 @@ _ABSTRACTS = {
 
 def test_the_blind_sheet_carries_no_gold_label():
     """Blind, per the ADR-0006 domain_sample precedent. A leaked label makes pi
-    unmeasurable, and nothing downstream could detect that it had happened."""
+    unmeasurable, and nothing downstream could detect that it had happened.
+
+    WHAT THIS TEST CANNOT DO, recorded because it already failed to once: an exact-key-set
+    assertion proves no field is NAMED label. It cannot prove no field IS the label. This
+    test listed chemical_id and disease_id as permitted and stayed green for the entire time
+    those two fields were identifying insufficient_overlap with certainty via a null slot.
+    See test_no_row_reveals_its_class_through_the_SHAPE_of_its_key for the structural
+    property that actually enforces blindness."""
     rows = export_blind_sheet(
         _PAIRS, _ABSTRACTS, n_contradiction=1, n_other=1, rng=random.Random(0)
     )
     for row in rows:
         assert "label" not in row
         assert "direction_a" not in row and "direction_b" not in row
-        assert set(row) == {"pair_id", "chemical_id", "disease_id", "abstract_a", "abstract_b"}
+        assert set(row) == {
+            "pair_id",
+            "shared_concept_id",
+            "shared_concept_name",
+            "abstract_a",
+            "abstract_b",
+        }
 
 
 def _pool(label: ContradictionLabel, count: int) -> list[GoldPair]:
@@ -158,3 +171,83 @@ def test_gate1_interval_is_the_wilson_interval_of_the_cant_tell_rate():
     including reporting a real Wilson interval on its own rate, not a stand-in constant."""
     gate = evaluate_gate1(cant_tell=6, n=30)
     assert gate.interval == wilson_interval(6, 30)
+
+
+def test_no_row_reveals_its_class_through_the_SHAPE_of_its_key():
+    """The blind protocol's real requirement, which an exact-key-set assertion cannot express.
+
+    `test_the_blind_sheet_carries_no_gold_label` pins that no field is NAMED label. It cannot
+    pin that no field IS the label, and for this corpus one was: insufficient_overlap is
+    DEFINED as sharing one endpoint rather than a curated key, so it is the only class whose
+    pairs carry a null chemical_id or disease_id. Measured on the real 900-pair corpus:
+    300/300 insufficient_overlap pairs have a null endpoint and 0/600 of the other two do. A
+    null slot identified the class with certainty, and the earlier test stayed green
+    throughout because the leaking fields were the ones it listed as permitted.
+
+    That matters for pi specifically, which is the ceiling every other number is compared
+    against. An annotator who can rule out insufficient_overlap on sight is choosing between
+    two labels instead of three on the remaining rows, which can only push pi UP -- and the
+    module's own docstring is explicit that nothing downstream could detect it had happened.
+
+    So the requirement is structural: every row identical in shape, with exactly one shared
+    concept, and no row carrying an empty one."""
+    pairs = [
+        GoldPair(
+            "p1",
+            "p2",
+            "C001",
+            "D001",
+            ContradictionLabel.contradiction,
+            "marker/mechanism",
+            "therapeutic",
+        ),
+        GoldPair(
+            "p3",
+            "p4",
+            "C002",
+            "D002",
+            ContradictionLabel.agreement,
+            "therapeutic",
+            "therapeutic",
+        ),
+        # The two shapes insufficient_overlap actually takes: shared chemical, shared disease.
+        GoldPair("p5", "p6", "C003", None, ContradictionLabel.insufficient_overlap, None, None),
+        GoldPair("p7", "p8", None, "D004", ContradictionLabel.insufficient_overlap, None, None),
+    ]
+    abstracts = {f"p{i}": f"Abstract {i}." for i in range(1, 9)}
+    rows = export_blind_sheet(pairs, abstracts, n_contradiction=1, n_other=2, rng=random.Random(0))
+    assert len({frozenset(row) for row in rows}) == 1, "rows differ in shape"
+    assert "chemical_id" not in rows[0] and "disease_id" not in rows[0]
+    assert all(row["shared_concept_id"] for row in rows), "a row carries an empty concept"
+
+
+def test_which_endpoint_is_shown_varies_so_the_concept_NAME_cannot_re_leak_the_class():
+    """The second-order leak, and the one a shape check cannot catch.
+
+    Making every row carry exactly one concept removes the cardinality tell. It does not
+    remove the tell if the CHOSEN endpoint is fixed. MeSH ids are opaque about which kind of
+    thing they denote -- in the real corpus chemicals are 641 `D`- and 170 `C`-prefixed and
+    diseases 687 `D`- and 2 `C`-prefixed -- but `shared_concept_name` is not opaque at all: a
+    reader knows "Vitamin D" from "Nausea" on sight.
+
+    So if two-endpoint pairs always showed their chemical, then any DISEASE-named concept on
+    the sheet would identify insufficient_overlap, which shares its disease in 89 of its 300
+    real pairs. The class would be back to being readable off the row, just via the name
+    column instead of the null column.
+
+    Mutation-verified as necessary: replacing the random choice with `endpoints[0]` left all
+    eleven other tests in this module green, including the shape test directly above -- the
+    fixed choice still yields one concept per row, identically shaped. Only this test fails."""
+    pairs = [
+        GoldPair(
+            f"a{i}", f"b{i}", f"C{i:03d}", f"D{i:03d}", ContradictionLabel.contradiction,
+            "marker/mechanism", "therapeutic",
+        )
+        for i in range(10)
+    ]
+    abstracts = {p: "Abstract." for pair in pairs for p in (pair.paper_id_a, pair.paper_id_b)}
+    rows = export_blind_sheet(
+        pairs, abstracts, n_contradiction=10, n_other=0, rng=random.Random(0)
+    )
+    shown = {row["shared_concept_id"][0] for row in rows}
+    assert shown == {"C", "D"}, f"endpoint choice did not vary: only {shown} appeared"
