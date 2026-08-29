@@ -5,6 +5,7 @@ import pytest
 from biolit.domain.records import ContradictionLabel
 from biolit_evals.contradiction_corpus import (
     ClassOutcome,
+    available_abstracts,
     bc5cdr_pmids_from_zip,
     compose_corpus,
     drop_report,
@@ -315,3 +316,25 @@ def test_excluded_pmids_come_from_ALL_THREE_bc5cdr_splits_not_only_test(tmp_path
         ):
             zf.writestr(member, f"{pmid}|t|Title here\n{pmid}|a|Abstract here.\n\n")
     assert bc5cdr_pmids_from_zip(zip_path) == frozenset({"111", "222", "333"})
+
+
+def test_a_paper_returned_without_abstract_text_counts_as_MISSING():
+    """PubMed answers for a pmid it knows even when that record carries no abstract -- older
+    papers, editorials, letters. `efetch_abstracts` reports those as (None, year), so the
+    pmid IS a key in the fetch result.
+
+    Handing that result straight to `usable_pairs` would be a silent corruption rather than
+    an error: `p.paper_id_a in abstracts` is True, the pair survives the filter, and the
+    corpus gains a pair the Critic is asked to judge with no text on one side. It would score
+    as a wrong answer attributable to the model instead of a missing input, and the drop rate
+    -- the very number this step exists to measure -- would be understated by exactly the
+    count of these.
+
+    A year with no abstract is the discriminating case: keying on presence alone, or on the
+    tuple being truthy, both keep it."""
+    fetched = {
+        "1": ("Real abstract text.", 1999),
+        "2": (None, 2004),  # known to PubMed, no abstract
+        "3": ("", 2010),  # present but empty
+    }
+    assert available_abstracts(fetched) == {"1": "Real abstract text."}

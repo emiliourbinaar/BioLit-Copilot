@@ -47,6 +47,21 @@ class DropReport:
     length_by_class: dict[str, list[int]]
 
 
+def available_abstracts(
+    fetched: Mapping[str, tuple[str | None, int | None]],
+) -> dict[str, str]:
+    """Keep only pmids that actually carry abstract text.
+
+    PubMed answers for a pmid it knows even when that record has no abstract -- older papers,
+    editorials, letters -- so `efetch_abstracts` reports (None, year) and the pmid IS a key in
+    its result. Passing that result straight to `usable_pairs` would not error: membership is
+    True, the pair survives, and the corpus gains a pair the Critic must judge with no text on
+    one side. That scores as a model error rather than a missing input, and understates the
+    drop rate this step exists to measure by exactly the count of such papers.
+    """
+    return {pmid: text for pmid, (text, _year) in fetched.items() if text}
+
+
 def usable_pairs(pairs: Sequence[GoldPair], abstracts: Mapping[str, str]) -> list[GoldPair]:
     return [p for p in pairs if p.paper_id_a in abstracts and p.paper_id_b in abstracts]
 

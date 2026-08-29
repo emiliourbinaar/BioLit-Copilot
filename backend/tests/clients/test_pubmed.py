@@ -134,3 +134,29 @@ async def test_esearch_returns_pmids(settings):
     async with httpx.AsyncClient() as http:
         pmids = await PubMedClient(http, settings).esearch("metformin PCOS")
     assert pmids == ["11111111", "22222222"]
+
+
+@respx.mock
+async def test_efetch_abstracts_does_not_touch_the_pmc_oa_service(settings):
+    """Phase 5 needs only pmid -> (abstract, year); it judges abstracts and never consults
+    full text, so the license/text-type classification `efetch` performs is work it does not
+    use. That work is not free: `_classify_pmc` issues ONE request per paper carrying a PMC
+    id, which against a 5,400-paper corpus at NCBI's unkeyed 3 req/s dominates the whole
+    fetch -- and it is also currently fatal, because the OA service answers 404 for an
+    article outside the OA subset while `request_with_retry` raises for status.
+
+    The OA route is deliberately left unmocked: respx fails any unmocked request, so this
+    test fails loudly if the lean path ever starts classifying. Asserting on the returned
+    values alone would not catch it -- the classification's results are simply discarded
+    here, so a version that made 5,400 pointless requests would return exactly the same
+    mapping.
+
+    The cassette's article carries a PMC id, so the temptation to classify is present."""
+    route = respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi").mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_pmc_oa.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        got = await PubMedClient(http, settings).efetch_abstracts(["11111111"])
+
+    assert got == {"11111111": ("Open abstract.", 2021)}
+    assert route.called

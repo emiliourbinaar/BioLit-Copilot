@@ -58,6 +58,40 @@ class PubMedClient:
             papers.append(await self._parse_article(article))
         return papers
 
+    async def efetch_abstracts(self, pmids: list[str]) -> dict[str, tuple[str | None, int | None]]:
+        """{pmid: (abstract, publication year)} for consumers that judge abstracts only.
+
+        Deliberately does NOT build `Paper` and does not consult the PMC OA service. A
+        consumer that never reads full text has no use for text_type, license, or a full-text
+        pointer, and obtaining them costs one extra HTTP request per article carrying a PMC
+        id -- which at NCBI's unkeyed 3 req/s is the dominant cost of a multi-thousand-paper
+        fetch, and is currently fatal besides: the OA service answers 404 for an article
+        outside the OA subset, and `request_with_retry` raises for status.
+
+        Year comes from JournalIssue/PubDate/Year and may be None; it is here because the
+        spec requires per-class publication-year distributions to be reported regardless of
+        outcome, as the check on the availability confound that topping up can introduce.
+        """
+        if not pmids:
+            return {}
+        resp = await request_with_retry(
+            self._client,
+            "GET",
+            f"{_EUTILS}/efetch.fcgi",
+            retry=self._retry,
+            params=self._params(db="pubmed", id=",".join(pmids), retmode="xml"),
+        )
+        root = ET.fromstring(resp.text)
+        out: dict[str, tuple[str | None, int | None]] = {}
+        for article in root.findall(".//PubmedArticle"):
+            pmid = article.findtext(".//MedlineCitation/PMID") or ""
+            if not pmid:
+                continue
+            year_text = article.findtext(".//JournalIssue/PubDate/Year")
+            year = int(year_text) if year_text and year_text.isdigit() else None
+            out[pmid] = (self._parse_abstract(article), year)
+        return out
+
     async def _parse_article(self, article: ET.Element) -> Paper:
         pmid = article.findtext(".//MedlineCitation/PMID") or ""
         title = article.findtext(".//Article/ArticleTitle") or ""
