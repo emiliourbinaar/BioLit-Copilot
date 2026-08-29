@@ -211,3 +211,123 @@ def evaluate_gate1(cant_tell: int, n: int) -> Gate1:
     """
     verdict = "REVISE_PROTOCOL" if 3 * cant_tell > n else "TRACTABLE"
     return Gate1(cant_tell=cant_tell, n=n, verdict=verdict, interval=wilson_interval(cant_tell, n))
+
+
+DEFAULT_CORPUS = "evals/gold/contradiction_corpus.jsonl"
+DEFAULT_TEXTS = "data/contradiction_abstract_texts.json"
+DEFAULT_ALIASES = "data/canon/mesh_aliases.json.gz"
+# The sheet carries full abstract text, so it is written under gitignored data/ and never
+# committed -- the same posture the fetch step takes. Only the ANNOTATOR'S LABELS, which
+# contain no abstract text, become a committed artifact.
+DEFAULT_SHEET = "data/annotation_batch_1.json"
+DEFAULT_MARKDOWN = "data/annotation_batch_1.md"
+
+
+def _concept_names(aliases_path: str) -> dict[str, str]:
+    """{normalized MeSH id: canonical name} inverted from the Phase 3A alias artifact.
+
+    The artifact is alias-major -- {alias: [[MESH:id, canonical_name, is_primary], ...]} --
+    and its ids carry the `MESH:` prefix the corpus strips, so both are normalised here.
+    Primary aliases win; a non-primary one is used only if nothing else names the concept.
+    """
+    import gzip
+    import json
+
+    names: dict[str, str] = {}
+    with gzip.open(aliases_path, "rt", encoding="utf-8") as fh:
+        for entries in json.load(fh).values():
+            for raw_id, canonical, is_primary in entries:
+                key = raw_id.split(":", 1)[1] if ":" in raw_id else raw_id
+                if is_primary or key not in names:
+                    names[key] = canonical
+    return names
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Write the first blind annotation batch. `main()` gets no direct unit test by
+    convention; `export_blind_sheet` and both gates are tested in their own module."""
+    import argparse
+    import json
+    from pathlib import Path
+
+    from biolit_evals.contradiction_gold import manifest_hash, read_manifest
+
+    parser = argparse.ArgumentParser(description="Export the blind annotation batch.")
+    parser.add_argument("--corpus", default=DEFAULT_CORPUS)
+    parser.add_argument("--texts", default=DEFAULT_TEXTS)
+    parser.add_argument("--aliases", default=DEFAULT_ALIASES)
+    parser.add_argument("--sheet", default=DEFAULT_SHEET)
+    parser.add_argument("--markdown", default=DEFAULT_MARKDOWN)
+    parser.add_argument("--n-contradiction", type=int, default=15)
+    parser.add_argument("--n-other", type=int, default=15)
+    parser.add_argument(
+        "--seed",
+        type=int,
+        required=True,
+        help="Shuffle seed. Required: it fixes which pairs are on the sheet and in what order.",
+    )
+    args = parser.parse_args(argv)
+
+    pairs = read_manifest(args.corpus)
+    texts = json.loads(Path(args.texts).read_text(encoding="utf-8"))
+    rows = export_blind_sheet(
+        pairs,
+        texts,
+        n_contradiction=args.n_contradiction,
+        n_other=args.n_other,
+        rng=random.Random(args.seed),
+        concept_names=_concept_names(args.aliases),
+    )
+
+    sheet = Path(args.sheet)
+    sheet.parent.mkdir(parents=True, exist_ok=True)
+    sheet.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    lines = [
+        "# Blind annotation batch 1",
+        "",
+        f"Corpus `{args.corpus}` (hash {manifest_hash(pairs)}), seed {args.seed}, "
+        f"{len(rows)} pairs.",
+        "",
+        "For each pair, judge **from the two abstracts alone** whether they disagree about "
+        "the shared concept, then record one of `contradiction`, `agreement`, "
+        "`insufficient_overlap`, or `cant_tell`, with a one-line reason.",
+        "",
+        "Nothing on this sheet encodes the gold answer: every row shows exactly one shared "
+        "concept, and which endpoint that is varies by design.",
+        "",
+        "---",
+        "",
+    ]
+    for i, row in enumerate(rows, start=1):
+        name = row["shared_concept_name"] or "(unnamed)"
+        lines += [
+            f"## {i}. `{row['pair_id']}`",
+            "",
+            f"**Shared concept:** {name} (`{row['shared_concept_id']}`)",
+            "",
+            "**Abstract A**",
+            "",
+            row["abstract_a"],
+            "",
+            "**Abstract B**",
+            "",
+            row["abstract_b"],
+            "",
+            "```",
+            "label:",
+            "reason:",
+            "```",
+            "",
+            "---",
+            "",
+        ]
+    Path(args.markdown).write_text("\n".join(lines), encoding="utf-8")
+
+    print(f"wrote {sheet} and {args.markdown}: {len(rows)} pairs")
+    named = sum(1 for r in rows if r["shared_concept_name"])
+    print(f"rows with a resolved concept name: {named}/{len(rows)}")
+
+
+if __name__ == "__main__":
+    main()
