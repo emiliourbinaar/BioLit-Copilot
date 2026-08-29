@@ -2071,3 +2071,186 @@ Six gates run on the real path: `assert_dataset_size`, `assert_papers_match_docu
 invoked it — and a second instance of the same shape was found in final review, on the fields
 carrying the headline number itself. The generalized lesson: **a value computed in a runner needs a
 fixture where it differs from its neighbours**, not merely one where it exists.
+
+---
+
+# Contradiction detection (Phase 5) — corpus, free baselines, annotation batch
+
+**Status: steps 1–3 of the spec's build order are complete and no paid call has been made.**
+Step 4 (blind human annotation, Gates 1 and 2) is exported and awaiting the annotator.
+
+## The corpus
+
+BC5CDR cannot supply contradiction gold. It annotates chemical-*induced*-disease relations
+only, so every gold key is `marker/mechanism` and disagreement is impossible by construction:
+**0 opposed pairs across all three splits** against 650 agreeing. Gold therefore derives from
+CTD's `DirectEvidence` direction field.
+
+Two artifacts, both committed, both content-hashed:
+
+| Artifact | Contents | Hash |
+|---|---|---|
+| `evals/gold/contradiction_pairs.jsonl` | the pre-registered pool, 900/class | `c3e8bfd78d19b2da` |
+| `evals/gold/contradiction_corpus.jsonl` | the evaluated corpus, 300/class | `cd3b394c63a85119` |
+
+Drawn from CTD release **Thu Jul 30 13:59:07 EDT 2026** under seed **20260819**, with 1,500
+BC5CDR PMIDs excluded before any pairing (the NER checkpoint was fine-tuned on that corpus, so
+a paper from *any* split is contaminated, not just the test split). 84,328 PMIDs carry direct
+evidence in this release.
+
+**The committed manifest, not CTD, is the frozen artifact.** CTD is republished continuously,
+so a rebuild would silently resample. The draw is a pure function of (directions, exclusions,
+per-class size, seed); the pool hash reproduced identically across three separate builds.
+
+### The pre-committed drop rule fired clean
+
+The pool is 3× target so that unmeasured abstract availability is absorbed by consuming more of
+a fixed, pre-ordered list rather than by re-drawing against whatever turned out to be fetchable.
+Every class reached 300, so the rule's first row applies and the design proceeds unchanged. No
+class entered the accept-smaller band, none hit the floor, and no differential filtering has to
+be recorded as a limitation.
+
+| Class | Usable pairs / pool | Availability |
+|---|---|---|
+| `insufficient_overlap` | 744 / 900 | 82.7% |
+| `agreement` | 679 / 900 | 75.4% |
+| `contradiction` | 655 / 900 | 72.8% |
+
+4,681 of 5,400 pool papers carry abstract text (86.7%).
+
+**Confound check (Limitation 5), reported regardless of outcome.** Median abstract length by
+class 1459 / 1409 / 1524 characters; median publication year 2004 / 2001 / 2003. The
+contradiction class is the oldest, shortest and least available of the three — the direction
+the design hypothesised, older causal-toxicology abstracts being thinner on coverage than
+therapeutic trials — but a 3-year median gap will not make its papers systematically unlike the
+others for reasons unrelated to the label.
+
+## Free baselines
+
+Scored on the 900-pair corpus. The random row is measured, not assumed: uniform prediction
+under the same scorer over 20 seeds.
+
+| Arm | macro-F1 | Accuracy | **contradiction F1** |
+|---|---|---|---|
+| `overlap` | 0.3400 | 0.4322 | **0.0000** |
+| `lexicon` | 0.3252 | 0.3433 | **0.2274** |
+| `majority` | 0.1667 | 0.3333 | **0.0000** |
+| *uniform random* | *0.3347 ± 0.0186* | *~0.3333* | *0.3344 ± 0.0287* |
+
+### The pre-registration is falsified
+
+`DirectionLexiconCritic`'s docstring recorded, before any run, that it should score **high**,
+because CTD's contradiction label *is* a direction flip — and that an LLM arm merely matching it
+would mean the gold measures cue-matching rather than reasoning.
+
+It scores at chance. The gap in that reasoning: CTD's label is a direction flip **in CTD's
+curated annotation**, not one a cue lexicon can read off free text. 606 of 1,800 papers (33.7%)
+yield `neither` — no cue fired, or cues tied — and `compose` sends `neither` on either side to
+`insufficient_overlap`, so the lexicon predicts that class 498 times against a gold 300, while
+finding 16.3% of contradictions.
+
+Neither consequence is a licence to skip the paid run, and neither is a licence to trust it:
+
+- **Step 7's premise stands at full scale.** The spec allowed that a near-ceiling lexicon would
+  convert the paid question into a cheaper one at N ≈ 150. It did not happen.
+- **Proxy-mimicry is not retired either.** The §2 warning concerns a critic that detects
+  direction flips *well*. A cue lexicon cannot, so this says nothing about an LLM. Recall near
+  1.0 from a paid arm remains evidence of mimicry, not quality.
+
+### ⭐ `overlap` has the best macro-F1 and it must not be quoted that way
+
+`ConceptOverlapCritic` posts the highest macro-F1 **and** the highest accuracy of the three
+free arms. Its contradiction row is `tp 0, fp 0, fn 300`: it emitted **zero** contradiction
+predictions across all 900 pairs. That is structural — a bag of shared or unshared concept ids
+carries no directional information, so `isdisjoint()` separates "about the same thing" from
+"not", and nothing else. Its macro-F1 is mechanically capped at (1.0 + 0 + 1.0)/3 = **0.667**,
+so comparing it on macro-F1 against a three-class-capable arm is not apples-to-apples.
+
+**This is the same failure shape as the retracted 127/270 headline in ADR-0015**, and saying so
+plainly is the point of this paragraph. There, an arm was scored on a population defined by
+another arm's failures, where its zero was a tautology rather than a measurement, and the error
+was found only *after* the number had been published as a headline and had to be retracted.
+Here the same shape — a score on a class an arm cannot by construction produce — was caught
+**before any number was quoted**, because the property was written into the baseline's docstring
+at design time and the per-class breakdown was read before the macro figure was reported.
+
+The difference between the two episodes is not that the second arm is better behaved. It is
+that the corrective habit the first episode produced — read the per-class rows before quoting a
+macro number, and ask what an arm is structurally incapable of — was applied in advance. That is
+the clearest evidence so far that the lessons from the retraction are holding rather than merely
+being recorded.
+
+Where `overlap` *is* informative: `insufficient_overlap` at P 0.679, a real signal that two
+papers are not about the same thing.
+
+### The bar the paid arm has to clear
+
+**On the contradiction class, no free baseline beats random.** The lexicon's 0.2274 sits roughly
+3.7 sd *below* the random floor of 0.3344, because it predicts the class only 131 times against
+a gold 300. The other two are zero by construction. The bar is a **floor**, not the
+near-ceiling the spec pre-registered, and no cheap mechanism has shown the task is exploitable
+by cue-matching or by topical overlap.
+
+## The blind sheet was not blind, and it was caught before annotation
+
+`insufficient_overlap` is *defined* as sharing one endpoint rather than a curated key, so its
+pairs are the only ones carrying a null `chemical_id` or `disease_id`. Measured on the corpus:
+**300/300** insufficient_overlap pairs have a null slot; **0/600** of the other two classes do.
+A null slot identified the class with certainty — 7 of the 30 rows in the first batch.
+
+That biases **π upward specifically**, and π is the ceiling every other number here is compared
+against: an annotator who can rule out one class on sight chooses between two labels instead of
+three on the remaining rows. The module's own docstring is explicit that nothing downstream
+could detect it had happened, which is why "before annotation" is the only time it could be
+caught at all.
+
+The spec says the annotator "sees both abstracts and the key". It did not reckon with the key's
+*shape* being the label for the one class defined by not having a key. Any faithful rendering of
+the key leaks, so the sheet now shows exactly one shared concept per row, identically for every
+class, with which endpoint appears randomised — because MeSH ids are opaque about what they
+denote but concept **names** are not, and always showing the chemical would make any
+disease-named concept a fresh tell.
+
+**Two testing lessons, both recorded because they generalise:**
+
+1. The pre-existing test asserted the **exact key set**, which is correct practice and still
+   could not catch this. An exact-key-set assertion proves no field is *named* label; it cannot
+   prove no field *is* the label. It listed the two leaking fields as permitted and stayed green
+   throughout.
+2. The first fix was mutation-tested and the mutation **survived**: replacing the randomised
+   endpoint choice with a fixed one left all eleven other tests green, including the new
+   shape test, because a fixed choice still yields one identically-shaped concept per row. The
+   rationale had been written into a docstring with nothing enforcing it — ADR-0016 rule 2 — and
+   needed its own witness.
+
+## Pending
+
+- **Step 4**, blind annotation of the 30-pair batch (15 contradiction + 8 agreement + 7
+  insufficient_overlap), running Gate 1 (tractability, `cant_tell` ≤ 1/3 of 30) and Gate 2
+  (stop rule, calibrated at exactly n = 15 contradiction pairs). Gate 2 may retire the design.
+- **Steps 5–7**, pilot then full run, each requiring explicit authorization. No paid call has
+  been made.
+- **A known defect, deliberately not fixed:** `PubMedClient.efetch` raises on an HTTP 404 from
+  the PMC OA service, which is the normal answer for an article outside the OA subset. One such
+  article kills the whole call; it reproduced on the first 20 PMIDs of this corpus. The respx
+  suite covers the 200-with-`<error>` body and has no 404 cassette — the same shape as the
+  structured-abstract truncation that survived an extensive suite because every cassette held an
+  unstructured abstract. Phase 5 routes around it via `efetch_abstracts`, which does no PMC
+  lookup at all.
+
+### Reproducing this
+
+```bash
+# All free. CTD (~161 MB) and CDR_Data.zip download on first run.
+uv run python -m biolit_evals.contradiction_corpus \
+    --ctd data/ctd/CTD_chemicals_diseases.tsv.gz \
+    --bc5cdr-zip data/bc5cdr/CDR_Data.zip --seed 20260819
+uv run python -m biolit_evals.contradiction_abstracts
+uv run python -m biolit_evals.contradiction_concepts
+uv run python -m biolit_evals.critic_eval --arm lexicon \
+    --manifest evals/gold/contradiction_corpus.jsonl \
+    --abstracts data/contradiction_abstract_texts.json \
+    --excluded-pmids data/bc5cdr_pmids.txt \
+    --ctd-release "Thu Jul 30 13:59:07 EDT 2026"
+uv run python -m biolit_evals.annotation_export --seed 20260819
+```
