@@ -4,12 +4,12 @@ A multi-agent biomedical literature research assistant, built as a **measurement
 project: every layer is priced against a free baseline before it is allowed to ship, and
 three of the mechanisms that looked most promising were rejected on their own numbers.
 
-**Status — Phases 1–4 complete; Phase 5's contradiction-detection harness is built and merged,
-and has not yet been run.** There is no runnable end-to-end pipeline yet and `frontend/` is
-empty; what exists is the NER → canonicalization → clustering → extraction stack, each with
-its own eval harness, plus a contradiction-detection harness whose corpus has not been built
-and whose paid arms have never been called. 16 architecture decisions record what was measured
-and what was rejected.
+**Status — Phases 1–4 complete; Phase 5 ran its free half and stopped there on purpose.**
+There is no runnable end-to-end pipeline yet and `frontend/` is empty; what exists is the
+NER → canonicalization → clustering → extraction stack, each with its own eval harness, plus a
+contradiction-detection harness whose 900-pair corpus and free baselines are built and whose
+paid arms were **retired by a pre-registered stop rule before they were ever called**.
+16 architecture decisions record what was measured and what was rejected.
 
 ## What is actually here
 
@@ -19,12 +19,12 @@ and what was rejected.
 | **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** |
 | **Clustering / pairing** (Phase 3) | `biolit.cluster` | same-sentence pairing F1 **0.6327**, ~halving downstream LLM calls |
 | **Sentence extraction** (Phase 4) | `biolit.extract` | deterministic control F1 **0.6238** — the LLM arm scored **0.3054** and was **not shipped** |
-| **Contradiction detection** (Phase 5) | `biolit.critic` | harness built, six arms wired, spend guard armed — **no result yet; no paid call has ever been made** |
-| **Eval harness** | `biolit_evals` | 460 tests; every run appended to a committed JSONL log |
+| **Contradiction detection** (Phase 5) | `biolit.critic` | 900-pair corpus, 3 free baselines at chance — **gold proxy measured invalid (π̂ 0.067) and the paid run cancelled; no paid call has ever been made** |
+| **Eval harness** | `biolit_evals` | 483 tests; every run appended to a committed JSONL log |
 
 ## The part worth reading
 
-The eval harness is the point of this project, not the pipeline. Four findings shaped it:
+The eval harness is the point of this project, not the pipeline. Five findings shaped it:
 
 **Upstream entity loss dominates, and it is unrecoverable downstream.** Measured twice: 1679
 gold mentions whose spans NER got exactly right but which linked to nothing (worth +0.0821
@@ -57,6 +57,15 @@ direction field instead, and because that label *is* a direction flip, the desig
 blind-annotation agreement rate as a **ceiling and never as a correction factor** — a critic
 that merely detects direction flips would score near 1.0, so high recall against this proxy is
 evidence of mimicry rather than quality.
+
+**Then the replacement gold failed too, and the stop rule caught it.** Gold derived from CTD's
+direction field, so the blind annotation measured its validity before any paid arm ran. A human
+agreed with **1 of 15** proxy-labelled contradictions (π̂ = 0.067, 95% CI [0.012, 0.298]) — CTD's
+`marker/mechanism` vs `therapeutic` mostly encodes *dual pharmacology*, not disagreement. A drug
+that treats a condition and can also cause it is not a contradiction. Gate 2, calibrated and
+committed before any result existed, read STOP and **the paid run was cancelled rather than
+renegotiated.** The corpus and baselines remain valid; the labels do not. This is the first time
+in the project the check was in place *before* the claim rather than added after being wrong.
 
 ## Development
 

@@ -2223,13 +2223,177 @@ disease-named concept a fresh tell.
    rationale had been written into a docstring with nothing enforcing it — ADR-0016 rule 2 — and
    needed its own witness.
 
+## ⭐ Gate 2 fired: the CTD proxy is retired, before any money was spent
+
+The 30-pair batch was annotated blind. Both gates were run by
+`biolit_evals.annotation_gates`, which parses the sheet back, joins it to the frozen corpus,
+and writes `evals/gold/annotation_batch_1_labels.jsonl`.
+
+| gate | domain | reading | verdict |
+|---|---|---|---|
+| Gate 1 — tractability | all 30 pairs | `cant_tell` = 1/30, 95% Wilson [0.006, 0.167] | **TRACTABLE** |
+| Gate 2 — stop rule | the 15 contradiction pairs | g = 1/15, π̂ = 0.067, 95% Wilson [0.012, 0.298] | **STOP** |
+
+Gate 1 clearing and Gate 2 stopping is the *informative* combination, and it is worth being
+explicit about why. A high `cant_tell` rate would have meant the protocol was unreadable —
+that the annotator could not judge these pairs from abstracts alone, in which case nothing
+could be concluded about the proxy. One `cant_tell` in thirty says the task was perfectly
+judgeable. **The annotator could tell, and what they told us is that the pairs are not
+contradictions.**
+
+π̂'s upper bound of 0.298 sits below the 0.70 the design was built to clear. So π ≥ 0.7 is
+*excluded* at n = 15, not merely unsupported — the one thing a 15-pair batch is powerful
+enough to establish is that the proxy is badly wrong, which is exactly what Gate 2 was
+calibrated to detect and all it was ever meant to do.
+
+### The confusion matrix
+
+Rows are CTD gold, columns are the human annotator.
+
+| gold ↓ / annotator → | contradiction | agreement | insufficient_overlap | cant_tell |
+|---|---|---|---|---|
+| **contradiction** (15) | **1** | 4 | 10 | 0 |
+| **agreement** (8) | 0 | 4 | 3 | 1 |
+| **insufficient_overlap** (7) | 0 | 2 | 5 | 0 |
+
+Exact agreement is **10/30 = 0.333**, which is precisely three-class chance. Cohen's κ
+against gold is **0.116**.
+
+That κ is **gold-versus-annotator agreement, not inter-rater reliability** — there is one
+annotator, so no IRR statistic exists for this batch. It measures how well CTD's derived
+label predicts a human's judgment, which is the quantity Phase 5 set out to estimate. It does
+not measure whether the human is self-consistent or whether a second annotator would concur.
+
+### Why it fails: opposite direction is not contradiction, it is dual pharmacology
+
+The gold labels a pair `contradiction` when CTD records `marker/mechanism` for one paper and
+`therapeutic` for the other on the same (chemical, disease) key. The pairing itself is sound —
+spot-checking confirmed both papers really are indexed to the same chemical and the same
+disease. The **inference from that co-keying to "these papers disagree" is what breaks**, and
+the annotator's written reasons show it breaking the same way over and over:
+
+- **Disulfiram / Cocaine-Related Disorders.** One paper reports it reduces cocaine use; the
+  other reports it exacerbates cocaine-induced seizures in mice. *Both are true.*
+- **Lidocaine / Tinnitus.** One evaluates IV lidocaine as a treatment for chronic tinnitus;
+  the other monitors tinnitus as the symptom that signals accidental intravascular injection
+  of epidural lidocaine. *Both are true.*
+- **Pimozide / Seizures.** One studies dose-dependent effects on cocaine-induced seizures;
+  the other its protective effect against chloroquine-induced seizures. Different inducing
+  agents entirely — not opposed claims, different experiments.
+- **Phenobarbital / drug-induced liver injury.** One has it suppressing lindane-induced
+  injury; the other is about acetaminophen-induced failure treated with bone marrow cells.
+
+A drug that both treats a condition and can cause or mark it is not a literature
+contradiction — it is ordinary pharmacology, resolved by dose, route, population, or
+co-administered agent. CTD's direction field encodes *what role the chemical played in that
+paper*, and two papers can carry opposite roles while making claims that are jointly true and
+never in tension. **The proxy conflates "opposite direction of effect" with "contradictory
+claims," and those are different things far more often than they are the same.**
+
+Exactly one pair of fifteen was a genuine disagreement: **bretylium tosylate / ventricular
+fibrillation**, where one paper calls it highly effective and safe for *preventing* VF and the
+other reports it can directly *induce* life-threatening VF. That is what the design assumed it
+was buying 300 of.
+
+### The honest counterweight: some of this is annotator strictness
+
+The annotator applied `insufficient_overlap` to 18 of 30 rows where gold has 7, and called
+only 4 of 8 gold `agreement` pairs `agreement`. **The pull toward `insufficient_overlap` is
+general, not specific to the contradiction class** — which means part of the low g reflects a
+high bar for "these two papers address the same proposition at all," not solely proxy failure.
+
+This does not rescue the design, for two reasons. First, π is *defined* as the fraction of
+proxy-labelled contradictions a human accepts as genuine; a strict-but-reasonable human is the
+measurement instrument the design chose, not a confound to be corrected out. Second, the
+direction of the effect is wrong for a rescue: the pairs the annotator rejected were rejected
+with specific, checkable reasons about different inducing agents and different populations,
+not with shrugs. **Separating strictness from proxy failure needs a second annotator, and that
+is the one thing a single-annotator batch structurally cannot do.** Recorded as a limitation
+rather than resolved.
+
+### A protocol confound, measured and reported even though it does not change the verdict
+
+The blindness fix shows exactly one of a pair's two endpoints, chosen at random. That closed
+the label leak, but it has a cost the spec did not anticipate: **on a disease-shown row, the
+annotator is not told which chemical the pair turns on.** In pair `35104500_9137910` the pair
+hinges on pramipexole; the sheet showed "Hypokinesia," and the annotator reasoned about
+atractylon — a different drug named in the same abstract.
+
+Split by which endpoint was displayed:
+
+| endpoint shown | exact match vs gold | of the 15 contradiction pairs, called contradiction |
+|---|---|---|
+| chemical | 7/14 | 1/5 |
+| disease | 3/16 | 0/10 |
+
+The direction is consistent with the concern, but **Fisher's exact two-sided p = 0.12 — this
+is a hypothesis, not an established effect**, and at these counts it would be easy to
+over-read.
+
+**It does not change the verdict, and that is checkable rather than asserted.** Under the most
+favourable possible assumption — that the chemical-shown rate of 1/5 held across all fifteen
+pairs — g would be 3. The STOP band is g ≤ 7. The design is retired under the best case for
+the protocol, so the confound is a defect to fix before any re-run, not a reason to discount
+this one.
+
+### What this costs, and what it bought
+
+Steps 5–8 are **not worth buying against this gold**, exactly as §4 of the spec pre-committed:
+*"the CTD proxy is failing badly enough that steps 5–8 are not worth buying, and the correct
+response is to reconsider the gold source rather than proceed with a known-weak ceiling."*
+That was written before any result existed, and it is being honoured rather than renegotiated
+now that it is inconvenient.
+
+Concretely, π is a **ceiling**. At π̂ = 0.067, a paid arm scored against this corpus would be
+graded almost entirely on its ability to reproduce a mislabelling. A high score would mean the
+model had learned CTD's indexing convention; a low score would mean it had correctly declined
+to call non-contradictions contradictions. **Neither outcome would have been interpretable,
+and both would have been quotable** — which is the precise failure this eval harness exists to
+prevent.
+
+What the two-tier design bought, for the price of thirty hand annotations and no API spend:
+
+1. The 900-pair corpus, the three free baselines, and the measured random floor are all still
+   valid — they describe a real, reproducible task, just not the task the labels claim.
+2. The negative result is itself the finding. **A pre-registered stop rule fired on the first
+   batch and prevented a paid run that would have produced an uninterpretable headline
+   number.** The gate was calibrated, committed, and placed before the spend on purpose.
+3. It confirms limitation 2 of §5 — "the proxy's own error rate is unknown until measured" —
+   was the right thing to have worried about, and that measuring it first was worth the delay.
+
+This is the **inverse** of the throughline recorded for the Phase 4 sub-project, and it belongs
+on the opposite side of the ledger rather than as another entry in it. That list enumerates
+claims that shipped because nothing required them to be true. This one is a claim that never
+shipped, because something did: **a stop rule written before the number existed, calibrated in
+advance, and placed where it had to be cleared before money moved.** The retracted 127/270
+headline is what the same situation looks like without one. The lesson from that episode was
+never "check harder afterwards" — it was "put the check before the claim," and this is the
+first time in the project that ordering was in place ahead of time rather than added in
+response to being wrong.
+
+### Where the design could go
+
+Not decided; recorded so the options are on paper rather than reconstructed later.
+
+- **Re-scope the task to what the corpus actually supports.** The annotator was, in effect,
+  answering "do these two papers address the same chemical–disease proposition?" — a real,
+  useful, and honestly-labelled question, and one the existing corpus and baselines already fit.
+- **Change the gold source.** Genuine contradiction pairs need a source that annotates
+  *claims*, not chemical roles. This is a larger undertaking than Phase 5 budgeted.
+- **Fix the endpoint confound first, either way.** Show both endpoints with the class tell
+  removed by other means, or show the pair's full key with a redesigned blind protocol. The
+  current sheet trades a known bias for an unmeasured one, and only the first was in the spec.
+
 ## Pending
 
-- **Step 4**, blind annotation of the 30-pair batch (15 contradiction + 8 agreement + 7
-  insufficient_overlap), running Gate 1 (tractability, `cant_tell` ≤ 1/3 of 30) and Gate 2
-  (stop rule, calibrated at exactly n = 15 contradiction pairs). Gate 2 may retire the design.
-- **Steps 5–7**, pilot then full run, each requiring explicit authorization. No paid call has
-  been made.
+- **Step 4 is complete.** Gate 1 TRACTABLE, Gate 2 STOP. See the section above.
+- **Steps 5–8 are retired against this gold**, not merely deferred. No paid call has been made,
+  and none should be against a corpus with a measured ceiling of π̂ = 0.067. Reviving them
+  requires a new gold source or a re-scoped task, which is a spec change and not a next step.
+- **The endpoint confound** in the blind sheet (chemical-shown 7/14 vs disease-shown 3/16 exact
+  match, Fisher p = 0.12) must be fixed before any re-annotation, whatever the design becomes.
+- **A second annotator** is the only way to separate proxy failure from annotator strictness.
+  Not obtainable within this project's constraints; recorded as a limitation.
 - **A known defect, deliberately not fixed:** `PubMedClient.efetch` raises on an HTTP 404 from
   the PMC OA service, which is the normal answer for an article outside the OA subset. One such
   article kills the whole call; it reproduced on the first 20 PMIDs of this corpus. The respx
@@ -2253,4 +2417,6 @@ uv run python -m biolit_evals.critic_eval --arm lexicon \
     --excluded-pmids data/bc5cdr_pmids.txt \
     --ctd-release "Thu Jul 30 13:59:07 EDT 2026"
 uv run python -m biolit_evals.annotation_export --seed 20260819
+# After the sheet at data/annotation_batch_1.md has been annotated by hand:
+uv run python -m biolit_evals.annotation_gates
 ```
