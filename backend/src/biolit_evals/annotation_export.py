@@ -17,6 +17,7 @@ by design; see each function's docstring.
 """
 
 import random
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -211,6 +212,59 @@ def evaluate_gate1(cant_tell: int, n: int) -> Gate1:
     """
     verdict = "REVISE_PROTOCOL" if 3 * cant_tell > n else "TRACTABLE"
     return Gate1(cant_tell=cant_tell, n=n, verdict=verdict, interval=wilson_interval(cant_tell, n))
+
+
+#: The four verdicts an annotator may write. `cant_tell` is deliberately NOT a
+#: `ContradictionLabel` -- it is an annotator-only escape hatch with no gold counterpart, and
+#: counting it is the entire job of Gate 1.
+ANNOTATOR_LABELS = frozenset(
+    {str(label) for label in ContradictionLabel} | {"cant_tell"},
+)
+
+_PAIR_HEADING = re.compile(r"^## \d+\.\s+`([^`]+)`\s*$", re.MULTILINE)
+_LABEL_LINE = re.compile(r"^\s*label:\s*(\S+)\s*$", re.MULTILINE)
+_REASON_LINE = re.compile(r"^\s*reason:\s*(.+?)\s*$", re.MULTILINE)
+
+
+@dataclass(frozen=True)
+class Annotation:
+    label: str
+    reason: str
+
+
+def parse_annotations(sheet: str) -> dict[str, Annotation]:
+    """Read the annotator's verdicts back out of the markdown sheet `main` wrote.
+
+    The inverse of `export_blind_sheet`. Both gates are COUNTS over what this returns, so a
+    block this function silently skips or mis-reads moves a gate verdict directly. It
+    therefore refuses rather than tolerating: a block with no `label:` line raises, and so
+    does a label outside `ANNOTATOR_LABELS`.
+
+    That strictness is asymmetric on purpose. A tolerant parser drops what it cannot read,
+    and a dropped `contradiction` lowers `g` -- pushing Gate 2 toward STOP, the verdict that
+    retires the design. The failure mode of a lenient parser here is "retire a sound design
+    on a typo", which is the one outcome that must not be reachable quietly.
+    """
+    headings = list(_PAIR_HEADING.finditer(sheet))
+    out: dict[str, Annotation] = {}
+    for index, heading in enumerate(headings):
+        pair_id = heading.group(1)
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(sheet)
+        body = sheet[heading.end() : end]
+
+        label_match = _LABEL_LINE.search(body)
+        if label_match is None:
+            raise ValueError(f"pair {pair_id} carries no `label:` line")
+        label = label_match.group(1)
+        if label not in ANNOTATOR_LABELS:
+            raise ValueError(
+                f"pair {pair_id} has label {label!r}, which is not one of "
+                f"{sorted(ANNOTATOR_LABELS)}"
+            )
+
+        reason_match = _REASON_LINE.search(body)
+        out[pair_id] = Annotation(label=label, reason=reason_match.group(1) if reason_match else "")
+    return out
 
 
 DEFAULT_CORPUS = "evals/gold/contradiction_corpus.jsonl"

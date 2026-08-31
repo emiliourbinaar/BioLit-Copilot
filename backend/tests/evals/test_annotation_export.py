@@ -1,9 +1,15 @@
 import random
+import textwrap
 
 import pytest
 
 from biolit.domain.records import ContradictionLabel
-from biolit_evals.annotation_export import evaluate_gate1, evaluate_gate2, export_blind_sheet
+from biolit_evals.annotation_export import (
+    evaluate_gate1,
+    evaluate_gate2,
+    export_blind_sheet,
+    parse_annotations,
+)
 from biolit_evals.contradiction_gold import GoldPair
 from biolit_evals.critic_scoring import wilson_interval
 
@@ -254,3 +260,79 @@ def test_which_endpoint_is_shown_varies_so_the_concept_NAME_cannot_re_leak_the_c
     rows = export_blind_sheet(pairs, abstracts, n_contradiction=10, n_other=0, rng=random.Random(0))
     shown = {row["shared_concept_id"][0] for row in rows}
     assert shown == {"C", "D"}, f"endpoint choice did not vary: only {shown} appeared"
+
+
+_SHEET = textwrap.dedent(
+    """\
+    # Blind annotation batch 1
+
+    ---
+
+    ## 1. `p1_p2`
+
+    **Shared concept:** Morphine (`D009020`)
+
+    **Abstract A**
+
+    Text A.
+
+    **Abstract B**
+
+    Text B.
+
+        label: contradiction
+        reason: A says it helps, B says it harms.
+
+    ---
+
+    ## 2. `p3_p4`
+
+    **Shared concept:** Seizures (`D012640`)
+
+    **Abstract A**
+
+    Text C.
+
+    **Abstract B**
+
+    Text D.
+
+        label: cant_tell
+        reason: Neither abstract states a direction.
+    """
+)
+
+
+def test_parse_annotations_reads_back_every_pair_with_its_label_and_reason():
+    """The inverse of `export_blind_sheet`: the annotator writes labels into the markdown
+    sheet, and both gates are COUNTS over what comes back. `cant_tell` is parseable here but
+    is not a `ContradictionLabel` -- it is an annotator-only verdict, and Gate 1 exists
+    precisely to count it."""
+    got = parse_annotations(_SHEET)
+
+    assert list(got) == ["p1_p2", "p3_p4"]
+    assert got["p1_p2"].label == "contradiction"
+    assert got["p1_p2"].reason == "A says it helps, B says it harms."
+    assert got["p3_p4"].label == "cant_tell"
+
+
+def test_parse_annotations_raises_when_a_pair_block_carries_no_label():
+    """An unannotated block must not be silently skipped. Both gates are counts over a fixed
+    denominator -- Gate 2 REFUSES any n but 15 -- so a dropped block does not produce a
+    visibly short batch, it produces a batch that fails the n check for a reason unrelated to
+    the real cause, or worse, silently shifts g."""
+    sheet = _SHEET.replace("    label: cant_tell\n", "")
+
+    with pytest.raises(ValueError, match="p3_p4"):
+        parse_annotations(sheet)
+
+
+def test_parse_annotations_rejects_a_label_outside_the_four_allowed_verdicts():
+    """A typo is the dangerous case, and it is dangerous ASYMMETRICALLY. `contradicton` is
+    not `contradiction`, so a tolerant parser would drop it from g -- biasing Gate 2 toward
+    STOP, which is the verdict that retires the design. A bug whose failure mode is 'retire
+    a design that was actually fine' must be impossible, not merely unlikely."""
+    sheet = _SHEET.replace("label: contradiction", "label: contradicton")
+
+    with pytest.raises(ValueError, match="contradicton"):
+        parse_annotations(sheet)
