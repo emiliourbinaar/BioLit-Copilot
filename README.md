@@ -9,7 +9,7 @@ There is no runnable end-to-end pipeline yet and `frontend/` is empty; what exis
 NER → canonicalization → clustering → extraction stack, each with its own eval harness, plus a
 contradiction-detection harness whose 900-pair corpus and free baselines are built and whose
 paid arms were **retired by a pre-registered stop rule before they were ever called**.
-16 architecture decisions record what was measured and what was rejected.
+17 architecture decisions record what was measured and what was rejected.
 
 ## What is actually here
 

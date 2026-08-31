@@ -2371,22 +2371,63 @@ never "check harder afterwards" — it was "put the check before the claim," and
 first time in the project that ordering was in place ahead of time rather than added in
 response to being wrong.
 
-### Where the design could go
+### Where the design could go — decided; see ADR-0017
 
-Not decided; recorded so the options are on paper rather than reconstructed later.
+Two options were on the table. **The re-scope is declined; the gold-source change is left open
+and explicitly unprejudged.**
 
-- **Re-scope the task to what the corpus actually supports.** The annotator was, in effect,
-  answering "do these two papers address the same chemical–disease proposition?" — a real,
-  useful, and honestly-labelled question, and one the existing corpus and baselines already fit.
-- **Change the gold source.** Genuine contradiction pairs need a source that annotates
-  *claims*, not chemical roles. This is a larger undertaking than Phase 5 budgeted.
-- **Fix the endpoint confound first, either way.** Show both endpoints with the class tell
-  removed by other means, or show the pair's full key with a redesigned blind protocol. The
-  current sheet trades a known bias for an unmeasured one, and only the first was in the spec.
+**Re-scoping to "do these two papers address the same chemical–disease proposition?" — DECLINED.**
+It was initially described in conversation as "nearly free given what's built," which was wrong
+and is corrected in ADR-0017 rather than quietly dropped: it needs gold, and the only free source
+is CTD co-keying, which the same 30 annotations do not validate. Two structural results carry the
+decision, neither depending on that small sample.
+
+⭐ **`overlap` goes from chance to strong the moment the task is re-scoped.** It never predicts
+`contradiction` at all — 0 in every row of its confusion matrix — so its whole signal is *do these
+share concepts*, which is exactly the re-scoped question. On the binary, over all 900 pairs
+against CTD's own labels:
+
+| arm | three-class | re-scoped binary |
+|---|---|---|
+| `overlap` | macro-F1 **0.3400** (random floor 0.3347 ± 0.0186) | accuracy **0.7333**, P 0.7459 / R 0.9100 / **F1 0.8198** |
+
+against a 0.6667 majority baseline. The re-scope would ask a paid arm to beat a free
+concept-overlap heuristic *at concept overlap* — ADR-0015's shape, where every budget-matched
+free positional heuristic beat the LLM extractor.
+
+**It also measures the filter rather than the judgment.** Phase 3's pairing generates candidates;
+the re-scoped task is the precision filter on them. Real, but not the Critic's job: the product
+claim lives entirely on the agreement-vs-contradiction axis, which the re-scope deletes. **Same
+failure family as an arm scored on a population it cannot lose on — just arriving from the other
+direction**, and the same pattern as the `overlap` tautology caught earlier in this phase. There
+the score was computed where the arm could not fail; here it would be computed over a decision the
+arm never has to make.
+
+**Supporting but confounded:** CTD co-keying as a label for "same proposition" scores 14/29 =
+**0.483**, 95% [0.314, 0.656], below the 0.621 of always answering "not the same" (Fisher p = 0.68).
+Reported with its defect — those judgments were made under the three-class protocol with the
+endpoint confound present, which pushes toward "different things" exactly where it damages the
+re-scope. Enough to retire "cheap"; not enough to condemn the option alone.
+
+**Changing the gold source to something that annotates *claims* — OPEN, and not prejudged here.**
+Nothing above is an argument about it. **Declining the re-scope says nothing about whether a
+claim-level gold standard is worth pursuing**; that case has not been made either way.
+
+**Fix the endpoint confound before any re-annotation, whatever the design becomes.** The current
+sheet trades a known bias for an unmeasured one, and only the first was in the spec.
 
 ## Pending
 
+**Phase 5 is closed as a negative result — ADR-0017.** What remains below is what a future phase
+inherits, not work in progress.
+
 - **Step 4 is complete.** Gate 1 TRACTABLE, Gate 2 STOP. See the section above.
+- ⭐ **The 30 annotated labels are the calibration seed for whatever gold comes next**, kept at
+  `evals/gold/annotation_batch_1_labels.jsonl` with each pair's gold label, the endpoint the blind
+  sheet displayed, and the annotator's written reason. They are the only validated claim-level
+  judgments this phase produced. **Any future contradiction gold, from any source, can be checked
+  against them before being trusted** — which is the check this phase learned to run first rather
+  than last. The sheet itself stays gitignored; it carries abstract text, the labels do not.
 - **Steps 5–8 are retired against this gold**, not merely deferred. No paid call has been made,
   and none should be against a corpus with a measured ceiling of π̂ = 0.067. Reviving them
   requires a new gold source or a re-scoped task, which is a spec change and not a next step.
