@@ -54,7 +54,7 @@ def test_prose_is_never_returned_as_a_licence():
         xmlns:ali="http://www.niso.org/schemas/ali/1.0/"
         xmlns:xlink="http://www.w3.org/1999/xlink">
       <front><article-meta>
-        <article-id pub-id-type="pmc">3333333</article-id>
+        <article-id pub-id-type="pmcid">PMC3333333</article-id>
         <permissions>
           <license>
             <license-p>This file is available for text mining.</license-p>
@@ -62,3 +62,34 @@ def test_prose_is_never_returned_as_a_licence():
         </permissions>
       </article-meta></front></article></pmc-articleset>"""
     assert licences_by_pmcid(ET.fromstring(xml)) == {"3333333": None}
+
+
+def test_only_the_emitted_pmcid_type_is_accepted_so_fixtures_cannot_drift_from_the_service():
+    """The cassettes must reproduce what efetch db=pmc actually emits, not a convenient shape.
+
+    They originally used `pub-id-type="pmc"` with bare digits. The live service emits
+    `pmcid` with the PMC-prefixed value, alongside `pmcid-ver`, `pmcaid` and `pmcaiid` --
+    verified across 10 articles spanning the id range, none of which emitted a bare `pmc`.
+    Against the fictional fixtures the parser passed while being unable to read a single
+    real response; the fixtures were the defect, so they were corrected and the parser
+    narrowed to the emitted type rather than widened to accept both.
+
+    Mutation-verified in both directions: the pre-correction parser (`== "pmc"`) fails four
+    of the five tests in this file against the corrected fixtures and passed all five against
+    the old ones, and re-broadening to `in ("pmc", "pmcid")` fails this test.
+
+    `pmcid-ver` carries a versioned value (`PMC8917620.1`) for the SAME article, so the match
+    is exact rather than a prefix test -- otherwise one article could yield two keys.
+    """
+    xml = """<pmc-articleset><article>
+      <front><article-meta>
+        <article-id pub-id-type="pmc">9999999</article-id>
+      </article-meta></front></article></pmc-articleset>"""
+    assert licences_by_pmcid(ET.fromstring(xml)) == {}
+
+    versioned = """<pmc-articleset><article>
+      <front><article-meta>
+        <article-id pub-id-type="pmcid">PMC8917620</article-id>
+        <article-id pub-id-type="pmcid-ver">PMC8917620.1</article-id>
+      </article-meta></front></article></pmc-articleset>"""
+    assert licences_by_pmcid(ET.fromstring(versioned)) == {"8917620": None}

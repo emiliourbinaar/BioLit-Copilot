@@ -52,8 +52,14 @@ def licences_by_pmcid(root: ET.Element) -> dict[str, str | None]:
     for article in root.findall(".//article"):
         pmcid = None
         for article_id in article.findall(".//article-id"):
-            # Real API uses pub-id-type="pmcid", test fixtures use "pmc"
-            if article_id.get("pub-id-type") in ("pmc", "pmcid"):
+            # `pmcid` is what the service actually emits, carrying the PMC-prefixed value
+            # (`PMC8917620`). Verified against efetch db=pmc across 10 articles spanning the
+            # id range: every one emits pmcid, pmcid-ver, pmcaid and pmcaiid, and not one
+            # emits a bare `pmc`. Matching `pmc` as well would be dead surface that exists
+            # only to accommodate a fixture, which is backwards -- the fixture follows the
+            # service. The match is exact, so the `pmcid-ver` sibling (`PMC8917620.1`) is
+            # correctly skipped rather than parsed as a different article.
+            if article_id.get("pub-id-type") == "pmcid":
                 pmcid = normalize_pmcid(article_id.text)
                 break
         if pmcid is None:

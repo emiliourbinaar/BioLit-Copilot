@@ -5,7 +5,9 @@
     <front>
       <article-meta>
         <article-id pub-id-type="pmid">11111111</article-id>
-        <article-id pub-id-type="pmc">8917620</article-id>
+        <article-id pub-id-type="pmcid">PMC8917620</article-id>
+        <article-id pub-id-type="pmcid-ver">PMC8917620.1</article-id>
+        <article-id pub-id-type="pmcaid">8917620</article-id>
         <permissions>
           <copyright-statement>© The Author(s) 2022</copyright-statement>
           <license>
@@ -21,7 +23,7 @@
            xmlns:xlink="http://www.w3.org/1999/xlink">
     <front>
       <article-meta>
-        <article-id pub-id-type="pmc">PMC7654321</article-id>
+        <article-id pub-id-type="pmcid">PMC7654321</article-id>
         <permissions>
           <license xlink:href="https://creativecommons.org/licenses/by-nc-nd/4.0/">
             <license-p>This is an open access article under the CC BY-NC-ND licence.</license-p>
