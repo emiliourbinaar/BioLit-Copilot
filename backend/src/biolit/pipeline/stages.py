@@ -11,8 +11,10 @@ count of that reads as a bug on first run. Every stage records what it dropped a
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+from biolit.cluster.group import cluster_papers
+from biolit.cluster.pairing import PairingStrategy
 from biolit.domain.paper import Paper
-from biolit.domain.records import Entity, ExtractedRecord
+from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit.extract.base import build_record
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
 from biolit.state.pipeline import StageReport, StageStatus
@@ -126,4 +128,69 @@ def records_stage(
             n_out=len(records),
             dropped={"zero_findings": zero_findings} if zero_findings else {},
         ),
+    )
+
+
+ADR_0017_NOTE = (
+    "Contradiction detection is not implemented. The CTD-derived gold standard was "
+    "retired by Gate 2 (pi-hat = 0.067) and the re-scoped alternative was declined; "
+    "see ADR-0017."
+)
+
+
+def cluster_stage(
+    records: Sequence[ExtractedRecord],
+    *,
+    texts: Mapping[str, str],
+    pairing: PairingStrategy,
+    min_size: int = 2,
+) -> tuple[list[Cluster], StageReport]:
+    """Group papers by shared chemical|disease key, per ADR-0013's SameSentencePairing.
+
+    Calls `cluster_papers` twice rather than reimplementing its grouping: once at
+    min_size=1 to see every key, then filters. That keeps the validated function as the
+    single source of grouping logic while still exposing WHICH drop occurred — a singleton
+    key and a paper that produced no pair at all look identical in the output and have
+    entirely different causes.
+    """
+    all_keys = cluster_papers(records, texts=texts, pairing=pairing, min_size=1)
+    clusters = [cluster for cluster in all_keys if len(cluster.paper_ids) >= min_size]
+
+    dropped: dict[str, int] = {}
+    singletons = len(all_keys) - len(clusters)
+    if singletons:
+        dropped["singleton_key"] = singletons
+    paired = {paper_id for cluster in all_keys for paper_id in cluster.paper_ids}
+    no_pairs = sum(1 for record in records if record.paper_id not in paired)
+    if no_pairs:
+        dropped["no_pairs"] = no_pairs
+
+    return clusters, StageReport(
+        name=CLUSTER,
+        status=StageStatus.completed,
+        n_in=len(records),
+        n_out=len(clusters),
+        dropped=dropped,
+    )
+
+
+def critic_stub(n_clusters: int) -> StageReport:
+    """Reports that the Critic does not exist. Emits no ContradictionFinding, ever."""
+    return StageReport(
+        name=CRITIC,
+        status=StageStatus.not_implemented,
+        n_in=n_clusters,
+        n_out=0,
+        note=ADR_0017_NOTE,
+    )
+
+
+def synthesis_stub() -> StageReport:
+    """Unimplemented for a different reason than the Critic: never built, not retired."""
+    return StageReport(
+        name=SYNTHESIS,
+        status=StageStatus.not_implemented,
+        n_in=0,
+        n_out=0,
+        note="Answer synthesis and citation assembly are not yet built.",
     )
