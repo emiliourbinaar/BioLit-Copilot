@@ -4,12 +4,29 @@ A multi-agent biomedical literature research assistant, built as a **measurement
 project: every layer is priced against a free baseline before it is allowed to ship, and
 three of the mechanisms that looked most promising were rejected on their own numbers.
 
-**Status — Phases 1–4 complete; Phase 5 ran its free half and stopped there on purpose.**
-There is no runnable end-to-end pipeline yet and `frontend/` is empty; what exists is the
-NER → canonicalization → clustering → extraction stack, each with its own eval harness, plus a
-contradiction-detection harness whose 900-pair corpus and free baselines are built and whose
-paid arms were **retired by a pre-registered stop rule before they were ever called**.
+**Status — Phases 1–4 complete; Phase 5 ran its free half and stopped there on purpose; the
+pipeline runs end to end.** `frontend/` is empty. What exists is the NER → canonicalization →
+clustering → extraction stack, each with its own eval harness and wired into a runnable CLI,
+plus a contradiction-detection harness whose 900-pair corpus and free baselines are built and
+whose paid arms were **retired by a pre-registered stop rule before they were ever called**.
 17 architecture decisions record what was measured and what was rejected.
+
+## What this demonstrates
+
+Five phases, each priced before the next was built: **NER → canonicalization → clustering →
+extraction → Critic**. At the phase level the trail contains two negative results and one
+positive one. (Three individual *mechanisms* were also measured and rejected — see below.)
+
+- **Negative result — the LLM extractor was measured and rejected** in favour of a free
+  deterministic control: **F1 0.3054 against 0.6238**. Cost was not the reason. **ADR-0015.**
+- **Negative result — the Critic's gold standard was measured and retired before any paid run
+  happened.** A stop rule fixed before the number existed read STOP on the blind annotation
+  (π̂ **0.067**), so **the paid Critic arms were retired unspent**. **ADR-0017.**
+- **Positive result — deterministic clustering and extraction hold up, and they are wired into a
+  real pipeline.** Same-sentence pairing F1 **0.6327**, roughly halving downstream LLM calls;
+  `python -m biolit.pipeline` runs a live query through the whole stack. **ADR-0013.**
+
+The reasoning behind each lives in the ADR, not here.
 
 ## What is actually here
 
@@ -19,8 +36,9 @@ paid arms were **retired by a pre-registered stop rule before they were ever cal
 | **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** |
 | **Clustering / pairing** (Phase 3) | `biolit.cluster` | same-sentence pairing F1 **0.6327**, ~halving downstream LLM calls |
 | **Sentence extraction** (Phase 4) | `biolit.extract` | deterministic control F1 **0.6238** — the LLM arm scored **0.3054** and was **not shipped** |
-| **Contradiction detection** (Phase 5) | `biolit.critic` | 900-pair corpus, 3 free baselines at chance — **gold proxy measured invalid (π̂ 0.067) and the paid run cancelled; no paid call has ever been made** |
-| **Eval harness** | `biolit_evals` | 483 tests; every run appended to a committed JSONL log |
+| **Contradiction detection** (Phase 5) | `biolit.critic` | 900-pair corpus, 3 free baselines at chance — **gold proxy measured invalid (π̂ 0.067) and the paid run cancelled before it was ever called** |
+| **End-to-end pipeline** | `biolit.pipeline` | runnable CLI over the real components, with a per-stage drop ledger; Critic and synthesis are explicit `not_implemented` stubs, not empty results |
+| **Eval harness** | `biolit_evals` | 528 tests; every run appended to a committed JSONL log |
 
 ## The part worth reading
 
@@ -76,6 +94,19 @@ uv run pytest -q
 uv run ruff check . && uv run pyright
 ```
 
+Run a query through the whole pipeline — live PubMed retrieval, NER, canonicalization, the
+licence gate, deterministic extraction, and clustering. Free: no credential, no LLM call, no
+paid API:
+
+```bash
+uv run python -m biolit.pipeline --query "metformin and lactic acidosis" --max-papers 20
+# add --json-out run.json to dump the full PipelineState
+```
+
+It prints a per-stage ledger accounting for every paper — including what the licence gate
+refused and why — and labels the Critic and synthesis stages `NOT IMPLEMENTED` rather than
+returning an empty result that would read as "ran and found nothing".
+
 Free evals (no credential, no API call — they download the public BC5CDR corpus on first run):
 
 ```bash
@@ -88,8 +119,8 @@ uv run python -m biolit_evals.baselines
 ## Reading order
 
 - `docs/EVAL_REPORT.md` — every number, its methodology, and its limitations
-- `docs/DECISIONS.md` — 16 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
-  findings, and ADR-0016 records why a passing test is not evidence the suite would notice a
-  regression
+- `docs/DECISIONS.md` — 17 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
+  findings, ADR-0017 closes Phase 5 as a negative result, and ADR-0016 records why a passing
+  test is not evidence the suite would notice a regression
 - `docs/ARCHITECTURE.md` — how the layers fit together
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-phase specs and plans

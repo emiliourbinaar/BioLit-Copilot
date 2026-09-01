@@ -1,3 +1,51 @@
+# BioLit Copilot — Evaluation Report
+
+This file is the running record of every measurement the project has made, appended
+phase by phase and never rewritten after the fact. It opens on Phase 2 because that is
+where measurement started; the sections below are in the order they were produced, and
+superseded claims are struck and kept rather than deleted.
+
+**The arc, in one paragraph.** Five phases, each priced against a free baseline before the
+next was built: **NER** (Phase 2) → **canonicalization** (Phase 3A/3B/3C) → **clustering**
+(Phase 3) → **sentence extraction** (Phase 4) → **contradiction detection** (Phase 5). The
+first three hold up and ship. The last two are negative results, and they are the reason
+this report is worth reading: an LLM extractor was measured and lost to a free deterministic
+control, and a derived gold standard for the Critic was measured invalid and retired before
+its own paid run was ever launched. (Phase 4's LLM arm *was* a real paid run — **$2.48**,
+measured, ~1500 calls. Phase 5's arms were the ones retired unspent; the two are often
+conflated and should not be.)
+
+**What each phase concluded.**
+
+| Phase | Headline | Outcome |
+|---|---|---|
+| 2 — NER | BC5CDR test **F1 0.8099** | Ships. 60% of domain errors are boundary disagreements, which is why canonicalization became a prerequisite rather than a refinement. |
+| 3A — linking | gold-mention **F1 0.7842** (NIL 0.259) | Ships. The dominant failure is *abstention*, not error. |
+| 3B — end-to-end canon | concept **F1 0.7697** | Ships. Oracle ceiling on the abstention gap is **+0.0821 F1**, ~39× the next-largest ablation — the standing entity-bottleneck finding (ADR-0013). |
+| 3C — embedding fallback | **+0.0200 F1**, 53.9% mention precision | **Documented, not shipped** (ADR-0012). Real effect, declined on cost and fragility. |
+| 3 — clustering | same-sentence pairing **F1 0.6327** | Ships, and halves downstream Critic calls. CID relation extraction declined (ADR-0013). |
+| 4 — extraction | control **0.6238** vs LLM **0.3054** | **LLM arm not shipped, in any role** (ADR-0015). Cost was not the reason — a full run measured **$2.48**. |
+| 5 — contradiction | π̂ **0.067**, 95% CI [0.012, 0.298] | **Gold proxy retired unspent** (ADR-0017). Corpus and free baselines survive; the labels do not. |
+
+**Two things recur across the phases, and both are methodological rather than biomedical.**
+The first is that *mention counts overstate concept value* — measured three separate times
+(fragment merging 91 mentions → 11 concepts, abbreviation expansion 543 → 4, paraphrase
+1136 → 431), so any mention-level opportunity here is treated as unpriced until ablated. The
+second is *the favourable-population trap*: an arm scored on a population defined by another
+arm's failures cannot lose, and a slice chosen after the fact flatters whatever produced it.
+That trap forced a retraction in Phase 4 (kept in place, below) and was then caught **before**
+anything was built in Phase 5, twice — once when BC5CDR was shown to be structurally incapable
+of supplying contradiction gold, and once when Gate 2 fired. ADR-0016 records the verification
+rules that came out of it.
+
+**What this report is not.** It is not a benchmark leaderboard and not a tuned result. Every
+number is a single point-in-time run of a committed harness, each with its own stated
+limitations section, and several of the most-quoted figures here are *ceilings* — constructions
+that grant something correct without touching what the system emits wrongly. A ceiling is never
+a forecast, and π̂ in particular is a ceiling that is never used as a correction factor.
+
+---
+
 # NER Eval Report (Phase 2)
 
 First real run of BioLit Copilot's local biomedical NER layer (`biolit.ner`) against a

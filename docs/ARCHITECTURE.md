@@ -1,23 +1,38 @@
 # BioLit Copilot — Architecture
 
-**Where this is.** Phases 1–4 are built and measured; Phase 5 (contradiction detection) is
-not started. The layers below run individually and each has an eval harness, but **nothing
-wires them into an end-to-end pipeline yet** — `PipelineState.clusters` has been a declared
-field since Phase 1 and is still populated by nothing. That gap is deliberate: the standing
-rule is no infrastructure without a demonstrated consumer, and the consumer for wired
-clusters is the Phase 5 Critic (ADR-0013).
+**Where this is.** Phases 1–5 are built and measured, and the layers are now **wired into a
+runnable end-to-end pipeline** (`biolit.pipeline`, `python -m biolit.pipeline --query "..."`).
+`PipelineState.clusters` was a declared field with no producer from Phase 1 until then; the
+pipeline's `cluster_stage` populates it, closing the gap ADR-0013 left open.
+
+**The Critic is the one layer that is still a stub, and deliberately so.** Phase 5 ran its free
+half and stopped: Gate 2 measured its derived gold standard invalid and retired it unspent
+(ADR-0017), so there is no validated gold to build a Critic against. The pipeline therefore
+reports `critic` and `synthesis` as explicit `StageStatus.not_implemented` rather than returning
+an empty result — `contradictions: []` on its own is indistinguishable from "ran and found
+nothing", which is the distinction the stage ledger exists to preserve.
 
 ## Layer map
 
 ```
-Paper ──► extract_entities ──► canonicalize ──► SameSentencePairing ──► group ──► [Phase 5]
-          biolit.ner           biolit.canon     biolit.cluster                     Critic
-          (Phase 2)            (Phase 3)        (Phase 3)                          (not built)
+PubMed ──► extract_entities ──► canonicalize ──► licence gate ──► build_record ──► group
+           biolit.ner           biolit.canon     build_record      biolit.extract   biolit.cluster
+           (Phase 2)            (Phase 3)        (Phase 1 rule)    (Phase 4)        (Phase 3)
 
-                               biolit.extract   ── measured in Phase 4, NOT wired in:
-                               (Phase 4)           the LLM arm was rejected, the
-                                                   deterministic control ships
+  ──► [ critic ]  ──►  [ synthesis ]
+      not_implemented   not_implemented
+      (ADR-0017)        (never built)
 ```
+
+`biolit.pipeline` runs that left-to-right path over the real components and prints a per-stage
+ledger accounting for every paper — including what the licence gate refused and why. The
+deterministic `SameSentenceAsEntitiesExtractor` is the extractor that ships; the LLM arm was
+measured and rejected (ADR-0015) and is not on this path.
+
+**The licence gate has exactly one enforcement point,** `build_record` in `biolit.extract.base`.
+It suppresses the whole record rather than just the findings, because `Entity.text` and
+`Finding.text` both carry verbatim abstract substrings. No stage decides extraction rights
+itself.
 
 Every layer is paired with a module in `biolit_evals` that scores it against gold and appends
 one JSON line per run to a committed log. The eval packages are separate from `biolit` on
