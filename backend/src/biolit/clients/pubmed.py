@@ -1,15 +1,28 @@
+from collections.abc import Mapping
 from xml.etree import ElementTree as ET
 
 import httpx
 
 from biolit.clients.http import RetryConfig, request_with_retry
+from biolit.clients.pmc import licences_by_pmcid, normalize_pmcid
 from biolit.config import Settings
 from biolit.domain.enums import Source, TextType
-from biolit.domain.licensing import extraction_allowed_for, normalize_license
+from biolit.domain.licensing import (
+    extraction_allowed_for,
+    license_token_from_url,
+    normalize_license,
+)
 from biolit.domain.paper import Author, Paper
 
 _EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-_PMC_OA = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
+_PMC_ARTICLE_URL = "https://pmc.ncbi.nlm.nih.gov/articles/PMC{pmcid}/"
+
+
+def _pmc_id_of(article: ET.Element) -> str | None:
+    for article_id in article.findall(".//ArticleIdList/ArticleId"):
+        if article_id.get("IdType") == "pmc":
+            return normalize_pmcid(article_id.text)
+    return None
 
 
 class PubMedClient:
@@ -53,10 +66,10 @@ class PubMedClient:
             params=self._params(db="pubmed", id=",".join(pmids), retmode="xml"),
         )
         root = ET.fromstring(resp.text)
-        papers: list[Paper] = []
-        for article in root.findall(".//PubmedArticle"):
-            papers.append(await self._parse_article(article))
-        return papers
+        articles = root.findall(".//PubmedArticle")
+        pmc_ids = sorted({p for article in articles if (p := _pmc_id_of(article))})
+        licences = await self._fetch_licences(pmc_ids)
+        return [self._parse_article(article, licences) for article in articles]
 
     async def efetch_abstracts(self, pmids: list[str]) -> dict[str, tuple[str | None, int | None]]:
         """{pmid: (abstract, publication year)} for consumers that judge abstracts only.
@@ -92,7 +105,32 @@ class PubMedClient:
             out[pmid] = (self._parse_abstract(article), year)
         return out
 
-    async def _parse_article(self, article: ET.Element) -> Paper:
+    async def _fetch_licences(self, pmc_ids: list[str]) -> dict[str, str | None]:
+        """One batched request for every PMC id in the response, or none at all.
+
+        Degrades to an empty map on any HTTP failure, which refuses rather than crashing.
+        A licence lookup that cannot answer must never be read as permission, and must
+        never take the whole fetch down with it -- which is exactly what the dead OA
+        endpoint did.
+        """
+        if not pmc_ids:
+            return {}
+        try:
+            resp = await request_with_retry(
+                self._client,
+                "GET",
+                f"{_EUTILS}/efetch.fcgi",
+                retry=self._retry,
+                params=self._params(db="pmc", id=",".join(pmc_ids), retmode="xml"),
+            )
+        except httpx.HTTPError:
+            return {}
+        try:
+            return licences_by_pmcid(ET.fromstring(resp.text))
+        except ET.ParseError:
+            return {}
+
+    def _parse_article(self, article: ET.Element, licences: Mapping[str, str | None]) -> Paper:
         pmid = article.findtext(".//MedlineCitation/PMID") or ""
         title = article.findtext(".//Article/ArticleTitle") or ""
         abstract = self._parse_abstract(article)
@@ -114,16 +152,21 @@ class PubMedClient:
         ]
 
         doi = None
-        pmc_id = None
+        pmc_id = _pmc_id_of(article)
+
         for aid in article.findall(".//ArticleIdList/ArticleId"):
             id_type = aid.get("IdType")
             if id_type == "doi":
                 doi = aid.text
-            elif id_type == "pmc":
-                pmc_id = aid.text
 
-        text_type, pointer, license_raw = await self._classify_pmc(pmc_id)
-        token, tier = normalize_license(license_raw)
+        raw_licence = licences.get(pmc_id) if pmc_id else None
+        token, tier = normalize_license(license_token_from_url(raw_licence))
+        if raw_licence:
+            text_type = TextType.full_text_unverified
+            pointer = _PMC_ARTICLE_URL.format(pmcid=pmc_id)
+        else:
+            text_type = TextType.abstract_only
+            pointer = None
 
         return Paper(
             id=doi or pmid,
@@ -163,25 +206,3 @@ class PubMedClient:
             label = el.get("Label")
             sections.append(f"{label}: {text}" if label else text)
         return "\n".join(sections) if sections else None
-
-    async def _classify_pmc(self, pmc_id: str | None) -> tuple[TextType, str | None, str | None]:
-        """Cross-reference the PMC OA Web Service; never infer rights from PMC presence."""
-        if not pmc_id:
-            return TextType.abstract_only, None, None
-        resp = await request_with_retry(
-            self._client,
-            "GET",
-            _PMC_OA,
-            retry=self._retry,
-            params={"id": pmc_id},
-        )
-        root = ET.fromstring(resp.text)
-        if root.find(".//error") is not None:
-            return TextType.abstract_only, None, None
-        record = root.find(".//records/record")
-        if record is None:
-            return TextType.abstract_only, None, None
-        license_raw = record.get("license")
-        link = record.find("link")
-        pointer = link.get("href") if link is not None else None
-        return TextType.full_text_unverified, pointer, license_raw

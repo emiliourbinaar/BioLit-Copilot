@@ -52,7 +52,8 @@ def licences_by_pmcid(root: ET.Element) -> dict[str, str | None]:
     for article in root.findall(".//article"):
         pmcid = None
         for article_id in article.findall(".//article-id"):
-            if article_id.get("pub-id-type") == "pmc":
+            # Real API uses pub-id-type="pmcid", test fixtures use "pmc"
+            if article_id.get("pub-id-type") in ("pmc", "pmcid"):
                 pmcid = normalize_pmcid(article_id.text)
                 break
         if pmcid is None:
