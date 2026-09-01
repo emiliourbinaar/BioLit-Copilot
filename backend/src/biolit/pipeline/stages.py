@@ -30,9 +30,11 @@ SYNTHESIS = "synthesis"
 
 def retrieve_stage(pmids: Sequence[str], papers: Sequence[Paper]) -> StageReport:
     dropped: dict[str, int] = {}
+    noted: dict[str, int] = {}
     no_abstract = sum(1 for paper in papers if not paper.abstract)
     if no_abstract:
-        dropped["no_abstract"] = no_abstract
+        # NOTED, not dropped: an abstract-less paper still goes on to the next stage.
+        noted["no_abstract"] = no_abstract
     unparsed = len(pmids) - len(papers)
     if unparsed > 0:
         dropped["no_article_returned"] = unparsed
@@ -40,8 +42,11 @@ def retrieve_stage(pmids: Sequence[str], papers: Sequence[Paper]) -> StageReport
         name=RETRIEVE,
         status=StageStatus.completed,
         n_in=len(pmids),
+        unit_in="pmids",
         n_out=len(papers),
+        unit_out="papers",
         dropped=dropped,
+        noted=noted,
     )
 
 
@@ -64,13 +69,14 @@ def entities_stage(
         by_paper[paper.id] = entities
         total += len(entities)
         unlinked += sum(1 for entity in entities if entity.canonical_id is None)
-    dropped = {"entity_unlinked": unlinked} if unlinked else {}
     return by_paper, StageReport(
         name=NER_LINKING,
         status=StageStatus.completed,
         n_in=len(papers),
+        unit_in="papers",
         n_out=total,
-        dropped=dropped,
+        unit_out="entities",
+        noted={"entity_unlinked": unlinked} if unlinked else {},
     )
 
 
@@ -125,8 +131,11 @@ def records_stage(
             name=EXTRACT,
             status=StageStatus.completed,
             n_in=len(records),
+            unit_in="records",
             n_out=len(records),
-            dropped={"zero_findings": zero_findings} if zero_findings else {},
+            unit_out="records",
+            # A record with no findings is still a record; it is not removed.
+            noted={"zero_findings": zero_findings} if zero_findings else {},
         ),
     )
 
@@ -156,21 +165,31 @@ def cluster_stage(
     all_keys = cluster_papers(records, texts=texts, pairing=pairing, min_size=1)
     clusters = [cluster for cluster in all_keys if len(cluster.paper_ids) >= min_size]
 
-    dropped: dict[str, int] = {}
+    noted: dict[str, int] = {}
     singletons = len(all_keys) - len(clusters)
     if singletons:
-        dropped["singleton_key"] = singletons
+        # A KEY count, not a record count. It belongs in `noted` precisely because it is in
+        # a different unit from n_in -- reporting it as a drop produced the nonsense
+        # "17 in -> 14 out, dropped 52".
+        noted["singleton_key"] = singletons
     paired = {paper_id for cluster in all_keys for paper_id in cluster.paper_ids}
     no_pairs = sum(1 for record in records if record.paper_id not in paired)
     if no_pairs:
-        dropped["no_pairs"] = no_pairs
+        noted["no_pairs"] = no_pairs
+
+    kept = {paper_id for cluster in clusters for paper_id in cluster.paper_ids}
+    no_cluster = sum(1 for record in records if record.paper_id not in kept)
 
     return clusters, StageReport(
         name=CLUSTER,
         status=StageStatus.completed,
         n_in=len(records),
+        unit_in="records",
         n_out=len(clusters),
-        dropped=dropped,
+        unit_out="clusters",
+        # The one drop that IS in n_in's unit: records that reached no surviving cluster.
+        dropped={"no_cluster": no_cluster} if no_cluster else {},
+        noted=noted,
     )
 
 
@@ -180,7 +199,9 @@ def critic_stub(n_clusters: int) -> StageReport:
         name=CRITIC,
         status=StageStatus.not_implemented,
         n_in=n_clusters,
+        unit_in="clusters",
         n_out=0,
+        unit_out="findings",
         note=ADR_0017_NOTE,
     )
 
@@ -191,6 +212,8 @@ def synthesis_stub() -> StageReport:
         name=SYNTHESIS,
         status=StageStatus.not_implemented,
         n_in=0,
+        unit_in="clusters",
         n_out=0,
+        unit_out="answers",
         note="Answer synthesis and citation assembly are not yet built.",
     )

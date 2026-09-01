@@ -23,13 +23,25 @@ class StageReport(BaseModel):
     Lives in PipelineState rather than only in the printed report so the JSON dump carries
     it too: `contradictions: []` alone is indistinguishable from "ran and found nothing",
     and a machine reader must be able to tell those apart.
+
+    `dropped` and `noted` are NOT interchangeable. `dropped` is what this stage REMOVED, in
+    the unit it consumes; `noted` is what it observed and passed through. Conflating them
+    made the first rendered ledger misreport: `no_abstract`, `zero_findings` and
+    `entity_unlinked` remove nothing, yet all three printed as "dropped N".
+
+    `unit_in`/`unit_out` exist because stages legitimately change unit -- 20 papers in, 412
+    entities out -- and an undeclared change reads as impossible growth. Where the two units
+    match, the ledger is checkable: n_in - sum(dropped) == n_out.
     """
 
     name: str
     status: StageStatus
     n_in: int
     n_out: int
+    unit_in: str = "papers"
+    unit_out: str = "papers"
     dropped: dict[str, int] = Field(default_factory=dict)
+    noted: dict[str, int] = Field(default_factory=dict)
     note: str | None = None
 
 

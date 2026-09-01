@@ -50,3 +50,53 @@ def test_dropped_defaults_to_an_empty_dict_and_is_not_shared_between_reports():
     second = StageReport(name="b", status=StageStatus.completed, n_in=1, n_out=1)
     first.dropped["x"] = 1
     assert second.dropped == {}
+
+
+def test_a_stage_separates_what_it_removed_from_what_it_merely_counted():
+    """`dropped` means REMOVED HERE. `noted` means observed and passed through.
+
+    Conflating them made the rendered ledger lie: `no_abstract`, `zero_findings` and
+    `entity_unlinked` all removed nothing -- entities_stage's own docstring says unlinked
+    entities are "COUNTED, never removed" -- yet all three printed as "dropped N".
+    """
+    report = StageReport(
+        name="retrieve",
+        status=StageStatus.completed,
+        n_in=20,
+        n_out=20,
+        noted={"no_abstract": 1},
+    )
+    assert report.dropped == {}
+    assert report.noted == {"no_abstract": 1}
+
+
+def test_units_are_declared_so_a_changing_unit_cannot_read_as_impossible_growth():
+    """20 papers in -> 412 entities out is correct, and unreadable without the units. The
+    line has to say which is which."""
+    report = StageReport(
+        name="ner_linking",
+        status=StageStatus.completed,
+        n_in=20,
+        unit_in="papers",
+        n_out=412,
+        unit_out="entities",
+        noted={"entity_unlinked": 132},
+    )
+    assert (report.unit_in, report.unit_out) == ("papers", "entities")
+
+
+def test_drops_reconcile_against_n_in_whenever_the_two_units_match():
+    """The invariant that makes the ledger checkable rather than decorative: where a stage
+    consumes and emits the same unit, everything that went in either came out or is named in
+    `dropped`. Nothing may vanish unaccounted for, and nothing may be 'dropped' in a unit the
+    stage does not consume -- which is how `cluster` came to report dropping 52 of 17.
+    """
+    gate = StageReport(
+        name="licence_gate",
+        status=StageStatus.completed,
+        n_in=20,
+        n_out=17,
+        dropped={"licence_refused:none": 3},
+    )
+    assert gate.unit_in == gate.unit_out
+    assert gate.n_in - sum(gate.dropped.values()) == gate.n_out

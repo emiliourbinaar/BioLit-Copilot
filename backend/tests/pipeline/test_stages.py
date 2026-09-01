@@ -36,7 +36,10 @@ def test_retrieve_stage_counts_pmids_that_produced_no_paper_and_papers_with_no_a
     assert report.status is StageStatus.completed
     assert report.n_in == 3
     assert report.n_out == 2
-    assert report.dropped["no_abstract"] == 1
+    # The two kinds side by side, which is the whole distinction: one pmid returned no
+    # article and is genuinely gone; the abstract-less paper is still in `papers`.
+    assert report.dropped == {"no_article_returned": 1}
+    assert report.noted == {"no_abstract": 1}
 
 
 def test_entities_stage_counts_unlinked_entities_without_discarding_them():
@@ -58,7 +61,9 @@ def test_entities_stage_counts_unlinked_entities_without_discarding_them():
         extract=lambda text: [linked, nil],
     )
     assert entities["a"] == [linked, nil]
-    assert report.dropped["entity_unlinked"] == 1
+    assert report.dropped == {}
+    assert report.noted["entity_unlinked"] == 1
+    assert (report.unit_in, report.unit_out) == ("papers", "entities")
     assert report.n_out == 2
 
 
@@ -84,7 +89,8 @@ def test_records_stage_counts_records_that_yielded_no_findings():
     looks like a crash."""
     paper = _paper("ok", "This abstract mentions nothing linkable.", allowed=True)
     outcome = records_stage([paper], {"ok": []})
-    assert outcome.extract.dropped["zero_findings"] == 1
+    assert outcome.extract.dropped == {}
+    assert outcome.extract.noted["zero_findings"] == 1
     assert outcome.extract.n_out == 1
 
 
@@ -120,7 +126,8 @@ def test_cluster_stage_separates_singleton_keys_from_papers_that_produced_no_pai
     clusters, report = cluster_stage(records, texts=texts, pairing=SameSentencePairing())
 
     assert [c.paper_ids for c in clusters] == [["a", "b"]]
-    assert report.dropped.get("no_pairs") == 1
+    assert report.noted.get("no_pairs") == 1
+    assert report.dropped == {"no_cluster": 1}
     assert report.n_out == 1
 
 
@@ -148,7 +155,8 @@ def test_cluster_stage_counts_a_key_held_by_only_one_paper_as_a_singleton_drop()
         records, texts={"a": "Metformin causes acidosis."}, pairing=SameSentencePairing()
     )
     assert clusters == []
-    assert report.dropped["singleton_key"] == 1
+    assert report.noted["singleton_key"] == 1
+    assert (report.unit_in, report.unit_out) == ("records", "clusters")
 
 
 def test_critic_stub_reports_not_implemented_and_points_at_the_adr():
