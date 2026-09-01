@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pmc-articleset>
+  <article xmlns:ali="http://www.niso.org/schemas/ali/1.0/"
+           xmlns:xlink="http://www.w3.org/1999/xlink">
+    <front>
+      <article-meta>
+        <article-id pub-id-type="pmid">11111111</article-id>
+        <article-id pub-id-type="pmcid">PMC8917620</article-id>
+        <article-id pub-id-type="pmcid-ver">PMC8917620.1</article-id>
+        <article-id pub-id-type="pmcaid">8917620</article-id>
+        <permissions>
+          <copyright-statement>© The Author(s) 2022</copyright-statement>
+          <license>
+            <ali:license_ref specific-use="textmining" content-type="ccbylicense">https://creativecommons.org/licenses/by/4.0/</ali:license_ref>
+            <license-p>Open Access. This article is licensed under a Creative Commons Attribution 4.0 licence.</license-p>
+          </license>
+        </permissions>
+      </article-meta>
+    </front>
+    <body><p>Full text body.</p></body>
+  </article>
+  <article xmlns:ali="http://www.niso.org/schemas/ali/1.0/"
+           xmlns:xlink="http://www.w3.org/1999/xlink">
+    <front>
+      <article-meta>
+        <article-id pub-id-type="pmcid">PMC7654321</article-id>
+        <permissions>
+          <license xlink:href="https://creativecommons.org/licenses/by-nc-nd/4.0/">
+            <license-p>This is an open access article under the CC BY-NC-ND licence.</license-p>
+          </license>
+        </permissions>
+      </article-meta>
+    </front>
+    <body><p>Full text body.</p></body>
+  </article>
+</pmc-articleset>

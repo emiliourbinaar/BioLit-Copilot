@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlsplit
 
 from biolit.domain.enums import LicenseTier
 
@@ -43,3 +44,30 @@ def normalize_license(raw: str | None) -> tuple[str | None, LicenseTier]:
 
 def extraction_allowed_for(tier: LicenseTier) -> bool:
     return _EXTRACTION_ALLOWED[tier]
+
+
+def license_token_from_url(raw: str | None) -> str | None:
+    """Map a Creative Commons licence URL to the canonical token vocabulary above.
+
+    The dead PMC OA service returned tokens like `CC BY`, which `_canonicalize` handled.
+    Its replacement returns URLs, so this is the new front half of the same pipeline; the
+    tier table and `extraction_allowed_for` are untouched.
+
+    MATCHING IS BY EXACT PATH SEGMENT, never by substring. `by-nc` is a proper substring of
+    `by-nc-nd` and `by-nc-sa`, both of which appear in the live sample, so `in` would
+    mislabel them. Anything that is not a recognised Creative Commons URL returns None and
+    is therefore refused -- prose asserting reuse rights is not a licence identifier.
+    """
+    if not raw or not raw.strip():
+        return None
+    parsed = urlsplit(raw.strip())
+    if parsed.netloc.lower().removeprefix("www.") != "creativecommons.org":
+        return None
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if len(segments) < 2:
+        return None
+    if segments[0] == "publicdomain" and segments[1] == "zero":
+        return "cc0"
+    if segments[0] == "licenses":
+        return "cc_" + segments[1].replace("-", "_")
+    return None
