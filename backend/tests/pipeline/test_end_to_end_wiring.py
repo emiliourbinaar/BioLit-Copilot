@@ -1,0 +1,98 @@
+from biolit.cluster.pairing import SameSentencePairing
+from biolit.domain.enums import EntityLabel, LicenseTier, Source, TextType
+from biolit.domain.paper import Paper
+from biolit.domain.records import Entity
+from biolit.pipeline.stages import (
+    cluster_stage,
+    critic_stub,
+    entities_stage,
+    records_stage,
+    retrieve_stage,
+    synthesis_stub,
+)
+from biolit.state.pipeline import PipelineState, StageStatus
+
+ABSTRACT = "Metformin therapy was associated with acidosis in this cohort."
+
+
+def _entities() -> list[Entity]:
+    return [
+        Entity(
+            text="Metformin",
+            label=EntityLabel.CHEMICAL,
+            start=0,
+            end=9,
+            canonical_id="D008687",
+            canonical_name="Metformin",
+        ),
+        Entity(
+            text="acidosis",
+            label=EntityLabel.DISEASE,
+            start=38,
+            end=46,
+            canonical_id="D000138",
+            canonical_name="Acidosis",
+        ),
+    ]
+
+
+def _paper(pid: str, *, allowed: bool) -> Paper:
+    return Paper(
+        id=pid,
+        source=Source.pubmed,
+        pmid=pid,
+        title=f"Title {pid}",
+        abstract=ABSTRACT,
+        text_type=TextType.abstract_only,
+        license_tier=LicenseTier.open if allowed else LicenseTier.unknown,
+        license="cc_by" if allowed else None,
+        extraction_allowed=allowed,
+    )
+
+
+def test_the_whole_pipeline_runs_and_the_ledger_accounts_for_every_paper():
+    """The wiring test. Two permitted papers cluster; one refused paper is accounted for.
+
+    Asserts the LEDGER, not just the outputs -- the ledger is the deliverable, and it is
+    the thing most likely to regress silently.
+    """
+    papers = [_paper("a", allowed=True), _paper("b", allowed=True), _paper("c", allowed=False)]
+    state = PipelineState(question="does metformin cause acidosis?")
+    state.candidate_papers = papers
+    state.stages.append(retrieve_stage(["1", "2", "3"], papers))
+
+    entities, entity_report = entities_stage(papers, extract=lambda text: _entities())
+    state.stages.append(entity_report)
+
+    outcome = records_stage(papers, entities)
+    state.extracted_records = outcome.records
+    state.stages.extend([outcome.licence, outcome.extract])
+
+    clusters, cluster_report = cluster_stage(
+        list(outcome.records.values()),
+        texts={p.id: ABSTRACT for p in papers},
+        pairing=SameSentencePairing(),
+    )
+    state.clusters = clusters
+    state.stages.append(cluster_report)
+    state.stages.append(critic_stub(len(clusters)))
+    state.stages.append(synthesis_stub())
+
+    assert set(state.extracted_records) == {"a", "b"}
+    assert [c.paper_ids for c in state.clusters] == [["a", "b"]]
+
+    by_name = {stage.name: stage for stage in state.stages}
+    assert by_name["licence_gate"].dropped == {"licence_refused:none": 1}
+    assert by_name["critic"].status is StageStatus.not_implemented
+    assert by_name["synthesis"].status is StageStatus.not_implemented
+
+
+def test_both_unimplemented_stages_survive_the_json_dump():
+    """The requirement most likely to regress silently, so it gets its own test: a machine
+    reader of the dump must see not_implemented rather than an empty contradictions list."""
+    state = PipelineState(question="q", stages=[critic_stub(0), synthesis_stub()])
+    payload = state.model_dump(mode="json")
+    statuses = {stage["name"]: stage["status"] for stage in payload["stages"]}
+    assert statuses == {"critic": "not_implemented", "synthesis": "not_implemented"}
+    assert payload["contradictions"] == []
+    assert payload["answer"] is None
