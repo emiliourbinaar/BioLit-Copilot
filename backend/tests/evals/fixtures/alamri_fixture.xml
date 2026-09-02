@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CORPUS>
+  <REVIEW REVIEW_PMID="900001" REVIEW_TITLE="Arginine for pre-eclampsia">
+    <CLAIM ASSERTION="YS" PMID="101" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="CAUS">Supplementation with L-arginine reduced blood pressure in pregnant women.</CLAIM>
+    <CLAIM ASSERTION="YS" PMID="104" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="CAUS">Arginine supplementation reduced blood pressure significantly.</CLAIM>
+    <CLAIM ASSERTION="YS" PMID="105" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="CAUS">Arginine lowered blood pressure in the treated arm.</CLAIM>
+    <CLAIM ASSERTION="NO" PMID="102" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="EVAL">L-arginine supplementation did not lower blood pressure in this cohort.</CLAIM>
+    <CLAIM ASSERTION="NO" PMID="103" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="EVAL">Arginine therapy produced no change in blood pressure or placebo-controlled outcomes.</CLAIM>
+    <CLAIM ASSERTION="NO" PMID="105" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="EVAL">Arginine had no effect on blood pressure at 12 weeks.</CLAIM>
+    <CLAIM ASSERTION="NO" PMID="106" QUESTION="In women with pre-eclampsia, does treatment with L-arginine, compared to placebo, reduce blood pressure" TYPE="EVAL">Mortality was unchanged over the follow-up period.</CLAIM>
+  </REVIEW>
+  <REVIEW REVIEW_PMID="900002" REVIEW_TITLE="Aspirin for stroke">
+    <CLAIM ASSERTION="YS" PMID="201" QUESTION="Does aspirin therapy lower stroke incidence in elderly cohorts" TYPE="CAUS">Aspirin therapy lowered stroke incidence in elderly patients.</CLAIM>
+    <CLAIM ASSERTION="NO" PMID="202" QUESTION="Does aspirin therapy lower stroke incidence in elderly cohorts" TYPE="EVAL">Aspirin did not reduce stroke incidence in this elderly cohort.</CLAIM>
+  </REVIEW>
+  <REVIEW REVIEW_PMID="900004" REVIEW_TITLE="Statins for cholesterol">
+    <CLAIM ASSERTION="YS" PMID="301" QUESTION="Do statins reduce cholesterol in diabetic adults" TYPE="CAUS">Statin therapy reduced cholesterol among diabetic adults.</CLAIM>
+    <CLAIM ASSERTION="YS" PMID="302" QUESTION="Do statins reduce cholesterol in diabetic adults" TYPE="CAUS">Cholesterol fell substantially on statins in this diabetic group.</CLAIM>
+  </REVIEW>
+  <REVIEW REVIEW_PMID="900003" REVIEW_TITLE="Arginine at term">
+    <CLAIM ASSERTION="YS" PMID="101" QUESTION="In pregnant women, does arginine supplementation reduce blood pressure at term" TYPE="CAUS">Supplementation with L-arginine reduced blood pressure in pregnant women.</CLAIM>
+    <CLAIM ASSERTION="NO" PMID="102" QUESTION="In pregnant women, does arginine supplementation reduce blood pressure at term" TYPE="EVAL">L-arginine supplementation did not lower blood pressure in this cohort.</CLAIM>
+  </REVIEW>
+</CORPUS>

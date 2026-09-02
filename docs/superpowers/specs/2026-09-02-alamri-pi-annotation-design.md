@@ -1,7 +1,9 @@
 # Alamri & Stevenson π̂ annotation pass — validating a candidate paper-pair contradiction gold
 
 - **Date:** 2026-09-02
-- **Status:** Design approved 2026-09-02; **no implementation started, no sheet generated, no annotation performed**
+- **Status:** Design approved 2026-09-02. Builder and exporter implemented under TDD 2026-09-02;
+  **no sheet generated and no annotation performed.** §0 figures and §4 corrected against the
+  built module — see the marked notes.
 - **Kind:** Measurement. A validity probe on a candidate gold source, run *before* any harness is
   built on it — the ordering ADR-0017 identified as the phase's most transferable lesson.
 - **Depends on:** ADR-0017 (Gate 1/Gate 2 methodology, the two recorded protocol defects, and the
@@ -58,9 +60,10 @@ text the Critic structurally cannot read.
 
 | property | measured | why it matters |
 |---|---:|---|
-| derivable contradiction pairs (`YS × NO`, shared question) | **728** | the unit is natively paper-pair |
+| derivable contradiction pairs (`YS × NO`, shared question) | **727** | the unit is natively paper-pair |
+| — of which excluded as self-pairs | **1** | PMID 20228403 carries both a `YS` and a `NO` claim under one question (olmesartan vs valsartan), which would derive a paper contradicting itself |
 | derivable agreement pairs (`YS × YS`, `NO × NO`) | **1,047** | a real control class exists |
-| class balance | **41.01%** contradiction | no 2.52%-prevalence problem (CTD's) |
+| class balance | **40.98%** contradiction | no 2.52%-prevalence problem (CTD's) |
 | productive questions | **24 / 24** | no dead reviews |
 | near-duplicate claim pairs in the whole corpus | **1** | not a negation-twin corpus — SciFact's killer is absent |
 | claims appearing **verbatim** in their own abstract | **257 / 259 (99.2%)** | the judgment is recoverable from the abstract; the A2 hazard does not fire |
@@ -75,14 +78,14 @@ question; no annotator wrote a negation. This is precisely the property SciFact 
 ### §0.3 The remaining risk, quantified — why this pass exists
 
 The corpus is structurally sound. The **derivation** from it may not be. Two lexical signals were
-measured over the 728 contradiction pairs:
+measured over the 727 contradiction pairs:
 
 | signal | rate |
 |---|---:|
-| the two claims carry **differing population qualifiers** | 34.2% |
-| a claim shares **no key term** with its own review question | 38.0% |
-| **either** signal fires (**flagged**) | **58.5%** (426 pairs) |
-| **neither** fires (**clean**) | **41.5%** (302 pairs) |
+| the two claims carry **differing population qualifiers** | 34.25% (249) |
+| a claim shares **no key term** with its own review question | 37.96% (276) |
+| **either** signal fires (**flagged**) | **58.46%** (425 pairs) |
+| **neither** fires (**clean**) | **41.54%** (302 pairs) |
 
 Plus two acknowledged properties that sampling cannot fix: pairs are **non-independent** (254
 papers, median 4 appearances, max 22), and the corpus is **selection-biased** — papers were
@@ -97,7 +100,7 @@ answers it separately per subset rather than in aggregate.**
 Pool sizes and diversity:
 
 ```
-FLAGGED     pairs=426    distinct papers=187  distinct questions=20
+FLAGGED     pairs=425    distinct papers=187  distinct questions=20
 CLEAN       pairs=302    distinct papers=167  distinct questions=22
 AGREEMENT   pairs=1047   distinct papers=250  distinct questions=24
 DISTRACTOR  pairs=21134  distinct papers=254  (188/276 key-term-disjoint question pairs)
@@ -117,11 +120,12 @@ in each, and 45 pairs over 24 questions already needs ~1.9 slots per question be
 are counted. **The cap moves 2 → 3 because the batch composition changed, not because a reading was
 unwelcome** — recorded here rather than silently adjusted, per the standing gate rule.
 
-At `cap_paper ≤ 1`, `cap_question ≤ 3`, seed 20260902:
+At `cap_paper ≤ 1`, `cap_question ≤ 3`, seed 20260902 — re-verified through the built module
+against the real corpus, feasible on 12/12 seeds:
 
 ```
 distinct papers used = 90/254   max appearances of any paper = 1
-questions touched    = 21/24    max pairs on any one question = 3
+questions touched    = 23/24    max question-slots on any one question = 3
 ```
 
 **Every paper in the batch appears exactly once**, down from a corpus maximum of 22.
@@ -164,7 +168,7 @@ required touching them, and is rejected for that reason alone.
 | stratum | n | drawn from | role |
 |---|---:|---|---|
 | **C** — clean (neither §0.3 signal) | 15 | 302 pairs | Gate 2, n=15 → π̂_C |
-| **F** — flagged (either §0.3 signal) | 15 | 426 pairs | Gate 2, n=15 → π̂_F |
+| **F** — flagged (either §0.3 signal) | 15 | 425 pairs | Gate 2, n=15 → π̂_F |
 | **A** — agreement control (`YS×YS` / `NO×NO`, shared question) | 10 | 1,047 pairs | strictness read |
 | **D** — cross-question distractors (papers from key-term-disjoint questions) | 5 | 21,134 pairs | known-unrelated anchor |
 
@@ -182,12 +186,26 @@ presentation, same two-abstract format. Class is not inferable from layout.
 
 ## §4 — Blind protocol: two changes from Phase 5, each fixing a recorded defect
 
-**(a) Show the review's clinical question.** ADR-0017 records the endpoint confound: showing one
+**(a) Show the review's clinical question — exactly ONE per row, distractors included.** ADR-0017 records the endpoint confound: showing one
 randomly-chosen MeSH endpoint closed a label leak but stopped telling the annotator *which
 chemical* the pair turned on (chemical-shown 7/14 exact match vs disease-shown 3/16, Fisher
 p = 0.12). Alamri's question names population, intervention, comparator and outcome — precisely the
 context that was missing. **It leaks nothing**: every pair under a review shares its question
-regardless of class, and distractor rows show both questions.
+regardless of class.
+
+⚠️ **Corrected during implementation.** This section originally said distractor rows show *both*
+questions, which contradicts §3's invariant that class is not inferable from layout — a
+two-question row identifies a distractor with certainty, and this batch's sole annotator is also
+its designer and knows five are present. Distractor rows therefore show **one** of the two
+questions, chosen by seed. That makes a distractor an honest instance of the same task every other
+row poses ("do these two abstracts disagree about this question?"), whose correct answer happens to
+be `insufficient_overlap` because the second paper does not address the question at all.
+
+**Two further layout tells, found by the same invariant and closed the same way.** `pair_id` is an
+opaque digest rather than a readable composite, because a readable one would be visibly longer for
+a distractor (two question ids, not one). And the two abstracts are presented in seed-randomised
+order, because in the manifest `paper_id_a` of a contradiction pair is always the `YS` paper — left
+unshuffled, "abstract A answers yes" would hold across every contradiction row in the batch.
 
 **(b) Show full abstracts, never the extracted claim sentence.** Two independent reasons. The Critic
 only ever sees abstracts, so anything else scores a judgment the arm never has to make (ADR-0017's
@@ -254,7 +272,7 @@ Then Gate 2, run twice at n=15 with unmodified bands:
 | `CONTINUE_FLAGGED` | `CONTINUE` | inverted, both marginal | Do not proceed. Investigate. |
 | `CONTINUE` | `STOP` | ⭐ **the lexical proxy is an actionable filter** | Clean 302-pair subset is candidate gold. **Size question opens.** |
 | `CONTINUE` | `CONTINUE_FLAGGED` | filter partially actionable | Clean subset is candidate gold; flagged subset excluded as marginal. Size question opens on the clean subset. |
-| `CONTINUE` | `CONTINUE` | gold valid, filter unnecessary | Full 728 pairs candidate. **Size question opens.** |
+| `CONTINUE` | `CONTINUE` | gold valid, filter unnecessary | Full 727 pairs candidate. **Size question opens.** |
 
 **Three standing prohibitions, restated so they cannot be rationalised later:**
 
