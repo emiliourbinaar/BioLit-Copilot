@@ -9,7 +9,9 @@ from biolit_evals.alamri_gold import (
     build_pairs,
     parse_corpus,
     question_id,
+    read_manifest,
     sample_batch,
+    write_manifest,
 )
 from biolit_evals.annotation_export import parse_annotations
 
@@ -110,3 +112,26 @@ def test_rows_are_not_left_grouped_by_stratum(batch, abstracts, questions):
         for seed in range(12)
     }
     assert orders != {tuple(strata_in_draw_order)}
+
+
+def test_rendering_the_sheet_does_not_disturb_the_frozen_manifest(
+    batch, abstracts, questions, tmp_path
+):
+    """The display swap is render-time ONLY. `paper_id_a` of a contradiction pair is the YS
+    paper in the manifest and must stay so however the sheet presents it -- the manifest is
+    what a later reader re-derives the gold from, and a swap leaking into it would silently
+    invert which paper answered yes."""
+    path = tmp_path / "batch.jsonl"
+    write_manifest(batch, path)
+    before = path.read_bytes()
+
+    rows = export_stratified_sheet(batch, abstracts, questions, rng=random.Random(3))
+    write_manifest(batch, path)
+
+    by_id = {p.pair_id: p for p in read_manifest(path)}
+    displayed_swapped = [
+        r for r in rows if r["abstract_a"] == abstracts[by_id[r["pair_id"]].paper_id_b]
+    ]
+    assert displayed_swapped, "seed produced no swapped row; the invariant is untested"
+    assert path.read_bytes() == before
+    assert all(p == q for p, q in zip(batch, [by_id[p.pair_id] for p in batch], strict=True))

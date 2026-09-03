@@ -1,9 +1,10 @@
 # Alamri & Stevenson π̂ annotation pass — validating a candidate paper-pair contradiction gold
 
 - **Date:** 2026-09-02
-- **Status:** Design approved 2026-09-02. Builder and exporter implemented under TDD 2026-09-02;
-  **no sheet generated and no annotation performed.** §0 figures and §4 corrected against the
-  built module — see the marked notes.
+- **Status:** Design approved 2026-09-02. Builder and exporter implemented under TDD, and the
+  **blind batch generated 2026-09-02 at seed `20260902`** — see §8.1 for the run record.
+  **No annotation has been performed and no reading has been taken.** §0 figures and §4 were
+  corrected against the built module — see the marked notes.
 - **Kind:** Measurement. A validity probe on a candidate gold source, run *before* any harness is
   built on it — the ordering ADR-0017 identified as the phase's most transferable lesson.
 - **Depends on:** ADR-0017 (Gate 1/Gate 2 methodology, the two recorded protocol defects, and the
@@ -321,6 +322,32 @@ network — abstract fetching is exercised against fixtures only. All commands r
 
 **Cost: zero.** Abstracts come from free NCBI `efetch` (all 254 already cached from the §0 probes).
 There is no LLM call, no credential requirement, no pricing step and no authorization gate.
+
+### §8.1 — Run record, written before any reading
+
+The batch was generated **before any pair was read**, so the sample cannot have been influenced
+by what it contains. Everything below is reproducible from the seed alone.
+
+| | |
+|---|---|
+| seed | **`20260902`** (the spec's date, matching Phase 5's `20260819` convention; never defaulted — `--seed` is a required argument) |
+| derived-pair manifest | `evals/gold/alamri_contradiction_pairs.jsonl`, 1,774 pairs (727 contradiction + 1,047 agreement), hash **`71c8bee3347f01d5`** |
+| batch manifest | `evals/gold/alamri_annotation_batch_1_pairs.jsonl`, 45 pairs, hash **`6d152f5a689b2bdb`** |
+| caps | `cap_paper=1`, `cap_question=3` |
+| strata drawn | flagged 15, clean 15, agreement 10, distractor 5 |
+| independence achieved | 90 distinct papers, **max appearances of any paper = 1** (corpus max is 22) |
+| abstracts | **254 / 254** retrieved live from NCBI `efetch`, confirming §0.2 against the live service |
+| cost | zero — no LLM call, no credential, no authorization gate |
+
+**Ordering, which is the point rather than an implementation detail:** the batch manifest is
+written and hashed *before* `export_stratified_sheet` is called, so the frozen record of which
+paper carries the `YS` claim cannot be disturbed by the sheet's display-order randomisation.
+Verified two ways — `paper_id_a` carries a `YS` claim and `paper_id_b` a `NO` claim in **727 / 727**
+contradiction pairs, and a test pins the manifest as byte-identical across a render, killing a
+mutant that leaks the swap back into the pair.
+
+**The sheet itself is gitignored** (`data/alamri_annotation_batch_1.{json,md}`) because it carries
+full abstract text. Both manifests are committed and carry none.
 
 ---
 
