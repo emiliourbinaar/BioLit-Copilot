@@ -1,10 +1,13 @@
 # Alamri & Stevenson π̂ annotation pass — validating a candidate paper-pair contradiction gold
 
 - **Date:** 2026-09-02
-- **Status:** Design approved 2026-09-02. Builder and exporter implemented under TDD, and the
-  **blind batch generated 2026-09-02 at seed `20260902`** — see §8.1 for the run record.
-  **No annotation has been performed and no reading has been taken.** §0 figures and §4 were
-  corrected against the built module — see the marked notes.
+- **Status:** **Closed 2026-09-03 as a negative result — see ADR-0018.** Design approved and
+  implemented under TDD; batch generated at seed `20260902`; annotated blind; gates run.
+  Gate 1 TRACTABLE (`cant_tell` 0/45). Gate 2 read **π̂_C = π̂_F = 0.6000 (g = 9/15 both)** →
+  `CONTINUE_FLAGGED` on both strata, **§6 decision row 5**: the lexical filter produced zero
+  separation and the corpus is marginal. Controls read `DISCRIMINATING`, so neither reading is
+  strictness-confounded. §0 figures and §4 were corrected against the built module during
+  implementation — see the marked notes; §8.1 carries the run record.
 - **Kind:** Measurement. A validity probe on a candidate gold source, run *before* any harness is
   built on it — the ordering ADR-0017 identified as the phase's most transferable lesson.
 - **Depends on:** ADR-0017 (Gate 1/Gate 2 methodology, the two recorded protocol defects, and the
