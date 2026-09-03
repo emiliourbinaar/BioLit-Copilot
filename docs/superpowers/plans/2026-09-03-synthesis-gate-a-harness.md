@@ -324,9 +324,14 @@ from biolit.domain.records import Cluster, ExtractedRecord
 
 #: Integers and decimals. Percent signs and units are excluded from the capture so "1.5%"
 #: and "1.5" compare equal -- an output that drops the unit has not invented a number.
-#: The \b anchors are load-bearing: without them "HbA1c" yields a phantom "1" and the
-#: paper ids "p1"/"p2" yield "1"/"2", injecting phantom unsupported numerals downstream.
-_NUMERAL = re.compile(r"\b\d+(?:\.\d+)?\b")
+#:
+#: The guard is a LEADING lookbehind, not a pair of word boundaries. What must be excluded
+#: is a digit buried inside an identifier -- the "1" in "HbA1c", the "1" in the paper id
+#: "p1" -- and those are recognised by what precedes them. A trailing boundary would also
+#: reject the unit written flush against the number, which is how doses and durations are
+#: normally written: "500mg" would yield nothing and "1.5mg/kg" would yield a phantom "1".
+#: The "." in the lookbehind stops a version-like "v1.2.3" from contributing "2.3".
+_NUMERAL = re.compile(r"(?<![\w.])\d+(?:\.\d+)?")
 
 
 def numerals(text: str) -> list[str]:
