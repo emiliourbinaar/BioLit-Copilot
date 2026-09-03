@@ -513,6 +513,21 @@ MAX_ALIAS_WORDS = 6
 _WORD_SPLIT = re.compile(r"[^a-z0-9\-]+")
 
 
+def _alias_words(text: str) -> list[str]:
+    """Lowercase `text` and split it into the exact word tokens both sides key on.
+
+    `load_aliases` and `mesh_concepts` MUST both go through this helper, in lockstep, to
+    build a lookup key -- that is the whole invariant the alias table depends on. A key
+    built any other way (e.g. plain `.lower()`, keeping punctuation) can never be found:
+    the scanner's n-gram keys are always plain word tokens rejoined with single spaces, so
+    a comma or other punctuation left in the loader's key -- as in the MeSH inverted form
+    "Diabetes Mellitus, Type 2", which is the descriptor's own primary alias -- makes that
+    concept permanently unreachable from either side. That drift is the defect this helper
+    exists to prevent from recurring.
+    """
+    return [w for w in _WORD_SPLIT.split(text.lower()) if w]
+
+
 def mesh_concepts(text: str, aliases: Mapping[str, str]) -> set[str]:
     """Every MeSH concept id whose alias appears in `text`.
 
@@ -520,7 +535,7 @@ def mesh_concepts(text: str, aliases: Mapping[str, str]) -> set[str]:
     substrings: the n-gram form is O(len(text)) with a hash lookup per gram, and the
     substring form is O(n_aliases) per call.
     """
-    words = [w for w in _WORD_SPLIT.split(text.lower()) if w]
+    words = _alias_words(text)
     found: set[str] = set()
     for start in range(len(words)):
         for size in range(1, MAX_ALIAS_WORDS + 1):
@@ -557,7 +572,9 @@ def load_aliases(path: str) -> dict[str, str]:
     out: dict[str, str] = {}
     with gzip.open(path, "rt", encoding="utf-8") as fh:
         for alias, entries in json.load(fh).items():
-            key = alias.lower()
+            key = " ".join(_alias_words(alias))
+            if not key:
+                continue
             for raw_id, _canonical, is_primary in entries:
                 if is_primary or key not in out:
                     out[key] = raw_id.split(":", 1)[1] if ":" in raw_id else raw_id
