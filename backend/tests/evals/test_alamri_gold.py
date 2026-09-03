@@ -162,10 +162,13 @@ def test_sample_batch_counts_a_distractor_against_both_its_questions(pool):
 def test_sample_batch_is_reproducible_from_its_seed(pool):
     """The sample must be recoverable from the seed and the manifest hash alone, since the
     sheet itself carries abstract text and is never committed."""
-    kwargs = dict(quotas=QUOTAS, cap_paper=3, cap_question=9)
-    first = sample_batch(pool, rng=random.Random(20260902), **kwargs)
-    again = sample_batch(pool, rng=random.Random(20260902), **kwargs)
-    other = sample_batch(pool, rng=random.Random(1), **kwargs)
+
+    def draw(seed: int):
+        return sample_batch(
+            pool, rng=random.Random(seed), quotas=QUOTAS, cap_paper=3, cap_question=9
+        )
+
+    first, again, other = draw(20260902), draw(20260902), draw(1)
     assert [p.pair_id for p in first] == [p.pair_id for p in again]
     assert [p.pair_id for p in first] != [p.pair_id for p in other]
 
