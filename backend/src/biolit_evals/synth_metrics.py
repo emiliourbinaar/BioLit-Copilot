@@ -12,7 +12,7 @@ compression against `dcr` is comparative.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from biolit.domain.paper import Paper
@@ -171,31 +171,80 @@ class Coverage:
         return 1.0 if self.n_papers == 0 else self.covered / self.n_papers
 
 
-def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Coverage:
-    """Fraction of the cluster's papers the output identifies by PMID or by paper id.
+def _contains_phrase(haystack: Sequence[str], phrase: Sequence[str]) -> bool:
+    """Whether `phrase` occurs as a CONTIGUOUS run of tokens inside `haystack`.
 
-    A DISQUALIFIER for the LLM arm, not a score: the template covers every paper by
-    construction, so its 1.0 here says nothing about its quality.
-
-    Membership is checked by WORD TOKEN, via `_alias_words`, not by substring: a substring
-    test reports a paper as covered when its id merely occurs inside another paper's id or
-    PMID -- `'1234567' in 'PMID 12345678'` is true, so a cluster containing both PMIDs would
-    score the shorter one covered by an output that only ever named the longer one. Coverage
-    is a disqualifier, so a false "covered" is a disqualifier that cannot fire -- the exact
-    shape this harness exists to catch.
-
-    ⚠️ RESIDUAL LIMITATION. A pid written flush against other word characters (no separating
-    space or punctuation, e.g. "PMID12345678") tokenises as a single word and is counted
-    missing even when a human reader would call it present. That errs toward strictness
-    against the LLM arm, which is why `missing` is returned ITEMISED and must never be
-    reported as a bare rate -- the same caveat `support_rate` already carries.
+    An empty phrase is never present -- there is nothing there to have been cited.
     """
-    output_words = set(_alias_words(output))
-    missing = tuple(
-        pid
-        for pid in cluster.paper_ids
-        if pid.lower() not in output_words and (papers[pid].pmid or pid).lower() not in output_words
-    )
+    phrase = tuple(phrase)
+    if not phrase:
+        return False
+    haystack = tuple(haystack)
+    n = len(phrase)
+    return any(haystack[i : i + n] == phrase for i in range(len(haystack) - n + 1))
+
+
+def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Coverage:
+    """Fraction of the cluster's papers the output carries an identifying reference for.
+
+    Spec §2 defines a content unit's paper reference as PMID / year+journal; this checks a
+    paper's own id, its PMID, and its year+journal together. A DISQUALIFIER for the LLM arm,
+    not a score: the template covers every paper by construction, so its 1.0 here says
+    nothing about its quality.
+
+    An id or PMID is checked as a CONTIGUOUS TOKEN PHRASE, via `_alias_words` and
+    `_contains_phrase`, not by single-token equality: `Paper.id` is `doi or pmid`, and
+    bioRxiv's client sets `id=doi or title` with no `pmid` at all. A DOI or title routinely
+    contains characters `_alias_words` treats as separators, so it tokenises into several
+    words -- a single-token check could never credit it, even cited verbatim. Phrase matching
+    still isn't a substring test: a paper's id or PMID must appear as its OWN run of tokens,
+    not merely inside a longer one -- `'1234567' in 'PMID 12345678'` is true as a substring,
+    but `['1234567']` is not a contiguous run of `['pmid', '12345678']`, so a cluster
+    containing both PMIDs still scores the shorter one missing against an output that only
+    ever named the longer one. Coverage is a disqualifier, so a false "covered" is a
+    disqualifier that cannot fire -- the exact shape this harness exists to catch.
+
+    A paper is ALSO covered when its year appears as a token and its journal appears as a
+    contiguous token phrase -- spec §5 hands each arm both, so "the 2019 N Engl J Med study"
+    is an identification the spec allows. This path fires only when the (year, journal) pair
+    is UNIQUE within the cluster, computed from the cluster's own papers, never from the
+    output: two or more papers sharing a (year, journal) cannot be told apart by it, so a
+    single mention such as "the 2019 NEJM papers" would otherwise cover several papers at
+    once -- a disqualifier satisfiable in bulk is a disqualifier that cannot fire, the same
+    shape the id/PMID phrase match exists to close. Papers that share a (year, journal) stay
+    creditable by id/PMID alone; a paper missing either a year or a journal is simply not
+    creditable this way.
+
+    ⚠️ RESIDUAL LIMITATION. An id, PMID or journal name written flush against other word
+    characters, with no separating space or punctuation (e.g. "PMID12345678"), tokenises as
+    one longer word and is counted missing even when a human reader would call it present.
+    That errs toward strictness against the LLM arm, which is why `missing` is returned
+    ITEMISED and must never be reported as a bare rate -- the same caveat `support_rate`
+    already carries.
+    """
+    output_words = _alias_words(output)
+
+    year_journal_counts: dict[tuple[int, str], int] = {}
+    for pid in cluster.paper_ids:
+        paper = papers[pid]
+        if paper.year is not None and paper.journal is not None:
+            key = (paper.year, paper.journal)
+            year_journal_counts[key] = year_journal_counts.get(key, 0) + 1
+
+    def _identified(pid: str) -> bool:
+        if _contains_phrase(output_words, _alias_words(pid)):
+            return True
+        pmid = papers[pid].pmid
+        if pmid is not None and _contains_phrase(output_words, _alias_words(pmid)):
+            return True
+        paper = papers[pid]
+        if paper.year is not None and paper.journal is not None:
+            key = (paper.year, paper.journal)
+            if year_journal_counts[key] == 1 and _contains_phrase(output_words, [str(paper.year)]):
+                return _contains_phrase(output_words, _alias_words(paper.journal))
+        return False
+
+    missing = tuple(pid for pid in cluster.paper_ids if not _identified(pid))
     return Coverage(
         covered=len(cluster.paper_ids) - len(missing),
         n_papers=len(cluster.paper_ids),

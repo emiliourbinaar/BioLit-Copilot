@@ -165,3 +165,66 @@ def test_coverage_does_not_credit_a_pid_that_is_only_a_substring_of_another():
     got = coverage("Full data reported in PMID 12345678.", cluster, papers)
 
     assert got.missing == ("1234567",)
+
+
+def test_a_doi_shaped_paper_id_with_no_pmid_cited_verbatim_is_covered():
+    """`Paper.id` is `doi or pmid`, and bioRxiv's client sets `id=doi or title` with no
+    `pmid` at all. A DOI or title id routinely contains punctuation that `_alias_words`
+    splits into several tokens, so a single-token equality check could never credit it --
+    even when the output cites it verbatim."""
+    doi = "10.1234/synth.gate.2019"
+    paper = Paper(
+        id=doi,
+        source=Source.biorxiv,
+        pmid=None,
+        title="A synthetic preprint",
+        text_type=TextType.abstract_only,
+        year=2019,
+        journal=None,
+    )
+    cluster = Cluster(key="a|b", paper_ids=[doi])
+
+    got = coverage(f"Findings are reported in {doi}.", cluster, {doi: paper})
+
+    assert got.missing == ()
+
+
+def test_a_paper_identified_only_by_year_and_journal_is_covered():
+    """Spec §2's paper reference is PMID *or* year+journal. Spec §5 hands each arm the year
+    and journal, so "the 2019 N Engl J Med study" is an identification the spec allows --
+    with no PMID anywhere in the output."""
+    cluster, records, papers = _fixture(p1="Metformin lowered glucose.")
+    papers["p1"] = papers["p1"].model_copy(update={"year": 2019, "journal": "N Engl J Med"})
+
+    output = "The 2019 N Engl J Med study found metformin lowered glucose."
+    got = coverage(output, cluster, papers)
+
+    assert got.missing == ()
+
+
+def test_two_papers_sharing_year_and_journal_are_not_covered_by_one_mention():
+    """A (year, journal) pair that two papers share cannot distinguish between them, so a
+    single mention such as "the 2019 NEJM papers" must not cover both -- a disqualifier
+    satisfiable in bulk is a disqualifier that cannot fire."""
+    cluster, records, papers = _fixture(p1="Alpha.", p2="Beta.")
+    papers["p1"] = papers["p1"].model_copy(update={"year": 2019, "journal": "N Engl J Med"})
+    papers["p2"] = papers["p2"].model_copy(update={"year": 2019, "journal": "N Engl J Med"})
+
+    got = coverage("The 2019 N Engl J Med papers found similar effects.", cluster, papers)
+
+    assert got.missing == ("p1", "p2")
+
+
+def test_a_shorter_pmid_that_is_a_substring_of_a_longer_one_is_still_reported_missing():
+    """Ruling 8, re-verified under phrase matching. `'1234567' in 'PMID 12345678'` is true
+    as a substring, but `['1234567']` is not a contiguous run of `['pmid', '12345678']` --
+    phrase matching must still refuse to credit the shorter PMID."""
+    papers = {
+        "1234567": _paper("1234567"),
+        "12345678": _paper("12345678"),
+    }
+    cluster = Cluster(key="a|b", paper_ids=sorted(papers))
+
+    got = coverage("Full data reported for PMID 12345678.", cluster, papers)
+
+    assert got.missing == ("1234567",)
