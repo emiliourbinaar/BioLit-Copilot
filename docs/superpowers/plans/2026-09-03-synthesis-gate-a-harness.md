@@ -351,7 +351,12 @@ def build_source_view(
     parts: list[str] = [cluster.key]
     for pid in cluster.paper_ids:
         paper = papers[pid]
-        parts.extend(str(x) for x in (paper.title, paper.journal, paper.year, paper.pmid) if x)
+        # TITLE IS DELIBERATELY EXCLUDED. Spec §5 gives each arm the year, journal, PMID and
+        # finding sentences -- never the title. Counting a title's numerals as "source" would
+        # let an arm cite a figure it was never shown and have it scored as supported: a false
+        # pass on a disqualifier, which is the score-that-cannot-be-lost shape ADR-0015 exists
+        # to catch. If an arm is ever given titles, this list must change in the same commit.
+        parts.extend(str(x) for x in (paper.journal, paper.year, paper.pmid) if x)
         if pid in records:
             parts.extend(f.text for f in records[pid].key_findings)
     text = "\n".join(parts)
