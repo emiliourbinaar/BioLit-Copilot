@@ -37,6 +37,14 @@ def test_numerals_finds_integers_decimals_and_percentages():
     assert numerals("HbA1c fell 1.5% in 42 of 100 patients") == ["1.5", "42", "100"]
 
 
+def test_a_numeral_written_flush_against_its_unit_is_still_a_numeral():
+    """Dose and duration are routinely written without a space. A trailing word boundary
+    drops "500mg" entirely -- letting a fabricated dose evade the support disqualifier --
+    and truncates "1.5mg/kg" to a phantom "1" that was never in the text at all."""
+    assert numerals("metformin 500mg twice daily for 12weeks") == ["500", "12"]
+    assert numerals("1.5mg/kg") == ["1.5"]
+
+
 def test_support_rate_counts_a_numeral_absent_from_source_as_unsupported():
     cluster, records, papers = _fixture(p1="HbA1c fell 1.5% over 12 weeks.")
     source = build_source_view(cluster, records, papers)
