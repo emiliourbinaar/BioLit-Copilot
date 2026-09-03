@@ -13,7 +13,9 @@ this report is worth reading: an LLM extractor was measured and lost to a free d
 control, and a derived gold standard for the Critic was measured invalid and retired before
 its own paid run was ever launched. (Phase 4's LLM arm *was* a real paid run — **$2.48**,
 measured, ~1500 calls. Phase 5's arms were the ones retired unspent; the two are often
-conflated and should not be.)
+conflated and should not be.) **A sixth strand followed**: the search for a gold standard to
+replace the retired one, closed after six corpora across three structural families produced
+nothing actionable (ADR-0018).
 
 **What each phase concluded.**
 
@@ -26,6 +28,7 @@ conflated and should not be.)
 | 3 — clustering | same-sentence pairing **F1 0.6327** | Ships, and halves downstream Critic calls. CID relation extraction declined (ADR-0013). |
 | 4 — extraction | control **0.6238** vs LLM **0.3054** | **LLM arm not shipped, in any role** (ADR-0015). Cost was not the reason — a full run measured **$2.48**. |
 | 5 — contradiction | π̂ **0.067**, 95% CI [0.012, 0.298] | **Gold proxy retired unspent** (ADR-0017). Corpus and free baselines survive; the labels do not. |
+| 5b — replacement gold | π̂ **0.60** both strata (9/15 each), 95% CI [0.36, 0.80] | **Search closed after six corpora / three families** (ADR-0018). Five failed structurally; the sixth landed marginal with **zero separation** between filtered and unfiltered subsets. A "do not proceed", not a "proven invalid". |
 
 **Two things recur across the phases, and both are methodological rather than biomedical.**
 The first is that *mention counts overstate concept value* — measured three separate times
@@ -37,6 +40,15 @@ That trap forced a retraction in Phase 4 (kept in place, below) and was then cau
 anything was built in Phase 5, twice — once when BC5CDR was shown to be structurally incapable
 of supplying contradiction gold, and once when Gate 2 fired. ADR-0016 records the verification
 rules that came out of it.
+
+**A third recurrence was added by the replacement-gold search, and it cuts the other way.**
+ADR-0017's lesson was that *a derived gold label inherits its source's ontology, not your task's
+semantics* — CTD's label meant something else. ADR-0018 is its inverse: the Alamri label means
+exactly the right thing (two annotators at 97% agreement on whether a paper answers a clinical
+question yes or no), the pairing is sound, and **the derivation is still invalid** — because the
+context that reconciles two opposed findings (population, dose, route, endpoint) lives in the
+papers rather than in the pair. *A correct label plus a correct pairing can still yield an
+invalid derivation, and only a human reading the pairs finds that out.*
 
 **What this report is not.** It is not a benchmark leaderboard and not a tuned result. Every
 number is a single point-in-time run of a committed harness, each with its own stated

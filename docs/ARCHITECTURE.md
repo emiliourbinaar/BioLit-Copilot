@@ -12,6 +12,16 @@ reports `critic` and `synthesis` as explicit `StageStatus.not_implemented` rathe
 an empty result — `contradictions: []` on its own is indistinguishable from "ran and found
 nothing", which is the distinction the stage ledger exists to preserve.
 
+**The search for a replacement gold is closed, and that closes the paper-pair Critic with it
+(ADR-0018).** Six corpora across three structural families were measured; the best candidate
+annotated at π̂ 0.60 with no separation between its filtered and unfiltered subsets. The
+recurring failure is not the corpora but **the unit**: `ContradictionFinding(paper_id_a,
+paper_id_b, …)` asks two abstracts to be commensurable, while real literature separates its
+findings by population, dose, route and endpoint in ways that make most opposed-looking pairs
+genuinely compatible. That held even in a corpus built from systematic reviews *specifically to
+hold population and intervention fixed*. **Reviving this stage means changing the unit — a unit
+that carries the qualifying context explicitly — which is a new spec, not a next step.**
+
 ## Layer map
 
 ```
@@ -19,9 +29,9 @@ PubMed ──► extract_entities ──► canonicalize ──► licence gate 
            biolit.ner           biolit.canon     build_record      biolit.extract   biolit.cluster
            (Phase 2)            (Phase 3)        (Phase 1 rule)    (Phase 4)        (Phase 3)
 
-  ──► [ critic ]  ──►  [ synthesis ]
-      not_implemented   not_implemented
-      (ADR-0017)        (never built)
+  ──► [ critic ]  ──────────►  [ synthesis ]
+      not_implemented           not_implemented
+      (ADR-0017, ADR-0018)      (never built)
 ```
 
 `biolit.pipeline` runs that left-to-right path over the real components and prints a per-stage
