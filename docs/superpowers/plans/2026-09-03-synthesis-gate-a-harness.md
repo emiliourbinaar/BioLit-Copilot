@@ -324,7 +324,9 @@ from biolit.domain.records import Cluster, ExtractedRecord
 
 #: Integers and decimals. Percent signs and units are excluded from the capture so "1.5%"
 #: and "1.5" compare equal -- an output that drops the unit has not invented a number.
-_NUMERAL = re.compile(r"\d+(?:\.\d+)?")
+#: The \b anchors are load-bearing: without them "HbA1c" yields a phantom "1" and the
+#: paper ids "p1"/"p2" yield "1"/"2", injecting phantom unsupported numerals downstream.
+_NUMERAL = re.compile(r"\b\d+(?:\.\d+)?\b")
 
 
 def numerals(text: str) -> list[str]:
