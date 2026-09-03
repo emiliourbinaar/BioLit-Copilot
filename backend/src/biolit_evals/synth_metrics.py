@@ -101,3 +101,63 @@ def support_rate(output: str, source: SourceView) -> Support:
     return Support(
         supported=len(found) - len(unsupported), total=len(found), unsupported=unsupported
     )
+
+
+#: Alias word-count cap for the n-gram scan. MeSH aliases run 1-36 words, but 1-6 covers
+#: 98.7% of the 551,669 in the artifact (measured 2026-09-03). Scanning to 36 would multiply
+#: the lookup cost sixfold to reach chemical names no generated prose will contain. The
+#: truncation is a real limitation and is reported rather than hidden.
+MAX_ALIAS_WORDS = 6
+
+_WORD_SPLIT = re.compile(r"[^a-z0-9\-]+")
+
+
+def mesh_concepts(text: str, aliases: Mapping[str, str]) -> set[str]:
+    """Every MeSH concept id whose alias appears in `text`.
+
+    Word n-grams are looked up in the alias table rather than scanning 551,669 aliases as
+    substrings: the n-gram form is O(len(text)) with a hash lookup per gram, and the
+    substring form is O(n_aliases) per call.
+    """
+    words = [w for w in _WORD_SPLIT.split(text.lower()) if w]
+    found: set[str] = set()
+    for start in range(len(words)):
+        for size in range(1, MAX_ALIAS_WORDS + 1):
+            if start + size > len(words):
+                break
+            concept = aliases.get(" ".join(words[start : start + size]))
+            if concept is not None:
+                found.add(concept)
+    return found
+
+
+def hallucinated_concepts(
+    output: str, source: SourceView, aliases: Mapping[str, str]
+) -> tuple[str, ...]:
+    """MeSH concepts named in the output that no source text mentions, sorted for stability.
+
+    ⚠️ SCOPE, STATED SO IT IS NOT OVERREAD. This catches an invented *MeSH-linkable entity*
+    -- a drug or disease that is not there. It does NOT catch an invented study design, an
+    invented relationship between two real entities, or a real entity attributed to the
+    wrong paper. A zero here is not a clean bill of health; it is the absence of one
+    specific, dangerous, mechanically-detectable failure.
+    """
+    return tuple(sorted(mesh_concepts(output, aliases) - mesh_concepts(source.text, aliases)))
+
+
+def load_aliases(path: str) -> dict[str, str]:
+    """{alias: MeSH id} from the Phase 3A artifact, which is alias-major and prefixes ids.
+
+    Primary aliases win; a non-primary one is kept only if nothing else claims that alias.
+    """
+    import gzip
+    import json
+
+    out: dict[str, str] = {}
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        for alias, entries in json.load(fh).items():
+            key = alias.lower()
+            for raw_id, _canonical, is_primary in entries:
+                if is_primary or key not in out:
+                    out[key] = raw_id.split(":", 1)[1] if ":" in raw_id else raw_id
+    return out

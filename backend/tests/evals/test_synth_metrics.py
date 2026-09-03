@@ -1,7 +1,12 @@
 from biolit.domain.enums import Source, TextType
 from biolit.domain.paper import Paper
 from biolit.domain.records import Cluster, ExtractedRecord, Finding
-from biolit_evals.synth_metrics import build_source_view, numerals, support_rate
+from biolit_evals.synth_metrics import (
+    build_source_view,
+    hallucinated_concepts,
+    numerals,
+    support_rate,
+)
 
 
 def _paper(pid: str, year: int = 2010) -> Paper:
@@ -66,3 +71,26 @@ def test_the_cluster_paper_count_is_a_supported_numeral():
 
     assert got.unsupported == ()
     assert got.rate == 1.0
+
+
+def test_an_entity_absent_from_the_source_is_reported_as_hallucinated():
+    """The dangerous failure: inventing a drug or disease that no source paper mentions."""
+    cluster, records, papers = _fixture(p1="Metformin lowered glucose.")
+    source = build_source_view(cluster, records, papers)
+    aliases = {"metformin": "D008687", "rosiglitazone": "D000077154"}
+
+    got = hallucinated_concepts("Metformin and rosiglitazone lowered glucose.", source, aliases)
+
+    assert got == ("D000077154",)
+
+
+def test_a_multi_word_alias_is_matched():
+    cluster, records, papers = _fixture(p1="Nothing relevant here.")
+    source = build_source_view(cluster, records, papers)
+    aliases = {"polycystic ovary syndrome": "D011085"}
+
+    got = hallucinated_concepts(
+        "Patients with polycystic ovary syndrome improved.", source, aliases
+    )
+
+    assert got == ("D011085",)
