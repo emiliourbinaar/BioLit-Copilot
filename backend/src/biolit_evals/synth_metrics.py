@@ -160,6 +160,49 @@ def hallucinated_concepts(
     return tuple(sorted(mesh_concepts(output, aliases) - mesh_concepts(source.text, aliases)))
 
 
+@dataclass(frozen=True)
+class Coverage:
+    covered: int
+    n_papers: int
+    missing: tuple[str, ...]
+
+    @property
+    def rate(self) -> float:
+        return 1.0 if self.n_papers == 0 else self.covered / self.n_papers
+
+
+def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Coverage:
+    """Fraction of the cluster's papers the output identifies by PMID or by paper id.
+
+    A DISQUALIFIER for the LLM arm, not a score: the template covers every paper by
+    construction, so its 1.0 here says nothing about its quality.
+
+    Membership is checked by WORD TOKEN, via `_alias_words`, not by substring: a substring
+    test reports a paper as covered when its id merely occurs inside another paper's id or
+    PMID -- `'1234567' in 'PMID 12345678'` is true, so a cluster containing both PMIDs would
+    score the shorter one covered by an output that only ever named the longer one. Coverage
+    is a disqualifier, so a false "covered" is a disqualifier that cannot fire -- the exact
+    shape this harness exists to catch.
+
+    ⚠️ RESIDUAL LIMITATION. A pid written flush against other word characters (no separating
+    space or punctuation, e.g. "PMID12345678") tokenises as a single word and is counted
+    missing even when a human reader would call it present. That errs toward strictness
+    against the LLM arm, which is why `missing` is returned ITEMISED and must never be
+    reported as a bare rate -- the same caveat `support_rate` already carries.
+    """
+    output_words = set(_alias_words(output))
+    missing = tuple(
+        pid
+        for pid in cluster.paper_ids
+        if pid.lower() not in output_words and (papers[pid].pmid or pid).lower() not in output_words
+    )
+    return Coverage(
+        covered=len(cluster.paper_ids) - len(missing),
+        n_papers=len(cluster.paper_ids),
+        missing=missing,
+    )
+
+
 def load_aliases(path: str) -> dict[str, str]:
     """{alias: MeSH id} from the Phase 3A artifact, which is alias-major and prefixes ids.
 

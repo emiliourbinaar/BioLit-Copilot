@@ -4,6 +4,7 @@ from biolit.domain.records import Cluster, ExtractedRecord, Finding
 from biolit_evals.synth_metrics import (
     MAX_ALIAS_WORDS,
     build_source_view,
+    coverage,
     hallucinated_concepts,
     load_aliases,
     numerals,
@@ -139,3 +140,28 @@ def test_an_alias_longer_than_the_word_cap_is_not_matched():
     got = hallucinated_concepts(alias, source, aliases)
 
     assert got == ()
+
+
+def test_coverage_reports_the_papers_the_output_never_references():
+    cluster, records, papers = _fixture(p1="Alpha.", p2="Beta.", p3="Gamma.")
+
+    got = coverage("Discussion of PMID p1 and PMID p3 only.", cluster, papers)
+
+    assert got.missing == ("p2",)
+    assert got.covered == 2
+    assert got.n_papers == 3
+
+
+def test_coverage_does_not_credit_a_pid_that_is_only_a_substring_of_another():
+    """'1234567' in 'PMID 12345678' is True, so a naive substring test would score the
+    shorter PMID covered by an output that only ever named the longer one. That is a false
+    "covered" on a disqualifier -- a disqualifier that cannot fire."""
+    papers = {
+        "1234567": _paper("1234567"),
+        "12345678": _paper("12345678"),
+    }
+    cluster = Cluster(key="a|b", paper_ids=sorted(papers))
+
+    got = coverage("Full data reported in PMID 12345678.", cluster, papers)
+
+    assert got.missing == ("1234567",)
