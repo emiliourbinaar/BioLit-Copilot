@@ -2,8 +2,10 @@ from biolit.domain.enums import Source, TextType
 from biolit.domain.paper import Paper
 from biolit.domain.records import Cluster, ExtractedRecord, Finding
 from biolit_evals.synth_metrics import (
+    MAX_ALIAS_WORDS,
     build_source_view,
     hallucinated_concepts,
+    load_aliases,
     numerals,
     support_rate,
 )
@@ -94,3 +96,46 @@ def test_a_multi_word_alias_is_matched():
     )
 
     assert got == ("D011085",)
+
+
+def test_a_punctuated_alias_is_matched_after_loading(tmp_path):
+    """The MeSH artifact stores a concept's own inverted name as its primary alias, e.g.
+    "Diabetes Mellitus, Type 2" -- comma and all. `load_aliases` used to key on that string
+    merely lowercased, while the scanner's n-gram keys never contain punctuation at all, so
+    a punctuated alias like this one could never be matched from either side."""
+    import gzip
+    import json
+
+    path = tmp_path / "aliases.json.gz"
+    payload = {
+        "Diabetes Mellitus, Type 2": [
+            ["MESH:D003924", "Diabetes Mellitus, Type 2", True],
+        ],
+    }
+    with gzip.open(path, "wt", encoding="utf-8") as fh:
+        json.dump(payload, fh)
+    aliases = load_aliases(str(path))
+
+    cluster, records, papers = _fixture(p1="Nothing relevant here.")
+    source = build_source_view(cluster, records, papers)
+
+    got = hallucinated_concepts(
+        "The cohort included patients with diabetes mellitus type 2.", source, aliases
+    )
+
+    assert got == ("D003924",)
+
+
+def test_an_alias_longer_than_the_word_cap_is_not_matched():
+    """MAX_ALIAS_WORDS caps the n-gram scan at 6 words -- a deliberate, documented limit that
+    trades a small amount of coverage for keeping the scan linear in text length. An alias
+    one word past the cap is therefore invisible to the scanner even when present verbatim."""
+    cluster, records, papers = _fixture(p1="Nothing relevant here.")
+    source = build_source_view(cluster, records, papers)
+    words = [f"word{i}" for i in range(MAX_ALIAS_WORDS + 1)]
+    alias = " ".join(words)
+    aliases = {alias: "D000001"}
+
+    got = hallucinated_concepts(alias, source, aliases)
+
+    assert got == ()
