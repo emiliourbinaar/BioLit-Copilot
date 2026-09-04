@@ -1,14 +1,17 @@
 from biolit.domain.enums import Source, TextType
 from biolit.domain.paper import Paper
 from biolit.domain.records import Cluster, ExtractedRecord, Finding
+from biolit.synth.template import render_cluster
 from biolit_evals.synth_metrics import (
     MAX_ALIAS_WORDS,
     build_source_view,
     coverage,
     dcr,
     hallucinated_concepts,
+    judgment_language,
     load_aliases,
     numerals,
+    score_output,
     support_rate,
 )
 
@@ -298,3 +301,55 @@ def test_a_paper_with_no_findings_is_separated_from_indistinguishable():
     assert got.no_findings == ("p2",)
     assert got.indistinguishable == ()
     assert got.scorable == 1
+
+
+def test_judgment_language_is_detected_so_it_can_be_logged():
+    """ADR-0018 established the pipeline cannot support an agreement claim. An LLM asked to
+    characterise a cluster will volunteer one unprompted, so the rate is logged as a
+    compliance diagnostic -- and deliberately never scored (spec §5.1)."""
+    assert judgment_language("The findings are conflicting.") == ("conflicting",)
+    assert judgment_language("Six papers measured HbA1c.") == ()
+
+
+def test_judgment_language_detects_an_inflected_term_the_original_list_missed():
+    """Ruling 14. Exact-token matching alone misses inflections of a stem already in the
+    vocabulary -- measured before this extension, "contradicts" was one of four plainly
+    judgmental sentences out of seven that produced no hit at all."""
+    got = judgment_language("The 2019 study contradicts the 2007 finding.")
+
+    assert got == ("contradicts",)
+
+
+def test_score_output_runs_every_metric_over_one_output():
+    """The brief's own bound here was `<= 1.5`, measured against an earlier render_cluster.
+    The template now wraps every paper in a heading, a bullet stamp and quoted findings, and
+    that fixed markup a two-finding fixture cannot dilute pushes the real ratio to ~1.67 --
+    still finite and sane, just above the brief's stale number. `<= 2.0` keeps this a smoke
+    check on score_output wiring everything together, not a pin on the exact ratio."""
+    cluster, records, papers = _fixture(p1="Metformin reduced hirsutism.", p2="Ovulation rose.")
+    out = render_cluster(cluster, records, papers)
+
+    score = score_output(out, cluster, records, papers, aliases={})
+
+    assert score.coverage.rate == 1.0
+    assert score.support.rate == 1.0
+    assert score.compression <= 2.0
+    assert score.hallucinated == ()
+
+
+def test_dcr_with_a_lower_min_token_len_retains_a_short_marker_the_default_floor_drops():
+    """Ruling 16. IL6/TNF are realistic 3-character biomedical markers, shorter than the
+    default floor of 4. The default excludes them from distinguishing_tokens entirely, so a
+    paper identified only by its marker is lost; min_token_len=3 keeps them and retains it."""
+    cluster, records, papers = _fixture(
+        p1="IL6 levels increased with treatment.",
+        p2="TNF levels decreased with treatment.",
+    )
+    output = "The IL6 finding was notable."
+
+    default = dcr(output, cluster, records)
+    lowered = dcr(output, cluster, records, min_token_len=3)
+
+    assert "p1" in default.lost
+    assert "p1" not in lowered.lost
+    assert lowered.retained == 1
