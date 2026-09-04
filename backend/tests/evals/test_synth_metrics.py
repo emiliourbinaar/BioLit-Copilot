@@ -215,6 +215,21 @@ def test_two_papers_sharing_year_and_journal_are_not_covered_by_one_mention():
     assert got.missing == ("p1", "p2")
 
 
+def test_journal_uniqueness_is_decided_on_the_normalised_journal_name():
+    """The uniqueness guard and the match must agree on what "same journal" means. Keying
+    uniqueness on the raw field while matching on tokens lets "N Engl J Med" and
+    "N. Engl. J. Med." count as two distinct journals that both match one mention -- the
+    bulk-credit hole the guard exists to close, reopened by the same normalisation drift
+    Ruling 6 records."""
+    cluster, records, papers = _fixture(p1="Alpha.", p2="Beta.")
+    papers["p1"] = papers["p1"].model_copy(update={"year": 2019, "journal": "N Engl J Med"})
+    papers["p2"] = papers["p2"].model_copy(update={"year": 2019, "journal": "N. Engl. J. Med."})
+
+    got = coverage("The 2019 N Engl J Med papers found similar effects.", cluster, papers)
+
+    assert got.missing == ("p1", "p2")
+
+
 def test_a_shorter_pmid_that_is_a_substring_of_a_longer_one_is_still_reported_missing():
     """Ruling 8, re-verified under phrase matching. `'1234567' in 'PMID 12345678'` is true
     as a substring, but `['1234567']` is not a contiguous run of `['pmid', '12345678']` --

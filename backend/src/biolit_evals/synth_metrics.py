@@ -215,20 +215,29 @@ def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Cove
     creditable by id/PMID alone; a paper missing either a year or a journal is simply not
     creditable this way.
 
-    ⚠️ RESIDUAL LIMITATION. An id, PMID or journal name written flush against other word
-    characters, with no separating space or punctuation (e.g. "PMID12345678"), tokenises as
-    one longer word and is counted missing even when a human reader would call it present.
-    That errs toward strictness against the LLM arm, which is why `missing` is returned
-    ITEMISED and must never be reported as a bare rate -- the same caveat `support_rate`
-    already carries.
+    ⚠️ RESIDUAL LIMITATION, IN TWO PARTS. An id, PMID or journal name written flush against
+    other word characters, with no separating space or punctuation (e.g. "PMID12345678"),
+    tokenises as one longer word and is counted missing even when a human reader would call
+    it present. And journal matching is literal: an arm that writes a journal's abbreviation
+    ("NEJM") where the stored field says "N Engl J Med" is not credited, because expanding
+    abbreviations would need a mapping this project does not have and inventing one would put
+    an unmeasured heuristic inside a disqualifier. Both err toward strictness against the LLM
+    arm, which is why `missing` is returned ITEMISED and must never be reported as a bare rate
+    -- the same caveat `support_rate` already carries. If the pilot shows an arm identifying
+    papers by abbreviation, that is a reason to revisit this, and the itemised list is what
+    will show it.
     """
     output_words = _alias_words(output)
 
-    year_journal_counts: dict[tuple[int, str], int] = {}
+    # Uniqueness is keyed on the NORMALISED journal, because that is what the match below
+    # compares. Keying the raw field instead would let "N Engl J Med" and "N. Engl. J. Med."
+    # count as two distinct journals that a single mention nonetheless matches -- reopening
+    # the bulk-credit hole this guard exists to close, through the same drift Ruling 6 records.
+    year_journal_counts: dict[tuple[int, tuple[str, ...]], int] = {}
     for pid in cluster.paper_ids:
         paper = papers[pid]
         if paper.year is not None and paper.journal is not None:
-            key = (paper.year, paper.journal)
+            key = (paper.year, tuple(_alias_words(paper.journal)))
             year_journal_counts[key] = year_journal_counts.get(key, 0) + 1
 
     def _identified(pid: str) -> bool:
@@ -239,9 +248,10 @@ def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Cove
             return True
         paper = papers[pid]
         if paper.year is not None and paper.journal is not None:
-            key = (paper.year, paper.journal)
+            journal_words = _alias_words(paper.journal)
+            key = (paper.year, tuple(journal_words))
             if year_journal_counts[key] == 1 and _contains_phrase(output_words, [str(paper.year)]):
-                return _contains_phrase(output_words, _alias_words(paper.journal))
+                return _contains_phrase(output_words, journal_words)
         return False
 
     missing = tuple(pid for pid in cluster.paper_ids if not _identified(pid))
