@@ -49,7 +49,13 @@ def sample_clusters(
 
     drawn: list[Cluster] = []
     for name, _low, _high in SIZE_BANDS:
-        pool = sorted(by_band.get(name, []), key=lambda c: c.key)
+        # (key, sorted(paper_ids)), not `key` alone: `sorted` is STABLE, so two clusters
+        # sharing a key would otherwise keep their input order through it, and that order
+        # feeds `rng.shuffle` -- the same seed then draws a different sample depending on
+        # which same-key cluster happened to come first in the pool. `key` alone is unique
+        # WITHIN one pipeline run (Ruling 25) but not across the pooled runs this sample is
+        # drawn from.
+        pool = sorted(by_band.get(name, []), key=lambda c: (c.key, sorted(c.paper_ids)))
         if len(pool) < per_band:
             raise ValueError(
                 f"sample_clusters: band {name!r} holds {len(pool)} clusters, need {per_band}. "
@@ -58,6 +64,21 @@ def sample_clusters(
             )
         rng.shuffle(pool)
         drawn.extend(pool[:per_band])
+
+    # POSITIVE CONTROL (Ruling 25). It should never fire -- Ruling 26 merges the pooled state
+    # files by key before they reach here -- which is exactly why it is worth asserting: a
+    # repeat means the corpus upstream is corrupt, and nothing downstream would say so. A
+    # duplicate double-weights one cluster in a stratified sample of thirty, and `sample_hash`
+    # would go on returning a perfectly stable hash of the corrupted draw, so the sample would
+    # look frozen and verified either way. Same posture as `contradiction_gold`'s
+    # `assert_papers_disjoint` / `assert_one_pair_per_key`.
+    identities = {(c.key, tuple(sorted(c.paper_ids))) for c in drawn}
+    if len(identities) != len(drawn):
+        raise ValueError(
+            f"sample_clusters: drew {len(drawn)} clusters but only {len(identities)} are "
+            "distinct. The pooled corpus repeats a cluster; merge the state files by key "
+            "rather than concatenating them. Scoring a repeated cluster would weight it twice."
+        )
     return drawn
 
 
