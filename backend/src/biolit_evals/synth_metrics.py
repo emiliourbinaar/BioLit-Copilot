@@ -132,7 +132,21 @@ def _alias_words(text: str) -> list[str]:
     concept permanently unreachable from either side. That drift is the defect this helper
     exists to prevent from recurring.
     """
-    return [w for w in _WORD_SPLIT.split(text.lower()) if w]
+    # Dangling hyphens are stripped (Ruling 28). `_WORD_SPLIT` treats non-ASCII as a
+    # separator, so "TNF-α" tokenises to "tnf-" with the hyphen orphaned, and "tnf-" can never
+    # match the alias key "tnf": the source reads as never having mentioned TNF, and an arm
+    # writing the plain form is reported as INVENTING it -- a false positive on the one hard
+    # disqualifier that must be exactly 0. Measured on the frozen corpus: 9 such tokens,
+    # among them tnf-, tgf- and nf-.
+    #
+    # Stripped on BOTH sides, because Ruling 6's lockstep is what keeps the table reachable at
+    # all; normalising only the scan side is the very drift that made 37.57% of aliases
+    # unmatchable. The cost is measured rather than assumed: 17.87% of alias keys change and
+    # 301 new concept collisions appear, but every sampled collision is IUPAC nomenclature
+    # ("10 perfluorohexyl decanol", "3 4 dihydroxyflavone") -- the same population
+    # MAX_ALIAS_WORDS already truncates, for the same reason: no synthesis prose contains it.
+    # Internal hyphens are untouched, so "non-hodgkin" and "il-6" keep their exact keys.
+    return [w for w in (w.strip("-") for w in _WORD_SPLIT.split(text.lower())) if w]
 
 
 def mesh_concepts(text: str, aliases: Mapping[str, str]) -> set[str]:

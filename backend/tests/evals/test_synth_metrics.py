@@ -412,6 +412,23 @@ def test_score_output_runs_every_metric_over_one_output():
     assert "conflicting" in judgy_score.judgment_volunteered
 
 
+def test_a_greek_suffixed_entity_the_source_named_is_not_counted_as_hallucinated():
+    """Ruling 28. `_WORD_SPLIT` treats non-ASCII as a separator, so "TNF-α" tokenised to
+    "tnf-" with the hyphen left dangling, and "tnf-" can never match the alias key "tnf".
+    The source therefore appeared not to mention TNF at all, and an arm writing the plain
+    form was reported as inventing it -- a false positive on the ONE hard disqualifier that
+    must be exactly 0. Measured on the frozen corpus: 9 such tokens, including tnf-, tgf-
+    and nf-, three of the most common entities in this literature.
+    """
+    cluster, records, papers = _fixture(
+        p1="Serum TNF-α rose sharply after treatment.",
+        p2="Ovulation rose.",
+    )
+    source = build_source_view(cluster, records, papers)
+
+    assert hallucinated_concepts("TNF was elevated.", source, {"tnf": "D014923"}) == ()
+
+
 def test_judgment_volunteered_excludes_vocabulary_the_source_itself_used():
     """Ruling 27, measured on the frozen sample: the template scored 10/30 on
     `judgment_terms` where the plan asserted 0 "by construction". All 12 hits were verbatim
