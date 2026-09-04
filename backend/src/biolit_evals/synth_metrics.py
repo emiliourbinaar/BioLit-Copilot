@@ -322,6 +322,17 @@ def dcr(output: str, cluster: Cluster, records: Mapping[str, ExtractedRecord]) -
     "Polycystic ovary morphology was unchanged", 'oral' in "Temporal trends were flat" --
     and the bias runs TOWARD the LLM arm, which writes more and longer prose than the
     template: exactly the false "LLM wins" ADR-0015 exists to catch.
+
+    ⚠️ AND A SECOND BIAS, RUNNING THE OTHER WAY, PRE-REGISTERED IN SPEC §2 ON 2026-09-04
+    BEFORE ANY ARM WAS RUN. Token-exact retention REWARDS COPYING. The template reproduces
+    finding sentences nearly verbatim and cannot lose; a faithful paraphrase can preserve
+    every fact and still score lower. On "Metformin reduced hirsutism scores." and
+    "Metformin reduced ovulation latency.", the template scores retained=2/2 while a
+    paraphrase carrying both facts scores retained=1 with lost=('p1',). This one favours the
+    arm the gate already defaults to shipping, so it must not be waved through as merely
+    conservative. Mitigation is reporting: `lost` is per paper, never only a rate, and a DCR
+    gap made of genuinely dropped content is a different result from one made of paraphrase.
+    Treating a DCR difference as decisive without reading `lost` is not supported here.
     """
     tokens = distinguishing_tokens(cluster, records)
     output_tokens = set(_alias_words(output))

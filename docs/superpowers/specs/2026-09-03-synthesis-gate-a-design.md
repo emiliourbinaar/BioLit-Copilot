@@ -113,6 +113,32 @@ category, never only as a rate.** A support rate of 0.90 composed of hallucinate
 one composed of unverifiable-but-true aggregates are different results, and collapsing them
 would let a limitation of the metric masquerade as a failure of the arm.
 
+### ⚠️ A second known bias, on the deciding axis — added 2026-09-04, before any arm was run
+
+Found while implementing the harness, and recorded here rather than in a footnote to the
+results, because it lands on DCR: one of only two comparative axes, and the number this gate
+actually decides on. **No arm has been run and nothing has been spent at the time of writing**,
+which is what keeps this a pre-registration rather than a post-hoc excuse.
+
+DCR counts a paper retained when one of its distinguishing tokens survives *as a token*. That
+rewards copying. The deterministic template reproduces finding sentences nearly verbatim and so
+cannot lose; an LLM that paraphrases faithfully can preserve every fact and still score lower.
+Measured on two findings — `Metformin reduced hirsutism scores.` and `Metformin reduced
+ovulation latency.` — the template scores `retained=2, scorable=2` while a paraphrase carrying
+both facts (`decreased androgenic symptom severity ... shortened the time to ovulation`) scores
+`retained=1, lost=('p1',)`.
+
+**The bias favours the arm this gate already defaults to shipping**, so it cannot be waved
+through as conservative. It is the mirror image of the substring-matching error the harness
+rejected during implementation, which ran the other way, toward the LLM.
+
+The mitigation is again reporting, not a looser threshold: **`lost` is reported per paper, never
+only as a rate**, and a DCR gap composed of genuine dropped content is a different result from
+one composed of faithful paraphrase. A reading that treats a DCR difference as decisive without
+inspecting `lost` is not supported by this design. Semantic retention is not measurable without
+annotation, which is the whole reason Gate A exists in this form (§1) — so the honest move is to
+name the limit, not to engineer around it.
+
 ---
 
 ## §3 — Pre-registered decision rule, written before any number exists
