@@ -5,6 +5,7 @@ from biolit_evals.synth_metrics import (
     MAX_ALIAS_WORDS,
     build_source_view,
     coverage,
+    dcr,
     hallucinated_concepts,
     load_aliases,
     numerals,
@@ -243,3 +244,57 @@ def test_a_shorter_pmid_that_is_a_substring_of_a_longer_one_is_still_reported_mi
     got = coverage("Full data reported for PMID 12345678.", cluster, papers)
 
     assert got.missing == ("1234567",)
+
+
+def test_dcr_counts_a_paper_retained_when_one_distinguishing_token_survives():
+    cluster, records, papers = _fixture(
+        p1="Metformin reduced hirsutism scores.",
+        p2="Metformin reduced ovulation latency.",
+    )
+
+    got = dcr("Metformin reduced hirsutism in one report.", cluster, records)
+
+    assert got.retained == 1
+    assert got.lost == ("p2",)
+    assert got.scorable == 2
+
+
+def test_a_paper_with_no_distinguishing_tokens_is_excluded_from_the_denominator():
+    """Two papers with identical findings cannot be told apart by any output, so scoring
+    an arm on them would penalise it for the corpus rather than for its own behaviour."""
+    cluster, records, papers = _fixture(p1="Identical finding.", p2="Identical finding.")
+
+    got = dcr("Nothing in particular.", cluster, records)
+
+    assert got.scorable == 0
+    assert got.indistinguishable == ("p1", "p2")
+    assert got.rate == 1.0
+
+
+def test_a_distinguishing_token_inside_a_longer_word_is_not_retained():
+    """Ruling 9. 'cyst' is a distinguishing token in p1's finding, and the output's
+    'polycystic' contains it as a bare substring -- a substring test would count 'cyst'
+    retained even though the word itself never occurs; token matching must not be fooled."""
+    cluster, records, papers = _fixture(
+        p1="Ovarian cyst volume decreased.",
+        p2="Endometrial thickness increased.",
+    )
+
+    got = dcr("Polycystic ovary morphology was unchanged.", cluster, records)
+
+    assert got.lost == ("p1", "p2")
+    assert got.retained == 0
+
+
+def test_a_paper_with_no_findings_is_separated_from_indistinguishable():
+    """Ruling 10. A paper extraction produced nothing for means EXTRACTION failed; a paper
+    with findings identical to a sibling's means the CORPUS carries a duplicate. Conflating
+    the two would misreport which one happened, so they must land in different fields."""
+    records = {"p1": _record("p1", "Metformin reduced hirsutism scores."), "p2": _record("p2")}
+    cluster = Cluster(key="a|b", paper_ids=["p1", "p2"])
+
+    got = dcr("Nothing about either paper.", cluster, records)
+
+    assert got.no_findings == ("p2",)
+    assert got.indistinguishable == ()
+    assert got.scorable == 1

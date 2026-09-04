@@ -262,6 +262,86 @@ def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Cove
     )
 
 
+#: Tokens shorter than this carry no distinguishing power in biomedical prose -- they are
+#: articles, prepositions and units, present in every paper's findings.
+_MIN_TOKEN_LEN = 4
+
+
+def distinguishing_tokens(
+    cluster: Cluster, records: Mapping[str, ExtractedRecord]
+) -> dict[str, frozenset[str]]:
+    """{paper_id: tokens appearing in that paper's findings and NO other paper's in the
+    cluster}. These are what an output must preserve to have characterised the group rather
+    than merely summarised it into one indistinguishable blur.
+
+    Tokenised through `_alias_words`, the same helper `mesh_concepts`/`load_aliases`/
+    `coverage` use (Ruling 6) -- one tokenisation in play, not a second inline copy.
+    """
+    per_paper: dict[str, frozenset[str]] = {}
+    for pid in cluster.paper_ids:
+        findings = records[pid].key_findings if pid in records else []
+        text = " ".join(f.text for f in findings)
+        per_paper[pid] = frozenset(w for w in _alias_words(text) if len(w) >= _MIN_TOKEN_LEN)
+    return {
+        pid: tokens - frozenset().union(*(per_paper[o] for o in per_paper if o != pid))
+        if len(per_paper) > 1
+        else tokens
+        for pid, tokens in per_paper.items()
+    }
+
+
+@dataclass(frozen=True)
+class DCR:
+    retained: int
+    scorable: int
+    indistinguishable: tuple[str, ...]
+    no_findings: tuple[str, ...]
+    lost: tuple[str, ...]
+
+    @property
+    def rate(self) -> float:
+        return 1.0 if self.scorable == 0 else self.retained / self.scorable
+
+
+def dcr(output: str, cluster: Cluster, records: Mapping[str, ExtractedRecord]) -> DCR:
+    """Fraction of scorable papers whose distinguishing content survives into the output.
+
+    THE ONLY COMPARATIVE AXIS, alongside compression. A paper with no distinguishing tokens
+    is excluded from the denominator and reported in one of two DISTINCT categories, because
+    they mean opposite things for the pilot report (Ruling 10): `indistinguishable` is a
+    paper that HAS findings identical to another paper's in its cluster -- a property of the
+    CORPUS, no output could tell those two apart -- while `no_findings` is a paper for which
+    extraction produced nothing at all -- a property of EXTRACTION, not of the corpus.
+    Conflating them would make the report say "the corpus carries duplicates" when the real
+    story is "extraction failed on this paper".
+
+    Retention is TOKEN membership, not substring (Ruling 9): `tokens[pid]` is intersected
+    with `set(_alias_words(output))`, using the same helper `distinguishing_tokens` builds
+    its side from. A substring test (`token in output.lower()`) would count a distinguishing
+    token retained whenever any longer word in the output happens to contain it -- 'cyst' in
+    "Polycystic ovary morphology was unchanged", 'oral' in "Temporal trends were flat" --
+    and the bias runs TOWARD the LLM arm, which writes more and longer prose than the
+    template: exactly the false "LLM wins" ADR-0015 exists to catch.
+    """
+    tokens = distinguishing_tokens(cluster, records)
+    output_tokens = set(_alias_words(output))
+    no_findings = tuple(
+        pid
+        for pid in cluster.paper_ids
+        if not (records[pid].key_findings if pid in records else [])
+    )
+    indistinguishable = tuple(pid for pid, t in tokens.items() if not t and pid not in no_findings)
+    scorable = [pid for pid, t in tokens.items() if t]
+    lost = tuple(pid for pid in scorable if not (tokens[pid] & output_tokens))
+    return DCR(
+        retained=len(scorable) - len(lost),
+        scorable=len(scorable),
+        indistinguishable=indistinguishable,
+        no_findings=no_findings,
+        lost=lost,
+    )
+
+
 def load_aliases(path: str) -> dict[str, str]:
     """{alias: MeSH id} from the Phase 3A artifact, which is alias-major and prefixes ids.
 
