@@ -457,6 +457,31 @@ def judgment_language(output: str) -> tuple[str, ...]:
     return tuple(sorted(matched))
 
 
+def judgment_volunteered(output: str, source: SourceView) -> tuple[str, ...]:
+    """Judgment vocabulary the arm introduced, i.e. that the source never gave it.
+
+    LOGGED, NEVER SCORED, exactly as `judgment_language` is. Read the two TOGETHER: neither
+    is sufficient alone. Measured on the frozen sample, the template -- which quotes source
+    sentences verbatim and cannot volunteer anything -- scored 10/30 clusters on
+    `judgment_language`, and all 12 hits were CLINICAL uses in quoted text ("consistent with
+    exertional rhabdomyolysis", "mixed high and normal anion gap metabolic acidosis"). So the
+    unfiltered count drowns §5.1's signal in the corpus's own vocabulary. But subtracting the
+    source is not sufficient either: an arm writing "the findings are consistent across
+    studies" over a corpus whose papers say "consistent with rhabdomyolysis" would go
+    unflagged here, and that is the exact direction §5.1 exists to catch.
+
+    Compared against `source.text`, not `findings_text`: the question is what the arm was
+    GIVEN, and it was given the journal, year and PMID as well as the findings.
+
+    This is construction-true at 0 for the template arm -- its output is boilerplate plus
+    verbatim source, and none of its boilerplate ("papers", "PMID", "no finding sentence
+    extracted") is judgment vocabulary. A non-zero value there means the template has begun
+    generating prose.
+    """
+    given = set(_judgment_words(source.text))
+    return tuple(w for w in judgment_language(output) if w not in given)
+
+
 def compression(output: str, source: SourceView) -> float:
     """Output length over concatenated source-FINDINGS length (spec §2).
 
@@ -480,6 +505,10 @@ class OutputScore:
     compression: float
     hallucinated: tuple[str, ...]
     judgment_terms: tuple[str, ...]
+    #: Ruling 27. Read WITH `judgment_terms`, never instead of it: this one is
+    #: construction-true at 0 for the template arm, that one carries the clinical vocabulary
+    #: the corpus itself uses. Neither is sufficient alone; see `judgment_volunteered`.
+    judgment_volunteered: tuple[str, ...]
 
 
 def score_output(
@@ -508,6 +537,7 @@ def score_output(
         compression=compression(output, source),
         hallucinated=hallucinated_concepts(output, source, aliases),
         judgment_terms=judgment_language(output),
+        judgment_volunteered=judgment_volunteered(output, source),
     )
 
 

@@ -10,6 +10,7 @@ from biolit_evals.synth_metrics import (
     dcr,
     hallucinated_concepts,
     judgment_language,
+    judgment_volunteered,
     load_aliases,
     numerals,
     score_output,
@@ -402,6 +403,41 @@ def test_score_output_runs_every_metric_over_one_output():
     judgy_output = out + " The findings are conflicting."
     judgy_score = score_output(judgy_output, cluster, records, papers, aliases={})
     assert judgy_score.judgment_terms == judgment_language(judgy_output)
+
+    # Ruling 27. The control arm volunteers nothing -- it quotes. That is the construction-true
+    # self-test the plan wanted from `judgment_terms` and never had.
+    source = build_source_view(cluster, records, papers)
+    assert score.judgment_volunteered == ()
+    assert judgy_score.judgment_volunteered == judgment_volunteered(judgy_output, source)
+    assert "conflicting" in judgy_score.judgment_volunteered
+
+
+def test_judgment_volunteered_excludes_vocabulary_the_source_itself_used():
+    """Ruling 27, measured on the frozen sample: the template scored 10/30 on
+    `judgment_terms` where the plan asserted 0 "by construction". All 12 hits were verbatim
+    quoted source sentences using the words CLINICALLY -- "consistent with exertional
+    rhabdomyolysis" is a diagnostic impression, not a claim about another paper. The template
+    quotes, so it inherits the corpus's vocabulary; 0 was never construction-true.
+
+    `judgment_volunteered` is the check the plan was reaching for and IS construction-true
+    for the template: its output is boilerplate plus verbatim source, and none of its
+    boilerplate is judgment vocabulary. Both numbers are reported because neither suffices
+    alone -- subtracting the source hides an arm that writes "the findings are consistent
+    across studies" over a corpus that says "consistent with rhabdomyolysis", and counting
+    everything drowns the signal in clinical prose.
+    """
+    cluster, records, papers = _fixture(
+        p1="Elevated creatine kinase, consistent with rhabdomyolysis.",
+        p2="Ovulation rose.",
+    )
+    source = build_source_view(cluster, records, papers)
+
+    quoted = 'The report noted findings "consistent with rhabdomyolysis".'
+    assert judgment_language(quoted) == ("consistent",)
+    assert judgment_volunteered(quoted, source) == ()
+
+    volunteered = "The two papers contradict each other."
+    assert judgment_volunteered(volunteered, source) == ("contradict",)
 
 
 def test_dcr_with_a_lower_min_token_len_retains_a_short_marker_the_default_floor_drops():
