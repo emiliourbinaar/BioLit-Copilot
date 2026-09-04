@@ -321,6 +321,40 @@ def test_judgment_language_detects_an_inflected_term_the_original_list_missed():
     assert got == ("contradicts",)
 
 
+def test_judgment_language_splits_on_a_hyphen_unlike_the_mesh_tokeniser():
+    """Ruling 15/23. `_alias_words` keeps '-' as a word character -- correct for MeSH
+    ("non-hodgkin" must stay one token) and wrong here: "broadly-consistent" tokenised that
+    way is one word, `broadly-consistent`, which is in no vocabulary and never fires.
+    Judgment detection needs its own split so the hyphen is a word boundary."""
+    got = judgment_language("The effect sizes were broadly-consistent across trials.")
+
+    assert got == ("consistent",)
+
+
+def test_judgment_language_detects_stem_inflections_the_exact_token_list_missed():
+    """Ruling 23. `JUDGMENT_TERMS` grew to 39 exact tokens under Ruling 14 and still missed
+    these, verified directly against the built module before this fix: "corroborated" and
+    "refuting" are inflections of stems already in the list, "consistency" is absent while
+    "inconsistency" is present, and the whole "concur" family is missing. A hand-maintained
+    inflection list keeps losing this game -- stem-prefix matching makes the docstring's
+    coverage claim true by construction instead of by vigilance."""
+    assert judgment_language("The 2015 study corroborated the 2010 finding.") == ("corroborated",)
+    assert judgment_language("The earlier paper is refuting this claim.") == ("refuting",)
+    assert judgment_language("There is consistency across the trials.") == ("consistency",)
+    assert judgment_language("The two studies concur on the mechanism.") == ("concur",)
+
+
+def test_judgment_language_stems_do_not_fire_on_their_named_false_positives():
+    """Ruling 23. The stem choice is deliberately narrower than the obvious one, and these
+    are exactly the sentences that motivate it: "consisten", not "consist", so a cohort that
+    "consists of" patients does not fire; and "concur" carries an explicit exclusion for
+    "concurrent"/"concurrently", which mean "at the same time" and are ordinary biomedical
+    vocabulary, not an agreement claim."""
+    assert judgment_language("The cohort consists of 40 patients.") == ()
+    assert judgment_language("Patients received concurrent chemotherapy.") == ()
+    assert judgment_language("The trial ran concurrently at three sites.") == ()
+
+
 def test_compression_is_measured_against_the_findings_not_the_metadata():
     """Spec §2 defines compression as "output length / concatenated source-findings length".
     Dividing by the whole source view instead folds the cluster key, journal, year and PMID of
@@ -359,6 +393,15 @@ def test_score_output_runs_every_metric_over_one_output():
     assert score.support.rate == 1.0
     assert score.compression > 1.0
     assert score.hallucinated == ()
+    assert score.dcr == dcr(out, cluster, records)
+
+    # judgment_terms must be wired from `output`, not `source.text` -- and the template's
+    # own rendering can never distinguish the two, because it invents no prose beyond the
+    # source it was given, so this half of the wiring needs an output that actually
+    # diverges from the source: judgment language the source does not contain.
+    judgy_output = out + " The findings are conflicting."
+    judgy_score = score_output(judgy_output, cluster, records, papers, aliases={})
+    assert judgy_score.judgment_terms == judgment_language(judgy_output)
 
 
 def test_dcr_with_a_lower_min_token_len_retains_a_short_marker_the_default_floor_drops():

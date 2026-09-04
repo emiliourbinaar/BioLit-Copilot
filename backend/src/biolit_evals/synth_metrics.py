@@ -386,56 +386,57 @@ def dcr(
 #: Vocabulary that asserts an epistemic relation between papers. ADR-0018 established the
 #: pipeline cannot support such a claim, so its presence is a COMPLIANCE signal.
 #:
-#: Covers inflections of every stem, not only its dictionary form (Ruling 14): exact-token
-#: matching alone missed "contradicts", "concordant", "corroborates" and "consensus", four
-#: of seven plainly judgmental sentences measured before this extension. Under-detection
-#: flatters the LLM arm on the one diagnostic meant to catch it volunteering a judgment, so
-#: err toward recall here -- `judgment_language` returns the matched terms itemised, so a
-#: reader can discount a benign hit. Deliberately excludes generic words ("similar",
-#: "different", "differ") that fire on ordinary prose unrelated to an agreement claim.
-JUDGMENT_TERMS = frozenset(
+#: STEM PREFIXES, not surface forms (Ruling 23, superseding Ruling 14). Ruling 14's own
+#: docstring claimed the exact-token list "covers inflections of every stem, not only its
+#: dictionary form" -- false as shipped, and demonstrated: "corroborated" and "refuting" are
+#: missing inflections of stems already in that list, "consistency" was absent while
+#: "inconsistency" was present, and the whole "concur" family was missing. 39 hand-enumerated
+#: tokens was already the second attempt at this; a hand-maintained inflection list keeps
+#: losing this game, so a word now matches if it STARTS WITH one of these stems, which makes
+#: the coverage claim true by construction instead of by vigilance.
+#:
+#: Two stems are deliberately narrower than they look, and that narrowness is the design:
+#: "consisten", not "consist", so "the cohort consists of 40 patients" does not fire; and
+#: "concur" carries an explicit exclusion (`JUDGMENT_EXCLUSIONS`) for "concurrent" and
+#: "concurrently", which mean "at the same time" and are ordinary biomedical vocabulary, not
+#: an agreement claim. Deliberately excludes generic words ("similar", "different", "differ")
+#: that fire on ordinary prose unrelated to an agreement claim.
+JUDGMENT_STEMS = frozenset(
     {
         "agree",
-        "agreement",
-        "agrees",
-        "agreed",
-        "conflict",
-        "conflicting",
-        "conflicts",
-        "conflicted",
-        "consistent",
-        "consistently",
-        "contradict",
-        "contradictory",
-        "contradiction",
-        "contradicts",
-        "contradicted",
-        "contradicting",
         "disagree",
-        "disagreement",
-        "disagrees",
-        "disagreed",
+        "conflict",
+        "consisten",
+        "inconsisten",
         "discrepant",
-        "inconsistent",
-        "inconsistency",
-        "inconsistencies",
         "mixed",
         "opposing",
-        "concordant",
-        "concordance",
-        "discordant",
-        "discordance",
-        "corroborate",
-        "corroborates",
-        "corroborating",
-        "refute",
-        "refutes",
-        "refuted",
+        "concordan",
+        "discordan",
+        "corroborat",
+        "refut",
         "consensus",
-        "divergent",
-        "divergence",
+        "divergen",
+        "contradict",
+        "concur",
     }
 )
+
+#: Words that would otherwise match a `JUDGMENT_STEMS` prefix but do not carry the judgment
+#: meaning: "concurrent"/"concurrently" start with "concur" but mean "at the same time".
+JUDGMENT_EXCLUSIONS = frozenset({"concurrent", "concurrently"})
+
+
+#: `judgment_language`'s OWN split, deliberately not `_alias_words` (Ruling 23, partly
+#: reversing Ruling 15). `_alias_words` keeps '-' as a word character, which is correct for
+#: MeSH ("non-hodgkin" must stay one token) but wrong here: "broadly-consistent" tokenised
+#: that way is the single word `broadly-consistent`, which matches no judgment vocabulary and
+#: never fires. One helper cannot serve both requirements.
+_JUDGMENT_WORD_SPLIT = re.compile(r"[^a-z0-9]+")
+
+
+def _judgment_words(text: str) -> list[str]:
+    return [w for w in _JUDGMENT_WORD_SPLIT.split(text.lower()) if w]
 
 
 def judgment_language(output: str) -> tuple[str, ...]:
@@ -445,10 +446,15 @@ def judgment_language(output: str) -> tuple[str, ...]:
     and folding it into a threshold would hand the gate a second comparative axis by the
     back door -- which is how ADR-0017's forbidden metric would return under a new name.
 
-    Tokenised through `_alias_words`, the same helper `mesh_concepts`/`coverage`/
-    `distinguishing_tokens` use (Ruling 15) -- not a fourth inline copy of the split.
+    Tokenised through `_judgment_words`, not `_alias_words` -- see that function's docstring.
+    Matched by STEM PREFIX against `JUDGMENT_STEMS`, minus `JUDGMENT_EXCLUSIONS` (Ruling 23):
+    the terms returned are the actual WORDS found in `output`, not the stems, so a reader
+    sees `corroborated`, not `corroborat` -- that itemisation is what spec §5.1's mitigation
+    relies on, and stemming must not take it away.
     """
-    return tuple(sorted(set(_alias_words(output)) & JUDGMENT_TERMS))
+    words = set(_judgment_words(output)) - JUDGMENT_EXCLUSIONS
+    matched = {w for w in words if any(w.startswith(stem) for stem in JUDGMENT_STEMS)}
+    return tuple(sorted(matched))
 
 
 def compression(output: str, source: SourceView) -> float:
