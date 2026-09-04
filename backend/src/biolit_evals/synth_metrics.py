@@ -40,6 +40,11 @@ class SourceView:
     """Everything an output about this cluster may legitimately draw on."""
 
     text: str
+    #: The finding sentences alone, with no cluster key and no paper metadata. Spec §2 defines
+    #: compression against "concatenated source-findings length", so it needs a denominator
+    #: that metadata cannot move; `text` is the wider view the support and hallucination checks
+    #: are entitled to draw on. Two different questions, two different strings.
+    findings_text: str
     numerals: frozenset[str]
     paper_ids: tuple[str, ...]
     n_papers: int
@@ -52,6 +57,7 @@ def build_source_view(
 ) -> SourceView:
     """Collect the cluster's finding sentences and paper metadata into one checkable view."""
     parts: list[str] = [cluster.key]
+    findings: list[str] = []
     for pid in cluster.paper_ids:
         paper = papers[pid]
         # TITLE IS DELIBERATELY EXCLUDED. Spec §5 gives each arm the year, journal, PMID and
@@ -61,10 +67,12 @@ def build_source_view(
         # to catch. If an arm is ever given titles, this list must change in the same commit.
         parts.extend(str(x) for x in (paper.journal, paper.year, paper.pmid) if x)
         if pid in records:
+            findings.extend(f.text for f in records[pid].key_findings)
             parts.extend(f.text for f in records[pid].key_findings)
     text = "\n".join(parts)
     return SourceView(
         text=text,
+        findings_text="\n".join(findings),
         numerals=frozenset(numerals(text)),
         paper_ids=tuple(cluster.paper_ids),
         n_papers=len(cluster.paper_ids),
@@ -444,8 +452,18 @@ def judgment_language(output: str) -> tuple[str, ...]:
 
 
 def compression(output: str, source: SourceView) -> float:
-    """Output length over source length. Below 1.0 means the arm said it shorter."""
-    return len(output) / len(source.text) if source.text else 0.0
+    """Output length over concatenated source-FINDINGS length (spec §2).
+
+    Below 1.0 means the arm said it shorter than the sentences it was given. The denominator
+    is `findings_text`, not `text`: dividing by the whole source view would fold the cluster
+    key and every paper's journal, year and PMID into it, so the same findings in a
+    long-named journal would score as more compressed than in a short-named one, and the
+    statement above would stop being true.
+
+    A cluster with no extracted findings has no denominator and returns 0.0 -- a sentinel,
+    not a measurement. `dcr` reports those papers in `no_findings`; read the two together.
+    """
+    return len(output) / len(source.findings_text) if source.findings_text else 0.0
 
 
 @dataclass(frozen=True)

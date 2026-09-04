@@ -5,6 +5,7 @@ from biolit.synth.template import render_cluster
 from biolit_evals.synth_metrics import (
     MAX_ALIAS_WORDS,
     build_source_view,
+    compression,
     coverage,
     dcr,
     hallucinated_concepts,
@@ -320,12 +321,35 @@ def test_judgment_language_detects_an_inflected_term_the_original_list_missed():
     assert got == ("contradicts",)
 
 
+def test_compression_is_measured_against_the_findings_not_the_metadata():
+    """Spec §2 defines compression as "output length / concatenated source-findings length".
+    Dividing by the whole source view instead folds the cluster key, journal, year and PMID of
+    every paper into the denominator, so a cluster in a long-named journal would score as more
+    compressed than the same findings in a short-named one -- and "below 1.0 means the arm said
+    it shorter" would stop being true. Metadata length must not move this number."""
+    short = _fixture(p1="Metformin reduced hirsutism.", p2="Ovulation rose.")
+    long_journal = _fixture(p1="Metformin reduced hirsutism.", p2="Ovulation rose.")
+    for pid in ("p1", "p2"):
+        long_journal[2][pid] = long_journal[2][pid].model_copy(
+            update={"journal": "Journal of Deliberately Very Long Titles and Subtitles"}
+        )
+
+    output = "Two papers."
+    a = compression(output, build_source_view(*short))
+    b = compression(output, build_source_view(*long_journal))
+
+    assert a == b
+
+
 def test_score_output_runs_every_metric_over_one_output():
-    """The brief's own bound here was `<= 1.5`, measured against an earlier render_cluster.
-    The template now wraps every paper in a heading, a bullet stamp and quoted findings, and
-    that fixed markup a two-finding fixture cannot dilute pushes the real ratio to ~1.67 --
-    still finite and sane, just above the brief's stale number. `<= 2.0` keeps this a smoke
-    check on score_output wiring everything together, not a pin on the exact ratio."""
+    """The brief asserted `compression <= 1.5`, and the plan's Ruling 2 predicted "slightly
+    above 1.0". Both were wrong, and an upper bound was the wrong shape anyway: the number it
+    pins depends on how long the fixture's findings happen to be (measured 2.96 on this
+    two-sentence fixture, 1.28 on realistic abstract-length ones), so any constant here is a
+    magic number waiting to break. `> 1.0` is instead a structural invariant of the control:
+    the template reproduces every finding verbatim and then adds a heading, a count line, a
+    stamp per paper and quoting, so it can never be shorter than the findings alone. If this
+    ever fails, the template has started dropping content."""
     cluster, records, papers = _fixture(p1="Metformin reduced hirsutism.", p2="Ovulation rose.")
     out = render_cluster(cluster, records, papers)
 
@@ -333,7 +357,7 @@ def test_score_output_runs_every_metric_over_one_output():
 
     assert score.coverage.rate == 1.0
     assert score.support.rate == 1.0
-    assert score.compression <= 2.0
+    assert score.compression > 1.0
     assert score.hallucinated == ()
 
 
