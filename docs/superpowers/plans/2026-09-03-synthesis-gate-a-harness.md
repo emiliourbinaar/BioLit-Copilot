@@ -652,17 +652,96 @@ class Coverage:
         return 1.0 if self.n_papers == 0 else self.covered / self.n_papers
 
 
-def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Coverage:
-    """Fraction of the cluster's papers the output identifies by PMID or by paper id.
+# SUPERSEDED IN FLIGHT. The version below is what shipped, not what this plan first
+# specified. The original used raw substring matching (`pid not in output`), which
+# credits a paper whose id merely occurs inside another's -- Ruling 8. Review then found
+# two further defects in the opposite direction: a punctuated id (DOI, or bioRxiv's title
+# fallback) could never be credited at all (Ruling 11), and spec §2's year+journal
+# reference was simply not implemented (Ruling 12).
+def _contains_phrase(haystack: Sequence[str], phrase: Sequence[str]) -> bool:
+    """Whether `phrase` occurs as a CONTIGUOUS run of tokens inside `haystack`.
 
-    A DISQUALIFIER for the LLM arm, not a score: the template covers every paper by
-    construction, so its 1.0 here says nothing about its quality.
+    An empty phrase is never present -- there is nothing there to have been cited.
     """
-    missing = tuple(
-        pid
-        for pid in cluster.paper_ids
-        if pid not in output and (papers[pid].pmid or pid) not in output
-    )
+    phrase = tuple(phrase)
+    if not phrase:
+        return False
+    haystack = tuple(haystack)
+    n = len(phrase)
+    return any(haystack[i : i + n] == phrase for i in range(len(haystack) - n + 1))
+
+
+def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Coverage:
+    """Fraction of the cluster's papers the output carries an identifying reference for.
+
+    Spec §2 defines a content unit's paper reference as PMID / year+journal; this checks a
+    paper's own id, its PMID, and its year+journal together. A DISQUALIFIER for the LLM arm,
+    not a score: the template covers every paper by construction, so its 1.0 here says
+    nothing about its quality.
+
+    An id or PMID is checked as a CONTIGUOUS TOKEN PHRASE, via `_alias_words` and
+    `_contains_phrase`, not by single-token equality: `Paper.id` is `doi or pmid`, and
+    bioRxiv's client sets `id=doi or title` with no `pmid` at all. A DOI or title routinely
+    contains characters `_alias_words` treats as separators, so it tokenises into several
+    words -- a single-token check could never credit it, even cited verbatim. Phrase matching
+    still isn't a substring test: a paper's id or PMID must appear as its OWN run of tokens,
+    not merely inside a longer one -- `'1234567' in 'PMID 12345678'` is true as a substring,
+    but `['1234567']` is not a contiguous run of `['pmid', '12345678']`, so a cluster
+    containing both PMIDs still scores the shorter one missing against an output that only
+    ever named the longer one. Coverage is a disqualifier, so a false "covered" is a
+    disqualifier that cannot fire -- the exact shape this harness exists to catch.
+
+    A paper is ALSO covered when its year appears as a token and its journal appears as a
+    contiguous token phrase -- spec §5 hands each arm both, so "the 2019 N Engl J Med study"
+    is an identification the spec allows. This path fires only when the (year, journal) pair
+    is UNIQUE within the cluster, computed from the cluster's own papers, never from the
+    output: two or more papers sharing a (year, journal) cannot be told apart by it, so a
+    single mention such as "the 2019 NEJM papers" would otherwise cover several papers at
+    once -- a disqualifier satisfiable in bulk is a disqualifier that cannot fire, the same
+    shape the id/PMID phrase match exists to close. Papers that share a (year, journal) stay
+    creditable by id/PMID alone; a paper missing either a year or a journal is simply not
+    creditable this way.
+
+    ⚠️ RESIDUAL LIMITATION, IN TWO PARTS. An id, PMID or journal name written flush against
+    other word characters, with no separating space or punctuation (e.g. "PMID12345678"),
+    tokenises as one longer word and is counted missing even when a human reader would call
+    it present. And journal matching is literal: an arm that writes a journal's abbreviation
+    ("NEJM") where the stored field says "N Engl J Med" is not credited, because expanding
+    abbreviations would need a mapping this project does not have and inventing one would put
+    an unmeasured heuristic inside a disqualifier. Both err toward strictness against the LLM
+    arm, which is why `missing` is returned ITEMISED and must never be reported as a bare rate
+    -- the same caveat `support_rate` already carries. If the pilot shows an arm identifying
+    papers by abbreviation, that is a reason to revisit this, and the itemised list is what
+    will show it.
+    """
+    output_words = _alias_words(output)
+
+    # Uniqueness is keyed on the NORMALISED journal, because that is what the match below
+    # compares. Keying the raw field instead would let "N Engl J Med" and "N. Engl. J. Med."
+    # count as two distinct journals that a single mention nonetheless matches -- reopening
+    # the bulk-credit hole this guard exists to close, through the same drift Ruling 6 records.
+    year_journal_counts: dict[tuple[int, tuple[str, ...]], int] = {}
+    for pid in cluster.paper_ids:
+        paper = papers[pid]
+        if paper.year is not None and paper.journal is not None:
+            key = (paper.year, tuple(_alias_words(paper.journal)))
+            year_journal_counts[key] = year_journal_counts.get(key, 0) + 1
+
+    def _identified(pid: str) -> bool:
+        if _contains_phrase(output_words, _alias_words(pid)):
+            return True
+        pmid = papers[pid].pmid
+        if pmid is not None and _contains_phrase(output_words, _alias_words(pmid)):
+            return True
+        paper = papers[pid]
+        if paper.year is not None and paper.journal is not None:
+            journal_words = _alias_words(paper.journal)
+            key = (paper.year, tuple(journal_words))
+            if year_journal_counts[key] == 1 and _contains_phrase(output_words, [str(paper.year)]):
+                return _contains_phrase(output_words, journal_words)
+        return False
+
+    missing = tuple(pid for pid in cluster.paper_ids if not _identified(pid))
     return Coverage(
         covered=len(cluster.paper_ids) - len(missing),
         n_papers=len(cluster.paper_ids),
