@@ -12,9 +12,13 @@
   reading is attributable), ADR-0016 (verification rules; decide by running the weakened case),
   ADR-0013 (no infrastructure without a demonstrated consumer), ADR-0015 (an arm scored on a
   population it cannot lose on proves nothing).
-- **Does not decide:** whether clusters should be **ordered** by relevance. §7 explains why the
-  labels will nonetheless be the evidence a future ordering decision needs, and why collecting
-  them costs nothing extra.
+- **Validates two things, from one round of labelling:** cluster **membership** (does the
+  filter keep the right clusters) and cluster **ordering** (does the ranker proposed in
+  ADR-0020 lead with the right one). §9 records why the label schema needed no change to
+  cover the second, and what it deliberately cannot certify.
+- **Does not decide:** which of two equally on-topic clusters should come first. §9.2 argues
+  that is a preference judgment this project has forbidden itself, and that the ranker is not
+  asked to get it right.
 
 ---
 
@@ -64,6 +68,12 @@ what lets the same 83 labels speak to both the filter and to ordering (§7).
 `cant_tell` exists as a **tractability gate**, exactly as in ADR-0018's Gate 1. It is not a
 convenience escape hatch, and §5 makes a high rate fatal to the whole reading rather than
 something to work around.
+
+**The first three labels are an ordinal scale, and that is what lets one round of labelling
+validate ordering as well as membership.** `answers` > `background` > `off_topic` is a
+3-grade relevance judgment, so a ranker's output can be checked against it directly (§5,
+Gate 4) with no additional annotation and no change to what the annotator is asked. `cant_tell`
+is not a grade and is excluded from every ordering computation.
 
 ---
 
@@ -151,6 +161,41 @@ each rate and the raw counts always printed beside them.
   commit to — the number is reported and read, and if it is bad the response is a diagnosed
   change to the rule, never a tuned constant.
 
+**Gate 4 — ordering**, over the same labels, for the ranker proposed in ADR-0020. Computed per
+query from the per-row labels; the annotator is never asked an ordering question (§9.1).
+Distractors and `cant_tell` rows are excluded throughout.
+
+- **4a — lead correctness (the user-visible property).** For each query, does the ranker's
+  first cluster belong to that query's highest non-empty label tier? Reported as a count out
+  of the number of **informative** queries, listed by name, with the baseline alongside:
+  under today's MeSH-id sort the lead is `background`-or-worse on at least three of eight
+  (`Isotretinoin | Acne Vulgaris`, `Bicarbonates | Acidosis`, `Heparin | Hemorrhage`).
+- **4b — tier inversions.** Count of cluster pairs the ranker places in the opposite order to
+  their labels, over pairs whose labels differ. Ties are not inversions and are not errors —
+  see §9.2. Reported per query and pooled, as a raw count over the raw number of comparable
+  pairs, never as a bare rate.
+- **4c — the diagnostic that separates two very different failures.** A query with **no
+  `answers` cluster at all** is not a ranking failure; it means the cluster that would answer
+  the question does not exist, which is a retrieval or entity-linking failure and belongs in
+  `DEFECTS.md`. This is worth having: `isotretinoin and depression` may well be such a query,
+  since no depression cluster exists in that run at all (bare `depression` NILs in all 26
+  papers that contain it). **Such queries are excluded from 4a and 4b and reported
+  separately.** Without this split, a linking defect would be scored as a ranking defect.
+
+**Pre-registered action:** 4a and 4b decide whether ADR-0020's score ships as specified, is
+revised, or is withdrawn. ⛔ **A revision may change the score's *structure* — which signals,
+in which order — and may never introduce a threshold constant tuned against these labels.**
+That would be fitting the ranker to its own validation set, and the labels are the whole
+population, so there is no held-out data to catch it.
+
+**Power for Gate 4 is worse than for Gate 3 and is stated first.** The denominator for 4a is
+**8 queries minus those excluded by 4c** — plausibly 5 or 6. A single query moves it by 15–20
+points, so 4a is evidence about *specific queries* and is not a rate. 4b has a larger
+denominator (hundreds of comparable pairs) but the pairs are not independent, since they share
+clusters and queries, so no interval is quoted for it. **Neither reading can support a claim
+that the ranker is good in general; both can support a claim that it does or does not fix the
+cases that are currently broken.** That is the question ADR-0020 actually asks.
+
 **Power is stated up front, not discovered afterwards.** 13 dropped clusters is a small
 denominator: one unexpected false drop moves that rate by roughly 8 points. Any statement about
 the *drop* side is therefore weak evidence about a rate and strong evidence about a specific
@@ -164,23 +209,30 @@ not resolve; this design deliberately does not lean on one.
 
 1. Diagnosing and fixing individual false drops (§5).
 2. Reporting the filter's over-inclusion rate with its interval.
-3. Deciding whether the ordering question is live (§7).
-4. Validating a derived proxy on its own terms (§8.2) — and *only* by comparison against these
+3. Deciding whether ADR-0020's ranking score ships, is revised, or is withdrawn (§5, Gate 4).
+4. Separating a ranking failure from a retrieval/linking failure (§5, Gate 4c).
+5. Validating a derived proxy on its own terms (§8.2) — and *only* by comparison against these
    labels, never by assuming the proxy.
 
-**Explicitly not sanctioned:** tuning any constant in `select_stage`; scoring any generative
-output; training anything; reporting an accuracy figure detached from its Gate 1 and Gate 2
-verdicts.
+**Explicitly not sanctioned:** tuning any constant in `select_stage` **or in the ranking
+score**; scoring any generative output; training anything; reporting an accuracy figure
+detached from its Gate 1 and Gate 2 verdicts; claiming the ranker is good *in general* on the
+strength of a denominator of 5–8 queries.
 
 ---
 
-## 7. What these labels give the deferred ordering decision
+## 7. What these labels give the ordering decision (ADR-0020)
 
-Ordering was deliberately not built. `render_cluster` states that its ordering "carries no
-implicit ranking — a reader must not be able to infer importance from position", and overturning
-that is an ADR, not a patch.
+⚠️ **Corrected 2026-09-05, after this section was first written.** It originally said ordering
+was blocked because `render_cluster` states its ordering "carries no implicit ranking — a
+reader must not be able to infer importance from position". **That rule was checked against
+the source and it governs the order of PAPERS WITHIN a cluster, not the order of clusters
+within an answer.** Cluster order has only ever been justified as "reproducible and diffable"
+(`cluster_papers`). The original sentence is left visible here rather than quietly deleted,
+because it was load-bearing for the claim that ordering needed an overturn, and it was wrong.
+ADR-0020 sets out what is actually changing.
 
-The **measured** case for reopening it is already strong and does not depend on this pass:
+The **measured** case for ordering is already strong and does not depend on this pass:
 selection keeps 70 of 83 clusters and does not change what an answer leads with. "isotretinoin
 and depression" keeps 5 of 5 and still opens on `Isotretinoin | Acne Vulgaris`.
 
@@ -264,3 +316,61 @@ are not evidence about mechanism questions, comparative-effectiveness questions,
 outside chemical–disease pairing. Stated because the corpus was frozen for Gate A and inherited
 here, which is a genuine strength for freedom-from-selection-bias and a genuine limit on
 external validity.
+
+---
+
+## 9. Does one round cover both questions? Yes — and what it refuses to cover
+
+This section exists because the question was asked directly before implementation started:
+does the design generalise to validate **ranking**, or only binary keep/drop?
+
+### 9.1 The label schema needed no change; the pre-registration did
+
+`answers` > `background` > `off_topic` was already a 3-grade ordinal scale, chosen in §2 so
+that `background` — the indication, the comparator, the co-occurring condition — could not be
+collapsed into either neighbour. **That is exactly the grading a ranker is checked against**,
+and it is checked from the same per-row labels with nothing added.
+
+There is also **no conflict with the blinding protocol**, which was the one real risk. §3.2
+requires rows shuffled across queries so the annotator cannot see the filter's decision; an
+ordering judgment would seem to require seeing a query's clusters together. It does not:
+**ordering is *derived* from the per-row labels after the fact, never elicited.** The annotator
+still sees one `(query, cluster)` row at a time in shuffled order and answers the same
+question. Gate 4 is computed later, by machine, from labels and the ranker's output.
+
+⭐ **What genuinely had to change is the pre-registration, and that is not a formality.** §5
+and §6 committed only to membership readings. Deciding *after* seeing labels that they also
+settle an ordering question would be choosing an analysis with the answers in hand — the
+failure this project's gate discipline exists to prevent. Gate 4 and the widened §6 are
+therefore added **now, before any label exists**, or they cannot be used at all.
+
+### 9.2 What it deliberately will not certify: within-tier order
+
+If a query has four `answers` clusters, these labels cannot say which of the four should lead,
+and **the design refuses to ask.** Two reasons, and the second is the load-bearing one:
+
+1. **The ranker is not asked to get it right.** ADR-0020's extended rule is that cluster order
+   carries relevance to the query and nothing else. Clusters the labels grade equally are, by
+   that rule, correctly in any order; the remaining order is the deterministic `sorted(by_key)`
+   tiebreak and asserts nothing. Ties are therefore not errors in Gate 4b, and scoring them as
+   errors would be scoring the ranker against a rule the ADR explicitly declines to adopt.
+2. **Finer grades would be the forbidden metric.** Asking a single annotator to rank four
+   equally on-topic clusters is asking which they *prefer* — ADR-0017's explicitly excluded
+   axis, with arbitrary inter-grade boundaries and no external referent. A 5- or 7-point scale
+   would produce more discriminating numbers and would not produce more trustworthy ones.
+
+**The failure being fixed is "the lead is not about what was asked", not "the lead is the
+second-best on-topic cluster".** The first is a defect a reader notices immediately and the
+labels catch it; the second is a preference this project has no way to adjudicate and no
+reason to.
+
+### 9.3 Cost of covering both
+
+Zero additional labels. 83 real rows plus 8 distractors, unchanged. The whole extension is
+Gate 4, the widened sanctioned-use list, and this section — all of which must be written
+before labelling begins, which is why they are.
+
+The one real cost is **statistical, not clerical, and it is stated rather than absorbed**: Gate
+4a's denominator is 5–8 queries after 4c's exclusions, so it can support "this fixes the cases
+that are broken" and cannot support "this ranker is good". §5 says so at the point of reading,
+and §6 forbids the stronger claim.
