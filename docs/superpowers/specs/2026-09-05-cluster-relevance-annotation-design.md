@@ -169,7 +169,8 @@ Distractors and `cant_tell` rows are excluded throughout.
   first cluster belong to that query's highest non-empty label tier? Reported as a count out
   of the number of **informative** queries, listed by name, and ⛔ **split into the three
   queries whose current leads were pre-judged during design and the rest — see §8.1, which
-  requires that split at every point of use**, with the baseline alongside:
+  requires that split at every point of use** — and separately from the queries §8.2 marks
+  **contaminated (not blind)**, whose ordering was disclosed outright, with the baseline alongside:
   under today's MeSH-id sort the lead is `background`-or-worse on at least three of eight
   (`Isotretinoin | Acne Vulgaris`, `Bicarbonates | Acidosis`, `Heparin | Hemorrhage`).
 - **4b — tier inversions.** Count of cluster pairs the ranker places in the opposite order to
@@ -213,7 +214,7 @@ not resolve; this design deliberately does not lean on one.
 2. Reporting the filter's over-inclusion rate with its interval.
 3. Deciding whether ADR-0020's ranking score ships, is revised, or is withdrawn (§5, Gate 4).
 4. Separating a ranking failure from a retrieval/linking failure (§5, Gate 4c).
-5. Validating a derived proxy on its own terms (§8.2) — and *only* by comparison against these
+5. Validating a derived proxy on its own terms (§8.3) — and *only* by comparison against these
    labels, never by assuming the proxy.
 
 **Explicitly not sanctioned:** tuning any constant in `select_stage` **or in the ranking
@@ -338,7 +339,55 @@ The genuinely clean fix is a second annotator with no exposure to this process, 
 available. **The available fix is to say so at every point of use rather than to discount it
 once here**, which is what the paragraph above requires.
 
-### 8.2 The MeSH-indexing cross-check is a candidate, not a shortcut
+### 8.2 ⛔ Three queries had the ranker's ACTUAL COMPUTED ORDERING disclosed before labelling
+
+**Distinct from §8.1 and worse.** §8.1 records that certain clusters were discussed as known
+failures — familiarity with which rows are contentious. This records something stronger: for
+three queries, **ADR-0020 publishes the actual computed MeSH tree distances**, which is the
+ranker's relative ordering over those queries' candidate clusters. The annotator does not
+merely know these rows are contentious; the annotator knows what the ranker will do with them,
+before assigning a label that will be used to judge the ranker.
+
+| query | disclosed in ADR-0020 | live for Gate 4? |
+|---|---|---|
+| `isotretinoin and depression` | from `Depressive Disorder`: Mental Disorders 2, Anxiety Disorders 3, Psychotic Disorders 4, Acne Vulgaris no shared tree | **probably moot** — likely excluded by 4c |
+| `lithium and thyroid dysfunction` | from `Thyroiditis`: Hypothyroidism 2, Hyperthyroidism 2, Bipolar Disorder and Behcet Syndrome no shared tree | ⛔ **LIVE** |
+| `warfarin and bleeding risk` | from `Hemorrhage`: Atrial Fibrillation 3, Stroke no shared tree | ⛔ **LIVE** |
+
+The third was not noticed when this limitation was first raised. It is disclosed incidentally,
+inside the ADR's C23 false-proximity caveat rather than in its worked examples, and
+`Hemorrhage` is the disease concept `warfarin and bleeding risk` resolves to — so
+`Warfarin | Atrial Fibrillation` and `Warfarin | Stroke` are that query's own clusters, and
+their relative order is now known in advance. **That it was found only by re-reading the ADR
+for disclosures, rather than by recalling what had been discussed, is the argument for auditing
+the artifact instead of trusting memory.**
+
+`isotretinoin and depression` is *probably* moot because it likely trips Gate 4c — no
+depression cluster exists in that run at all, since bare `depression` NILs in all 26 papers
+containing it. **That is a prediction, not a finding, and the labels decide it.** If 4c does
+not exclude it, this section governs it.
+
+**Requirement.** Gate 4a and 4b **must report these queries separately, marked "contaminated —
+not blind"**, and must never fold them into a denominator that reads as clean. This is the same
+mechanical treatment as 4c's exclusion and ⛔ **the two reasons must not be conflated in the
+write-up**: 4c excludes a query because *the pipeline* could not produce a cluster that answers
+it, which is a finding about the pipeline; this excludes a query because *the annotator was
+told the answer*, which is a finding about the measurement. Reporting both as "excluded" without
+the distinction would let a contamination problem read as a pipeline problem.
+
+**Direction of the bias is unknown and cannot be assumed benign.** Knowing the ranker will put
+`Hypothyroidism` and `Hyperthyroidism` above `Bipolar Disorder` could pull a label toward
+agreement, or — in someone actively trying to be fair — toward overcorrection. Neither is
+detectable from the labels themselves.
+
+**Combined with §8.1, the headline Gate 4a reading is thin.** Of eight queries: up to three are
+contaminated at this level, at least one more may be excluded by 4c, and §8.1 separately flags
+the three whose *leads* were pre-judged. ⛔ **The queries that are clean on both counts are
+`cisplatin nephrotoxicity`, `statins and rhabdomyolysis` and `amiodarone pulmonary toxicity`.
+Those three carry whatever independent evidence this pass produces about ordering, and the
+write-up must say so plainly rather than quoting a figure out of eight.**
+
+### 8.3 The MeSH-indexing cross-check is a candidate, not a shortcut
 
 PubMed indexes every paper with MeSH descriptors, which suggests a free derived relevance
 proxy: score a cluster by the overlap between its concepts and the descriptors on its own
@@ -355,7 +404,7 @@ and never used to "extend" the human labels to unlabelled data unless a separate
 authorises it on the strength of the measured agreement. If the proxy disagrees with the human
 labels, the proxy is discarded, not the labels.
 
-### 8.3 Eight queries, all drug–adverse-effect shaped
+### 8.4 Eight queries, all drug–adverse-effect shaped
 
 The frozen corpus is eight queries of one clinical shape. Findings generalise to that shape and
 are not evidence about mechanism questions, comparative-effectiveness questions, or anything
