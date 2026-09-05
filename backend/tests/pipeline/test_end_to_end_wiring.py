@@ -8,8 +8,10 @@ from biolit.pipeline.stages import (
     entities_stage,
     records_stage,
     retrieve_stage,
+    select_stage,
     synthesis_stage,
 )
+from biolit.query.concepts import QueryConcepts
 from biolit.state.pipeline import PipelineState, StageStatus
 
 ABSTRACT = "Metformin therapy was associated with acidosis in this cohort."
@@ -73,8 +75,15 @@ def test_the_whole_pipeline_runs_and_the_ledger_accounts_for_every_paper():
         texts={p.id: ABSTRACT for p in papers},
         pairing=SameSentencePairing(),
     )
-    state.clusters = clusters
     state.stages.append(cluster_report)
+
+    # The query is CONSULTED here and nowhere else after esearch. Before this stage existed
+    # `PipelineState.question` was write-only, and every cluster retrieval happened to
+    # produce went into the answer regardless of what was asked.
+    concepts = QueryConcepts(frozenset({"D008687"}), {"D008687": "metformin"}, ())
+    clusters, select_report = select_stage(clusters, concepts)
+    state.clusters = clusters
+    state.stages.append(select_report)
     state.stages.append(critic_stub(len(clusters)))
     answer, synthesis_report = synthesis_stage(clusters, outcome.records, {p.id: p for p in papers})
     state.answer = answer
@@ -85,6 +94,7 @@ def test_the_whole_pipeline_runs_and_the_ledger_accounts_for_every_paper():
 
     by_name = {stage.name: stage for stage in state.stages}
     assert by_name["licence_gate"].dropped == {"licence_refused:none": 1}
+    assert by_name["select"].n_in == 1 and by_name["select"].n_out == 1
     assert by_name["critic"].status is StageStatus.not_implemented
     # ADR-0019: synthesis is implemented now; the Critic remains retired.
     assert by_name["synthesis"].status is StageStatus.completed

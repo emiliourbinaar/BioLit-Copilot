@@ -1,4 +1,6 @@
+import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -16,6 +18,32 @@ from biolit.domain.paper import Author, Paper
 
 _EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 _PMC_ARTICLE_URL = "https://pmc.ncbi.nlm.nih.gov/articles/PMC{pmcid}/"
+
+#: `"acidosis, lactic"[MeSH Terms]` -> ("acidosis, lactic", "MeSH Terms").
+_QUOTED_TERM = re.compile(r'"([^"]+)"\[([^\]]+)\]')
+
+#: EVERY quoted term is kept, whatever field tag it carries, and the dictionary decides.
+#:
+#: ⚠️ SUPERSEDED DESIGN, recorded because the reasoning was wrong in an instructive way. This
+#: first restricted to {MeSH Terms, Supplementary Concept, Pharmacological Action} on the
+#: argument that `[All Fields]` carries only inflections ("depressed", "depression's") and
+#: `[Subheading]` only qualifiers ("physiopathology"), so a variant colliding with an
+#: unrelated alias could widen the concept set. That risk was hypothetical. Measured on
+#: 2026-09-05 across the eight frozen queries it never occurred: dropping the restriction
+#: adds exactly three concepts, and all three are correct -- Hemorrhage, Acidosis, and
+#: 3-hydroxy-3-methylglutaryl-coenzyme A. The restriction's cost was real and larger: it
+#: drops five on-query clusters the wide policy keeps (65/83 vs 70/83), among them
+#: `Aspirin | Hemorrhage` and `SSRI | Hemorrhage` for an NSAIDs/GI-bleeding question and the
+#: 9-paper `Lactic Acid | Acidosis` mechanism cluster for metformin/lactic acidosis.
+#: A measured cost beats a hypothetical risk; the inflections simply NIL and cost nothing.
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    """PMIDs plus NCBI's own reading of what the query is about."""
+
+    pmids: list[str]
+    concept_terms: tuple[str, ...]
 
 
 def _pmc_id_of(article: ET.Element) -> str | None:
@@ -45,6 +73,23 @@ class PubMedClient:
         return params
 
     async def esearch(self, query: str, retmax: int = 20) -> list[str]:
+        return (await self.esearch_detailed(query, retmax=retmax)).pmids
+
+    async def esearch_detailed(self, query: str, retmax: int = 20) -> SearchResult:
+        """`esearch`, plus the concept terms NCBI translated the query into.
+
+        The translation is free -- it rides on the search request that already happens -- and
+        it is the only query-side concept resolution available that does not depend on the
+        local alias dictionary. That matters because the dictionary NILs on exactly the terms
+        a user is most likely to type: measured over the eight frozen queries, `depression`,
+        `gastrointestinal bleeding` and `thyroid dysfunction` all resolve to nothing locally,
+        while NCBI maps them to "depressive disorder", "gastrointestinal hemorrhage" and
+        "thyroid gland" respectively.
+
+        NOTE the element is `TranslationSet`, NOT `TranslationStack`: the stack is absent from
+        every response measured on 2026-09-05, so parsing it would have silently produced an
+        empty concept set on every real query while the unit tests passed against a fixture.
+        """
         resp = await request_with_retry(
             self._client,
             "GET",
@@ -53,7 +98,15 @@ class PubMedClient:
             params=self._params(db="pubmed", term=query, retmax=str(retmax)),
         )
         root = ET.fromstring(resp.text)
-        return [el.text or "" for el in root.findall(".//IdList/Id") if el.text]
+        terms: list[str] = []
+        for translation in root.findall(".//TranslationSet/Translation"):
+            for term, _field in _QUOTED_TERM.findall(translation.findtext("To") or ""):
+                if term not in terms:
+                    terms.append(term)
+        return SearchResult(
+            pmids=[el.text or "" for el in root.findall(".//IdList/Id") if el.text],
+            concept_terms=tuple(terms),
+        )
 
     async def efetch(self, pmids: list[str]) -> list[Paper]:
         if not pmids:

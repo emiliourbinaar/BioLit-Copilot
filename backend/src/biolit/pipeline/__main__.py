@@ -32,8 +32,10 @@ def main(argv: list[str] | None = None) -> None:
         entities_stage,
         records_stage,
         retrieve_stage,
+        select_stage,
         synthesis_stage,
     )
+    from biolit.query.concepts import resolve_query_concepts
     from biolit.state.pipeline import PipelineState
 
     parser = argparse.ArgumentParser(description="Run a query through the BioLit pipeline.")
@@ -47,10 +49,11 @@ def main(argv: list[str] | None = None) -> None:
     async def retrieve():
         async with httpx.AsyncClient(timeout=60) as http:
             client = PubMedClient(http, settings)
-            pmids = await client.esearch(args.query, retmax=args.max_papers)
-            return pmids, await client.efetch(pmids)
+            found = await client.esearch_detailed(args.query, retmax=args.max_papers)
+            return found, await client.efetch(found.pmids)
 
-    pmids, papers = asyncio.run(retrieve())
+    found, papers = asyncio.run(retrieve())
+    pmids = found.pmids
 
     state = PipelineState(question=args.query)
     state.candidate_papers = papers
@@ -76,6 +79,14 @@ def main(argv: list[str] | None = None) -> None:
     )
     state.clusters = clusters
     state.stages.append(cluster_report)
+
+    # A3 + A1: NCBI translated the question into MeSH terms on the search request that
+    # already happened; the dictionary turns those terms into concept ids, and the stage
+    # keeps clusters that share one. Free, deterministic, no LLM.
+    concepts = resolve_query_concepts(found.concept_terms, lookup=linker.link)
+    clusters, select_report = select_stage(clusters, concepts)
+    state.clusters = clusters
+    state.stages.append(select_report)
 
     state.stages.append(critic_stub(len(clusters)))
     answer, synthesis_report = synthesis_stage(

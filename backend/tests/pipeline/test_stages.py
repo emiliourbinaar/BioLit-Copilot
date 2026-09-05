@@ -1,15 +1,17 @@
 from biolit.cluster.pairing import SameSentencePairing
 from biolit.domain.enums import EntityLabel, LicenseTier, Source, TextType
 from biolit.domain.paper import Paper
-from biolit.domain.records import Entity, ExtractedRecord
+from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit.pipeline.stages import (
     cluster_stage,
     critic_stub,
     entities_stage,
     records_stage,
     retrieve_stage,
+    select_stage,
     synthesis_stage,
 )
+from biolit.query.concepts import QueryConcepts
 from biolit.state.pipeline import StageStatus
 
 
@@ -209,3 +211,112 @@ def test_synthesis_stage_returns_no_answer_when_there_is_nothing_to_synthesise()
     assert answer is None
     assert report.status is StageStatus.completed
     assert report.n_out == 0
+
+
+def _concepts(*ids: str) -> QueryConcepts:
+    return QueryConcepts(ids=frozenset(ids), evidence={i: i for i in ids}, unresolved=())
+
+
+def test_select_stage_drops_clusters_that_share_no_concept_with_the_query():
+    """The gap this stage closes: before it, `synthesis_stage` rendered every cluster
+    retrieval happened to produce, and the query string was never consulted again after
+    `esearch`. On the frozen metformin run that shipped `Creatinine | Hyperkalemia` and
+    `Potassium | Acute Kidney Injury` inside the answer to "metformin and lactic acidosis".
+    """
+    on_query = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"])
+    off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"])
+
+    kept, report = select_stage([on_query, off_query], _concepts("MESH:D008687"))
+
+    assert kept == [on_query]
+    assert report.status is StageStatus.completed
+    assert (report.n_in, report.n_out) == (2, 1)
+    assert (report.unit_in, report.unit_out) == ("clusters", "clusters")
+    assert report.dropped == {"off_query": 1}
+
+
+def test_select_stage_records_no_drop_key_when_every_cluster_is_on_query():
+    """An absent key, not a zero. Every other stage in this module omits a drop it did not
+    make, and a `{"off_query": 0}` row would read in the rendered ledger as a drop that
+    happened to be empty."""
+    cluster = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"])
+
+    kept, report = select_stage([cluster], _concepts("MESH:D008687"))
+
+    assert kept == [cluster]
+    assert report.dropped == {}
+
+
+def test_select_stage_fails_open_when_the_query_resolved_to_no_concept_at_all():
+    """FAIL-OPEN, and the reason it must be open rather than closed: filtering on an empty
+    concept set drops everything, so a query NCBI could not translate would return no answer
+    at all rather than an unfiltered one. Returning the clusters unfiltered is a strictly
+    smaller failure than returning nothing, but it is still a failure, so it is `noted` --
+    a reader must be able to tell an unfiltered run from a filtered one that kept everything.
+    """
+    clusters = [
+        Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"]),
+        Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"]),
+    ]
+
+    kept, report = select_stage(clusters, QueryConcepts(frozenset(), {}, ("wibble",)))
+
+    assert kept == clusters
+    assert report.dropped == {}
+    assert report.noted == {"query_unlinked": 1}
+    assert "unfiltered" in (report.note or "").lower()
+
+
+def test_select_stage_does_not_rescue_a_query_that_filters_down_to_nothing():
+    """A DELIBERATE non-rescue, recorded because the opposite is tempting. Falling back to
+    the unfiltered list whenever the filter empties would be a hidden threshold of exactly
+    the kind this project forbids, and it would mask the one case a reader most needs to
+    see. `synthesis_stage` already renders an empty cluster list as `answer is None`, which
+    is a truthful "nothing here answers that", and the ledger shows the whole drop.
+    """
+    off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"])
+
+    kept, report = select_stage([off_query], _concepts("MESH:D008687"))
+
+    assert kept == []
+    assert report.n_out == 0
+    assert report.dropped == {"off_query": 1}
+
+
+def test_synthesis_stage_quotes_a_paper_once_across_clusters_and_counts_the_repeats():
+    """A4 at the join. A paper carrying two chemical|disease pairs is a member of two
+    clusters and must appear in both -- dropping it from one would misreport the cluster --
+    but its sentences belong in the answer once. The count is `noted`, not `dropped`:
+    nothing is removed from the pipeline, only from the rendered text."""
+    from biolit.domain.records import Finding
+
+    papers = {pid: _paper(pid, "irrelevant", allowed=True) for pid in ("p1", "p2")}
+    records = {
+        pid: ExtractedRecord(
+            paper_id=pid,
+            key_findings=[Finding(text=f"Finding for {pid}.", start=0, end=1, sentence_index=0)],
+        )
+        for pid in papers
+    }
+    clusters = [
+        Cluster(key="MESH:D1|MESH:D2", paper_ids=["p1", "p2"]),
+        Cluster(key="MESH:D1|MESH:D3", paper_ids=["p1"]),
+    ]
+
+    answer, report = synthesis_stage(clusters, records, papers)
+
+    assert answer is not None
+    assert answer.count("Finding for p1.") == 1
+    assert answer.count("Finding for p2.") == 1
+    assert report.noted == {"repeat_appearance": 1}
+    assert report.n_out == 2
+
+
+def test_synthesis_stage_notes_no_repeats_when_every_paper_appears_once():
+    cluster = Cluster(key="MESH:D1|MESH:D2", paper_ids=["p1"])
+    papers = {"p1": _paper("p1", "irrelevant", allowed=True)}
+    records = {"p1": ExtractedRecord(paper_id="p1")}
+
+    _answer, report = synthesis_stage([cluster], records, papers)
+
+    assert report.noted == {}

@@ -17,6 +17,7 @@ from biolit.domain.paper import Paper
 from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit.extract.base import build_record
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
+from biolit.query.concepts import QueryConcepts, cluster_matches
 from biolit.state.pipeline import StageReport, StageStatus
 from biolit.synth.template import render_cluster
 
@@ -25,6 +26,7 @@ NER_LINKING = "ner_linking"
 LICENCE_GATE = "licence_gate"
 EXTRACT = "extract"
 CLUSTER = "cluster"
+SELECT = "select"
 CRITIC = "critic"
 SYNTHESIS = "synthesis"
 
@@ -194,6 +196,64 @@ def cluster_stage(
     )
 
 
+def select_stage(
+    clusters: Sequence[Cluster], concepts: QueryConcepts
+) -> tuple[list[Cluster], StageReport]:
+    """Keep only clusters sharing a MeSH concept with the question. THE ONLY STAGE THAT
+    CONSULTS THE QUERY after `esearch`.
+
+    Before this existed, `PipelineState.question` was write-only: set once in `__main__` and
+    read by nothing, so every cluster retrieval happened to produce went into the answer. On
+    the frozen corpus that shipped `Creatinine | Hyperkalemia` and `Potassium | Acute Kidney
+    Injury` inside the answer to "metformin and lactic acidosis", and `Amiodarone |
+    Incontinentia Pigmenti` -- an abbreviation mislink -- inside the amiodarone one.
+
+    ⚠️ MEASURED EFFECT, so nobody over-reads this stage: it keeps 70 of the 83 clusters in
+    the frozen corpus. It removes off-topic material from the tail; it does NOT fix which
+    cluster leads. "isotretinoin and depression" keeps 5 of 5 and still opens on `Isotretinoin
+    | Acne Vulgaris`, because leading is an ORDERING property and `render_cluster` deliberately
+    carries no ranking. Ordering is a separate decision and needs its own ADR.
+
+    FAIL-OPEN on a query that resolved to nothing, because filtering on an empty concept set
+    drops everything -- an untranslatable query would return no answer rather than an
+    unfiltered one. It is `noted`, never silent.
+    """
+    if not concepts.ids:
+        return list(clusters), StageReport(
+            name=SELECT,
+            status=StageStatus.completed,
+            n_in=len(clusters),
+            unit_in="clusters",
+            n_out=len(clusters),
+            unit_out="clusters",
+            noted={"query_unlinked": 1},
+            note=(
+                "FAIL-OPEN: the question resolved to no MeSH concept, so clusters are "
+                "unfiltered. Filtering on an empty concept set would drop every cluster and "
+                f"return no answer at all. Unlinked terms: {', '.join(concepts.unresolved)}."
+            ),
+        )
+    kept = [cluster for cluster in clusters if cluster_matches(cluster, concepts)]
+    dropped = len(clusters) - len(kept)
+    return kept, StageReport(
+        name=SELECT,
+        status=StageStatus.completed,
+        n_in=len(clusters),
+        unit_in="clusters",
+        n_out=len(kept),
+        unit_out="clusters",
+        # NO RESCUE when this empties the list. Falling back to the unfiltered clusters
+        # whenever the filter keeps nothing would be a hidden threshold, and it would hide
+        # the one case a reader most needs to see. `synthesis_stage` renders an empty list as
+        # `answer is None`, which is a truthful "nothing here answers that".
+        dropped={"off_query": dropped} if dropped else {},
+        note=(
+            f"Kept clusters sharing a concept with the question "
+            f"({', '.join(sorted(concepts.evidence.values()))})."
+        ),
+    )
+
+
 def critic_stub(n_clusters: int) -> StageReport:
     """Reports that the Critic does not exist. Emits no ContradictionFinding, ever."""
     return StageReport(
@@ -229,7 +289,13 @@ def synthesis_stage(
     exists and nothing consumes it, and emitting rows no reader uses is the infrastructure
     ADR-0013 asks for a demonstrated consumer before adding.
     """
-    rendered = [render_cluster(cluster, records, papers) for cluster in clusters]
+    cited: set[str] = set()
+    repeats = 0
+    rendered: list[str] = []
+    for cluster in clusters:
+        rendered.append(render_cluster(cluster, records, papers, already_cited=cited))
+        repeats += sum(1 for paper_id in cluster.paper_ids if paper_id in cited)
+        cited.update(cluster.paper_ids)
     answer = "\n\n".join(rendered) if rendered else None
     return answer, StageReport(
         name=SYNTHESIS,
@@ -238,5 +304,10 @@ def synthesis_stage(
         unit_in="clusters",
         n_out=len(rendered),
         unit_out="answers",
+        # NOTED, not dropped: nothing leaves the pipeline. The paper is still a member of
+        # every cluster it appears in and still carries its stamp there; only the repeated
+        # QUOTATION is replaced. Counting it makes the shrinkage auditable -- on the frozen
+        # metformin run this is 69 of 129 paper-appearances.
+        noted={"repeat_appearance": repeats} if repeats else {},
         note="Deterministic template (ADR-0019). Citation assembly is not yet built.",
     )
