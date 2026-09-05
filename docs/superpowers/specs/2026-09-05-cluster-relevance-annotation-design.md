@@ -184,6 +184,42 @@ The **measured** case for reopening it is already strong and does not depend on 
 selection keeps 70 of 83 clusters and does not change what an answer leads with. "isotretinoin
 and depression" keeps 5 of 5 and still opens on `Isotretinoin | Acne Vulgaris`.
 
+### 7.1 A tighter filter was tried and refuted (2026-09-05)
+
+Before conceding that ordering is required, the stronger form of the filter was measured:
+**require the cluster's disease side to match a disease-side concept of the query**, falling
+back to today's any-side OR only when the query has no disease concept even through NCBI.
+Disease-side membership came from the existing unused `data/canon/concept_labels.json.gz`.
+
+It fails, and it fails in three separate ways:
+
+| | any-side OR | disease-required |
+|---|---|---|
+| clusters kept (of 83) | 70 | **33** |
+| queries returning an **empty answer** | 0 | **2 of 8** |
+| queries whose lead cluster changed | — | **0 of 8** |
+
+1. ⛔ **It empties two answers.** `isotretinoin and depression` keeps **0 of 5**: NCBI resolves
+   the query to `Depressive Disorder` (D003866) while the clusters carry `Mental Disorders`,
+   `Anxiety Disorders` and `Psychotic Disorders` — siblings and parents, never D003866.
+   `lithium and thyroid dysfunction` keeps **0 of 7**: the query resolves to `Thyroiditis`, the
+   clusters are `Hypothyroidism` and `Hyperthyroidism`. **The fail-open guard does not fire in
+   either case, because the disease side did resolve — it just resolved to a different node of
+   the same hierarchy.** This is DEF-0002's root cause reaching a second consumer.
+2. **It drops clusters that are plainly on-query**: `Metformin | Acute Kidney Injury` (9
+   papers, a core complication of metformin-associated lactic acidosis), `HMG-CoA reductase
+   inhibitors | Myalgia` (8) and `| Muscular Diseases` (8) for statins/rhabdomyolysis,
+   `Warfarin | Stroke` for warfarin/bleeding risk — the risk actually being traded off.
+3. ⭐ **It changes the lead on zero queries.** metformin still opens on `Bicarbonates |
+   Acidosis`; warfarin still opens on `Heparin | Hemorrhage`.
+
+Point 3 is the structural one, and it is why no filter of any strictness can close this gap.
+Clusters are emitted in `sorted(by_key)` order, so the lead is **whichever surviving cluster
+has the alphabetically smallest MeSH descriptor id** — `Bicarbonates` D001639 sorts before
+`Metformin` D008687, `Heparin` D006493 before `Warfarin` D014859. A filter changes which
+clusters survive; it cannot change the sort. Relevance and MeSH-id collation are uncorrelated
+by construction, so **the lead is fixable only by ordering.**
+
 What these labels add is the missing quantity: **how many kept clusters are `background` rather
 than `answers`, and how often a `background` cluster currently precedes an `answers` one under
 MeSH-id ordering.** That is computable from the labels with no extra annotation, it is the exact
