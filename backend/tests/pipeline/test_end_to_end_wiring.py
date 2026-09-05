@@ -8,7 +8,7 @@ from biolit.pipeline.stages import (
     entities_stage,
     records_stage,
     retrieve_stage,
-    synthesis_stub,
+    synthesis_stage,
 )
 from biolit.state.pipeline import PipelineState, StageStatus
 
@@ -76,7 +76,9 @@ def test_the_whole_pipeline_runs_and_the_ledger_accounts_for_every_paper():
     state.clusters = clusters
     state.stages.append(cluster_report)
     state.stages.append(critic_stub(len(clusters)))
-    state.stages.append(synthesis_stub())
+    answer, synthesis_report = synthesis_stage(clusters, outcome.records, {p.id: p for p in papers})
+    state.answer = answer
+    state.stages.append(synthesis_report)
 
     assert set(state.extracted_records) == {"a", "b"}
     assert [c.paper_ids for c in state.clusters] == [["a", "b"]]
@@ -84,15 +86,22 @@ def test_the_whole_pipeline_runs_and_the_ledger_accounts_for_every_paper():
     by_name = {stage.name: stage for stage in state.stages}
     assert by_name["licence_gate"].dropped == {"licence_refused:none": 1}
     assert by_name["critic"].status is StageStatus.not_implemented
-    assert by_name["synthesis"].status is StageStatus.not_implemented
+    # ADR-0019: synthesis is implemented now; the Critic remains retired.
+    assert by_name["synthesis"].status is StageStatus.completed
+    assert state.answer is not None
+    assert "PMID a" in state.answer and "PMID b" in state.answer
 
 
-def test_both_unimplemented_stages_survive_the_json_dump():
+def test_the_retired_critic_survives_the_json_dump_as_not_implemented():
     """The requirement most likely to regress silently, so it gets its own test: a machine
-    reader of the dump must see not_implemented rather than an empty contradictions list."""
-    state = PipelineState(question="q", stages=[critic_stub(0), synthesis_stub()])
+    reader of the dump must see not_implemented rather than an empty contradictions list.
+    ADR-0019 implemented synthesis, so only the Critic is left to make this claim -- and it
+    matters more now, not less: a dump carrying a real synthesis answer alongside an empty
+    contradictions list is exactly where a reader might infer "no contradictions found"."""
+    _, synthesis_report = synthesis_stage([], {}, {})
+    state = PipelineState(question="q", stages=[critic_stub(0), synthesis_report])
     payload = state.model_dump(mode="json")
     statuses = {stage["name"]: stage["status"] for stage in payload["stages"]}
-    assert statuses == {"critic": "not_implemented", "synthesis": "not_implemented"}
+    assert statuses == {"critic": "not_implemented", "synthesis": "completed"}
     assert payload["contradictions"] == []
     assert payload["answer"] is None

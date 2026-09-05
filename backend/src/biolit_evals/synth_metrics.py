@@ -9,6 +9,27 @@ THE SUITE IS DELIBERATELY ASYMMETRIC. Support and coverage are DISQUALIFIERS for
 arm, not scores: the template scores 1.0 on both by construction, so comparing the arms
 there would be a score one arm cannot lose -- ADR-0015's tautology from the other side. Only
 compression against `dcr` is comparative.
+
+===============================================================================
+⛔ `dcr` AND `compression` ARE RETIRED AS DECISION CRITERIA (ADR-0019). ⛔
+They still compute what their docstrings say. They CANNOT rank characterisation
+quality, and nothing may treat them as though they can.
+
+`dcr` marks a paper retained if ANY of its distinguishing tokens survives, and papers carry
+a MEDIAN OF 19 such tokens. Measured on the frozen sample, an arm keeping 1, 2, 3 or 5
+tokens per paper scores DCR 1.0000 every time. Its entire dynamic range lies between "zero
+words about this paper" and "one word about this paper" -- it is a second coverage metric,
+not a retention metric. `compression` has no content floor and rewards brevity monotonically.
+
+Together they rank outputs in the OPPOSITE order to their quality. An `index` arm emitting
+"PMID x: <one word>" per paper scores coverage 1.0, hallucinated 0, DCR 1.0 and compression
+0.0516 against the template's 1.1417 -- it characterises nothing and dominates on both
+comparative axes. A genuine synthesis fails the §3.1 tolerance on 28 of 30 clusters.
+
+Retained, not deleted: they are the evidence for ADR-0019 and the frozen run log is only
+readable with them present. Report them as DESCRIPTIVE only, always beside the itemised
+lists. Anyone tempted to revive them as a gate should read ADR-0019 first.
+===============================================================================
 """
 
 import re

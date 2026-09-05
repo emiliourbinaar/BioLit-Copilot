@@ -18,6 +18,7 @@ from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit.extract.base import build_record
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
 from biolit.state.pipeline import StageReport, StageStatus
+from biolit.synth.template import render_cluster
 
 RETRIEVE = "retrieve"
 NER_LINKING = "ner_linking"
@@ -206,14 +207,36 @@ def critic_stub(n_clusters: int) -> StageReport:
     )
 
 
-def synthesis_stub() -> StageReport:
-    """Unimplemented for a different reason than the Critic: never built, not retired."""
-    return StageReport(
+def synthesis_stage(
+    clusters: Sequence[Cluster],
+    records: Mapping[str, ExtractedRecord],
+    papers: Mapping[str, Paper],
+) -> tuple[str | None, StageReport]:
+    """Render every cluster with the deterministic template. THIS IS THE SYNTHESIS STAGE.
+
+    ADR-0019. Gate A set out to decide whether an LLM arm earns this slot and could not,
+    because its two comparative axes -- DCR and compression -- cannot separate a better
+    characterisation from a shorter one. No LLM arm was ever bought; the failure was found
+    for $0. The template ships because it is the only option that requires no unjustifiable
+    judgment call, and because everything it says is traceable to a source sentence.
+
+    It makes no agreement or disagreement claim between papers, per ADR-0018, and it invents
+    nothing: measured over 30 real clusters, support 1.0, coverage 1.0, entity hallucinations
+    0, and no judgment vocabulary it was not handed.
+
+    `answer` is None rather than "" for an empty cluster list, so a caller can tell "nothing
+    to synthesise" from "synthesised nothing". CITATION ASSEMBLY IS STILL NOT BUILT: `Citation`
+    exists and nothing consumes it, and emitting rows no reader uses is the infrastructure
+    ADR-0013 asks for a demonstrated consumer before adding.
+    """
+    rendered = [render_cluster(cluster, records, papers) for cluster in clusters]
+    answer = "\n\n".join(rendered) if rendered else None
+    return answer, StageReport(
         name=SYNTHESIS,
-        status=StageStatus.not_implemented,
-        n_in=0,
+        status=StageStatus.completed,
+        n_in=len(clusters),
         unit_in="clusters",
-        n_out=0,
+        n_out=len(rendered),
         unit_out="answers",
-        note="Answer synthesis and citation assembly are not yet built.",
+        note="Deterministic template (ADR-0019). Citation assembly is not yet built.",
     )
