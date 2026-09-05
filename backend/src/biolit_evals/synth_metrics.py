@@ -12,6 +12,7 @@ compression against `dcr` is comparative.
 """
 
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -117,6 +118,56 @@ def support_rate(output: str, source: SourceView) -> Support:
 #: truncation is a real limitation and is reported rather than hidden.
 MAX_ALIAS_WORDS = 6
 
+#: Greek letters spelled out, because biomedical prose writes the same entity both ways and
+#: the two must reach the same alias key. `unicodedata` cannot do this: NFKD leaves β as β,
+#: since "beta" is a NAME rather than a decomposition. Only the letters that actually occur in
+#: this literature are mapped; an unmapped letter still folds to nothing and simply fails to
+#: match, which is the safe direction (a miss, never a false hallucination).
+_GREEK = {
+    "α": "alpha",
+    "β": "beta",
+    "γ": "gamma",
+    "δ": "delta",
+    "ε": "epsilon",
+    "ζ": "zeta",
+    "η": "eta",
+    "θ": "theta",
+    "ι": "iota",
+    "κ": "kappa",
+    "λ": "lambda",
+    "μ": "mu",
+    "ν": "nu",
+    "ξ": "xi",
+    "π": "pi",
+    "ρ": "rho",
+    "σ": "sigma",
+    "τ": "tau",
+    "υ": "upsilon",
+    "φ": "phi",
+    "χ": "chi",
+    "ψ": "psi",
+    "ω": "omega",
+}
+
+#: Every Unicode dash, folded to ASCII hyphen: en/em dashes are common in copy-edited
+#: abstracts and would otherwise split a token that a hyphen would have held together.
+_DASHES = re.compile(r"[‐-―−]")
+
+
+def _fold(text: str) -> str:
+    """ASCII-fold `text` so the same entity written two ways reaches one key (Ruling 29).
+
+    Greek letters first (they are named, not decomposed), then NFKD with combining marks
+    dropped so "café"/"cafe" agree, then dashes. Applied on BOTH sides via `_alias_words`,
+    for the Ruling 6 reason: normalising one side is the drift that made 37.57% of aliases
+    unmatchable.
+    """
+    text = "".join(_GREEK.get(c, c) for c in text)
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return _DASHES.sub("-", text)
+
+
 _WORD_SPLIT = re.compile(r"[^a-z0-9\-]+")
 
 
@@ -146,7 +197,7 @@ def _alias_words(text: str) -> list[str]:
     # ("10 perfluorohexyl decanol", "3 4 dihydroxyflavone") -- the same population
     # MAX_ALIAS_WORDS already truncates, for the same reason: no synthesis prose contains it.
     # Internal hyphens are untouched, so "non-hodgkin" and "il-6" keep their exact keys.
-    return [w for w in (w.strip("-") for w in _WORD_SPLIT.split(text.lower())) if w]
+    return [w for w in (w.strip("-") for w in _WORD_SPLIT.split(_fold(text).lower())) if w]
 
 
 def mesh_concepts(text: str, aliases: Mapping[str, str]) -> set[str]:
@@ -272,8 +323,19 @@ def coverage(output: str, cluster: Cluster, papers: Mapping[str, Paper]) -> Cove
         if paper.year is not None and paper.journal is not None:
             journal_words = _alias_words(paper.journal)
             key = (paper.year, tuple(journal_words))
-            if year_journal_counts[key] == 1 and _contains_phrase(output_words, [str(paper.year)]):
-                return _contains_phrase(output_words, journal_words)
+            # ADJACENT, in either order (Ruling 31). Checking the year and the journal
+            # INDEPENDENTLY closed bulk credit but left the cross-product open: a year
+            # donated by one paper and a journal donated by another credited a third the
+            # output never named. Measured on the frozen sample, that let 5 papers be omitted
+            # with coverage still reading 1.000, one of them turning a true 0.889 -- below
+            # the 0.90 disqualifier -- into a pass. Requiring one contiguous run ties the two
+            # halves to a single mention. Both orders are accepted because prose writes both
+            # ("the 2019 Lancet study", "Lancet 2019").
+            year_words = [str(paper.year)]
+            if year_journal_counts[key] == 1:
+                return _contains_phrase(
+                    output_words, year_words + journal_words
+                ) or _contains_phrase(output_words, journal_words + year_words)
         return False
 
     missing = tuple(pid for pid in cluster.paper_ids if not _identified(pid))
@@ -491,9 +553,31 @@ def judgment_volunteered(output: str, source: SourceView) -> tuple[str, ...]:
     verbatim source, and none of its boilerplate ("papers", "PMID", "no finding sentence
     extracted") is judgment vocabulary. A non-zero value there means the template has begun
     generating prose.
+
+    ⚠️ MEMBERSHIP IS NOT USE (Ruling 30). An earlier form subtracted any word appearing
+    ANYWHERE in the source, which left a laundering path through exactly the clusters where
+    it matters: an arm writing "the findings are consistent across these studies" over a
+    corpus whose papers say "consistent with rhabdomyolysis" returned (), and the headline
+    read 0. Measured at 10/30 clusters on the frozen sample -- a third of it. A term is now
+    treated as GIVEN only when the arm's local bigram also occurs in the source, so quoting
+    is exempt and repurposing is not. The template still scores 0 by construction, because
+    quoting verbatim reproduces the source's bigrams exactly.
     """
-    given = set(_judgment_words(source.text))
-    return tuple(w for w in judgment_language(output) if w not in given)
+    out_words = _judgment_words(output)
+    src_words = _judgment_words(source.text)
+    given_bigrams = set(zip(src_words, src_words[1:], strict=False))
+    matched = set(judgment_language(output))
+
+    volunteered = set()
+    for i, word in enumerate(out_words):
+        if word not in matched:
+            continue
+        quoted = (i > 0 and (out_words[i - 1], word) in given_bigrams) or (
+            i + 1 < len(out_words) and (word, out_words[i + 1]) in given_bigrams
+        )
+        if not quoted:
+            volunteered.add(word)
+    return tuple(sorted(volunteered))
 
 
 def compression(output: str, source: SourceView) -> float:

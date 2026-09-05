@@ -30,6 +30,18 @@ def _paper(pid: str, year: int = 2010) -> Paper:
     )
 
 
+def _paper_yj(pid: str, year: int, journal: str) -> Paper:
+    return Paper(
+        id=pid,
+        source=Source.pubmed,
+        pmid=None,
+        title=f"Title {pid}",
+        text_type=TextType.abstract_only,
+        year=year,
+        journal=journal,
+    )
+
+
 def _record(pid: str, *sentences: str) -> ExtractedRecord:
     return ExtractedRecord(
         paper_id=pid,
@@ -419,14 +431,65 @@ def test_a_greek_suffixed_entity_the_source_named_is_not_counted_as_hallucinated
     form was reported as inventing it -- a false positive on the ONE hard disqualifier that
     must be exactly 0. Measured on the frozen corpus: 9 such tokens, including tnf-, tgf-
     and nf-, three of the most common entities in this literature.
+
+    ⚠️ The Greek exemplar this test originally used is SUPERSEDED by Ruling 29 and moved to
+    its own test. Folding resolves "TNF-α" to `tnf-alpha` -> D014409, the correct specific
+    concept, rather than crushing it to the broader `tnf` -> D014923 as the strip alone did.
+    The strip is still load-bearing for hyphens orphaned by anything folding does not repair
+    -- six such tokens survive on the real corpus, among them "-induced" and "depressive-" --
+    and a trailing hyphen from PDF line-break hyphenation is the plainest instance.
     """
     cluster, records, papers = _fixture(
-        p1="Serum TNF-α rose sharply after treatment.",
+        p1="Serum TNF- rose sharply after treatment.",
         p2="Ovulation rose.",
     )
     source = build_source_view(cluster, records, papers)
 
     assert hallucinated_concepts("TNF was elevated.", source, {"tnf": "D014923"}) == ()
+
+
+def test_coverage_does_not_credit_a_paper_from_a_year_and_journal_borrowed_from_others():
+    """Ruling 31. Ruling 12 closed BULK credit, where several papers share one (year,
+    journal) pair. It did not close the CROSS-PRODUCT: the year and the journal were checked
+    independently, so a year donated by one paper and a journal donated by another credited a
+    third that the output never mentioned. All three pairs below are unique, so Ruling 12's
+    guard does not engage at all.
+
+    Live on the frozen sample this let 5 papers be omitted entirely while coverage still read
+    1.000, one of them converting a true 0.889 -- BELOW the 0.90 disqualifier -- into a pass.
+    A disqualifier that cannot fire, which is the shape this harness exists to catch, and
+    template-invisible because the template cites every PMID.
+    """
+    papers = {
+        "1": _paper_yj("1", 2019, "Lancet"),
+        "2": _paper_yj("2", 2019, "N Engl J Med"),
+        "3": _paper_yj("3", 2021, "Lancet"),
+    }
+    cluster = Cluster(key="a|b", paper_ids=["1", "2", "3"])
+
+    got = coverage("The 2019 N Engl J Med report and the 2021 Lancet report.", cluster, papers)
+
+    assert got.missing == ("1",)
+
+
+def test_an_ascii_rendering_of_a_greek_lettered_entity_is_not_hallucinated():
+    """Ruling 29. Ruling 28 stripped DANGLING hyphens, which fixed a Greek letter in final
+    position ("TNF-α") and closed the entry -- but the CLASS stayed open for a non-ASCII
+    character in INTERIOR position. "TGF-β1" tokenised to `tgf` with the `1` orphaned, so the
+    source read as never naming D053773, and an arm writing `TGF-beta1` -- the standard ASCII
+    rendering, and what a plain-text model routinely emits -- was reported as inventing it.
+    Hard disqualifier, must be exactly 0, and template-invisible: the control quotes verbatim
+    so its surface forms always match, and `hallucinated_total` stayed 0 either way.
+    """
+    cluster, records, papers = _fixture(
+        p1="Serum TGF-β1 rose after treatment.",
+        p2="Ovulation rose.",
+    )
+    source = build_source_view(cluster, records, papers)
+    aliases = {"tgf-beta1": "D053773"}
+
+    assert hallucinated_concepts("TGF-beta1 was elevated.", source, aliases) == ()
+    assert hallucinated_concepts("TGF-β1 was elevated.", source, aliases) == ()
 
 
 def test_judgment_volunteered_excludes_vocabulary_the_source_itself_used():
@@ -455,6 +518,14 @@ def test_judgment_volunteered_excludes_vocabulary_the_source_itself_used():
 
     volunteered = "The two papers contradict each other."
     assert judgment_volunteered(volunteered, source) == ("contradict",)
+
+    # Ruling 30. The laundering path: the arm makes an epistemic claim using a word the
+    # corpus happens to use CLINICALLY. Bare membership cannot see it -- "consistent" is in
+    # the source, so subtraction returns () and the headline reads 0. Measured at 10/30
+    # clusters on the frozen sample, i.e. a third of the gate's sample.
+    laundered = "The findings are consistent across these studies."
+    assert judgment_language(laundered) == ("consistent",)
+    assert judgment_volunteered(laundered, source) == ("consistent",)
 
 
 def test_dcr_with_a_lower_min_token_len_retains_a_short_marker_the_default_floor_drops():

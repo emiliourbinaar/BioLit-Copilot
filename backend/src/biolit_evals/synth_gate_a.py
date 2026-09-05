@@ -27,6 +27,7 @@ def main(argv: list[str] | None = None) -> None:
     from biolit_evals._meta import git_sha
     from biolit_evals.synth_corpus import band_for, sample_clusters, sample_hash
     from biolit_evals.synth_metrics import (
+        build_source_view,
         dcr,
         load_aliases,
         mesh_concepts,
@@ -106,6 +107,12 @@ def main(argv: list[str] | None = None) -> None:
                 # disagree materially that is reported, not hidden.
                 "dcr_rate_floor3": dcr(output, cluster, records, min_token_len=3).rate,
                 "compression": score.compression,
+                # Ruling 32. `compression` returns 0.0 for a cluster with no extracted
+                # findings -- a sentinel, not a measurement -- so the pooled mean needs
+                # to exclude those rows for exactly the reason `dcr_mean` excludes
+                # zero-scorable ones. Logged as a length so the exclusion is visible in
+                # the row rather than inferred from a magic 0.0.
+                "findings_chars": len(build_source_view(cluster, records, papers).findings_text),
                 "hallucinated": list(score.hallucinated),
                 "judgment_terms": list(score.judgment_terms),
                 # Ruling 27. Both, always. `judgment_terms` carries the corpus's own
@@ -140,6 +147,18 @@ def main(argv: list[str] | None = None) -> None:
         values = [r[field] for r in subset]
         return statistics.fmean(values) if values else None
 
+    def compression_mean(subset: list[dict]) -> float | None:
+        """Ruling 32. Ruling 17's argument, transferred to the other comparative axis -- it
+        was made for DCR and never carried across, though it holds word for word. A cluster
+        with no extracted findings has no denominator, so `compression` returns the 0.0
+        sentinel its own docstring names; that value depends only on the corpus, never on the
+        output, so it hands BOTH arms the same number and compresses the arm gap. Measured on
+        a synthetic corpus that exercises the path: 1.108 with the sentinels averaged in
+        against 1.846 without, a 40% distortion. Latent on the frozen sample, which has no
+        such cluster, and that is precisely why it needed transferring rather than waiting."""
+        values = [r["compression"] for r in subset if r["findings_chars"] > 0]
+        return statistics.fmean(values) if values else None
+
     def dcr_mean(subset: list[dict]) -> float | None:
         """Ruling 17. A cluster with no scorable papers returns rate 1.0, and `scorable`
         depends only on the cluster and its records -- never on the output -- so such a
@@ -156,7 +175,7 @@ def main(argv: list[str] | None = None) -> None:
             "support_rate": mean("support_rate", [r for r in rows if r["band"] == band]),
             "coverage_rate": mean("coverage_rate", [r for r in rows if r["band"] == band]),
             "dcr_rate": dcr_mean([r for r in rows if r["band"] == band]),
-            "compression": mean("compression", [r for r in rows if r["band"] == band]),
+            "compression": compression_mean([r for r in rows if r["band"] == band]),
             # Ruling 19. Without these a reader sees a high `dcr_rate` on the large band and
             # cannot tell real retention from a collapsed denominator -- and the large band is
             # where sibling papers most often share vocabulary, so collapse concentrates
@@ -188,7 +207,7 @@ def main(argv: list[str] | None = None) -> None:
             )
             if any(r["dcr_scorable"] > 0 for r in rows)
             else None,
-            "compression": mean("compression", rows),
+            "compression": compression_mean(rows),
         },
         "per_band": per_band,
         "hallucinated_total": sum(len(r["hallucinated"]) for r in rows),
@@ -197,6 +216,7 @@ def main(argv: list[str] | None = None) -> None:
         "dcr_indistinguishable_papers": sum(len(r["dcr_indistinguishable"]) for r in rows),
         "dcr_no_findings_papers": sum(len(r["dcr_no_findings"]) for r in rows),
         "dcr_zero_scorable_clusters": sum(1 for r in rows if r["dcr_scorable"] == 0),
+        "compression_excluded_clusters": sum(1 for r in rows if r["findings_chars"] == 0),
         "journal_alias_clusters": sum(1 for r in rows if r["journal_alias_concepts"]),
     }
     with Path(args.log).open("a", encoding="utf-8") as fh:
