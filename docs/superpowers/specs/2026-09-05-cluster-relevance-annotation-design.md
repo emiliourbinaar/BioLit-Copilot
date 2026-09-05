@@ -167,7 +167,9 @@ Distractors and `cant_tell` rows are excluded throughout.
 
 - **4a — lead correctness (the user-visible property).** For each query, does the ranker's
   first cluster belong to that query's highest non-empty label tier? Reported as a count out
-  of the number of **informative** queries, listed by name, with the baseline alongside:
+  of the number of **informative** queries, listed by name, and ⛔ **split into the three
+  queries whose current leads were pre-judged during design and the rest — see §8.1, which
+  requires that split at every point of use**, with the baseline alongside:
   under today's MeSH-id sort the lead is `background`-or-worse on at least three of eight
   (`Isotretinoin | Acne Vulgaris`, `Bicarbonates | Acidosis`, `Heparin | Hemorrhage`).
 - **4b — tier inversions.** Count of cluster pairs the ranker places in the opposite order to
@@ -291,6 +293,50 @@ and they are not a substitute for independence. **No inter-annotator agreement f
 computed from this pass, and none should be quoted.** The honest description is: a structured,
 blinded, single-annotator sanity check over a complete population, with a control that says
 whether the labels track their definitions.
+
+⛔ **A SHARPER LIMITATION THAN THE GENERAL ONE ABOVE, AND THE MORE DAMAGING OF THE TWO.
+Specific clusters have already been named and discussed as known failing examples, in this
+design process, before any label exists — and they are disproportionately the rows that will
+drive Gate 4a.**
+
+This is not the generic non-independence caveat spread evenly across 83 rows. It is a
+**concentrated prior judgment** on a handful of rows that carry unusual leverage:
+
+- **`Isotretinoin | Acne Vulgaris`**, **`Bicarbonates | Acidosis`** and **`Heparin |
+  Hemorrhage`** have each been named repeatedly, by name, as *the wrong thing to lead with*.
+  They are the current leads of three of the eight queries. **Gate 4a's denominator is 5–8
+  queries after §5's 4c exclusions, so a pre-judged lead on three queries is a prior on
+  something like half of that gate's evidence.**
+- A further set has been named in argument as clusters a filter *should* have kept —
+  `Metformin | Acute Kidney Injury`, `HMG-CoA reductase inhibitors | Myalgia` and
+  `| Muscular Diseases`, `Warfarin | Stroke`, `Aspirin | Hemorrhage`, `SSRI | Hemorrhage`,
+  `Lactic Acid | Acidosis` — and the isotretinoin and lithium cluster sets were enumerated in
+  full while arguing that the tightened filter wrongly emptied them.
+- Weaker but real: **all 83 clusters have appeared by name in printed listings** during this
+  work, so no row is being seen for the first time at labelling.
+- The MeSH tree distances from `Depressive Disorder` and `Thyroiditis` to their competing
+  clusters were computed and reported *before* labelling, so the ranker's likely behaviour on
+  the flagship cases is already known to the annotator.
+
+**Consequence, and it is not fully mitigable.** Blinding to the filter's decision does nothing
+here: the contamination is not knowledge of what `select_stage` did, it is a remembered
+argument about what these particular clusters *ought* to be. Shuffling does not help either,
+since the bias is attached to the cluster's identity, not its position.
+
+**What this means for how the readings may be used.** Gate 3's membership numbers are affected
+least — they run over all 83 rows, most of which carry no specific prior. **Gate 4a is affected
+most, and its reading must be reported with this limitation attached every time it is
+quoted.** ⛔ **A Gate 4a result that merely confirms the three pre-judged leads should be
+treated as the weakest possible evidence — it is close to checking whether the ranker agrees
+with an opinion already formed and written down.** The informative part of Gate 4a is
+therefore the queries whose leads have *not* been discussed: `cisplatin nephrotoxicity`,
+`NSAIDs and gastrointestinal bleeding`, `statins and rhabdomyolysis`, `amiodarone pulmonary
+toxicity`. **Those should be reported separately from the three pre-judged ones**, and if the
+gate is read as a single pooled number the pooling must be called out.
+
+The genuinely clean fix is a second annotator with no exposure to this process, which is not
+available. **The available fix is to say so at every point of use rather than to discount it
+once here**, which is what the paragraph above requires.
 
 ### 8.2 The MeSH-indexing cross-check is a candidate, not a shortcut
 
