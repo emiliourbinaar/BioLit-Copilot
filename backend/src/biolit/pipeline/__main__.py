@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> None:
         entities_stage,
         records_stage,
         retrieve_stage,
-        synthesis_stub,
+        synthesis_stage,
     )
     from biolit.state.pipeline import PipelineState
 
@@ -78,12 +78,19 @@ def main(argv: list[str] | None = None) -> None:
     state.stages.append(cluster_report)
 
     state.stages.append(critic_stub(len(clusters)))
-    state.stages.append(synthesis_stub())
+    answer, synthesis_report = synthesis_stage(
+        clusters, outcome.records, {paper.id: paper for paper in papers}
+    )
+    state.answer = answer
+    state.stages.append(synthesis_report)
 
     print(f"query: {args.query!r}\n")
     print(render_report(state.stages))
     for cluster in clusters:
         print(f"\ncluster {cluster.key}: {', '.join(cluster.paper_ids)}")
+
+    if answer:
+        print(f"\n{answer}")
 
     if args.json_out:
         Path(args.json_out).write_text(state.model_dump_json(indent=2), encoding="utf-8")

@@ -8,7 +8,7 @@ from biolit.pipeline.stages import (
     entities_stage,
     records_stage,
     retrieve_stage,
-    synthesis_stub,
+    synthesis_stage,
 )
 from biolit.state.pipeline import StageStatus
 
@@ -169,10 +169,43 @@ def test_critic_stub_reports_not_implemented_and_points_at_the_adr():
     assert "ADR-0017" in (report.note or "")
 
 
-def test_synthesis_stub_says_not_yet_built_rather_than_citing_a_decision():
-    """Synthesis is unimplemented for a DIFFERENT reason than the Critic: no ADR retired
-    it, it was simply never built. Dressing that up as a decision would misrepresent the
-    project's own record."""
-    report = synthesis_stub()
-    assert report.status is StageStatus.not_implemented
-    assert "ADR" not in (report.note or "")
+def test_synthesis_stage_renders_every_cluster_and_reports_completed():
+    """ADR-0019. Synthesis is no longer a stub: the deterministic template IS the stage.
+    Gate A could not demonstrate an LLM advantage over it -- not because the LLM lost, but
+    because the checkable axes could not tell "better" from "shorter", so no arm was ever
+    bought. The template ships as the only option needing no unjustifiable judgment call.
+    """
+    from biolit.domain.records import Cluster, Finding
+
+    papers = {
+        "p1": _paper("p1", "irrelevant", allowed=True),
+        "p2": _paper("p2", "irrelevant", allowed=True),
+    }
+    records = {
+        pid: ExtractedRecord(
+            paper_id=pid,
+            key_findings=[Finding(text=f"Finding for {pid}.", start=0, end=1, sentence_index=0)],
+        )
+        for pid in papers
+    }
+    clusters = [Cluster(key="MESH:D1|MESH:D2", paper_ids=["p1", "p2"])]
+
+    answer, report = synthesis_stage(clusters, records, papers)
+
+    assert report.status is StageStatus.completed
+    assert report.n_in == 1
+    assert report.n_out == 1
+    assert answer is not None
+    assert "Finding for p1." in answer
+    assert "Finding for p2." in answer
+
+
+def test_synthesis_stage_returns_no_answer_when_there_is_nothing_to_synthesise():
+    """Zero clusters is the ordinary outcome of a narrow query, not an error. `answer` stays
+    None rather than becoming an empty string, so a caller can tell "nothing to say" from
+    "said nothing"."""
+    answer, report = synthesis_stage([], {}, {})
+
+    assert answer is None
+    assert report.status is StageStatus.completed
+    assert report.n_out == 0
