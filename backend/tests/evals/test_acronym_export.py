@@ -256,3 +256,28 @@ def test_rows_hash_tracks_content_not_order():
 
     assert rows_hash(rows) == rows_hash(list(reversed(rows)))
     assert rows_hash(rows) != rows_hash(rows[:-1])
+
+
+def test_controls_avoid_disclosed_surfaces_and_disclosed_concepts_on_both_sides():
+    """§7.1. Gate 2 is the instrument that makes every other reading attributable, so a control
+    the annotator can reject from MEMORY rather than from the text corrupts the one gate the
+    pass cannot afford to lose.
+
+    Both sides are excluded, and the second is the less obvious one. A control on a disclosed
+    SURFACE is rejectable because the annotator was told what it means. A control wearing a
+    disclosed CONCEPT is rejectable because they were told that concept is a known bogus
+    linking target -- recognising `Aphakia, congenital primary` from the `CPA` discussion primes
+    the same reflex without a word of the passage being read.
+    """
+    pairs = [_pair(f"S{i}", concept_id=f"MESH:D{i:05d}", concept_name=f"C{i}") for i in range(12)]
+    shown = {"S0", "S1", "S2"}
+    shown_concepts = {"MESH:D00003", "MESH:D00004"}
+
+    controls = choose_controls(
+        pairs, n=4, seed=7, exclude_surfaces=shown, exclude_concepts=shown_concepts
+    )
+
+    assert len(controls) == 4
+    for control in controls:
+        assert control.surface not in shown
+        assert control.concept_id not in shown_concepts

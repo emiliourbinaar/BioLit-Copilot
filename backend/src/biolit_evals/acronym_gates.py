@@ -8,7 +8,7 @@ data, and none of them may move to match an observation.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from biolit_evals.acronym_export import ACRONYM_LABELS
+from biolit_evals.acronym_export import ACRONYM_LABELS, DISCLOSED_SURFACES
 from biolit_evals.annotation_export import parse_annotations
 
 #: §5 Gate 1. At or above this share of `cant_tell` on real rows the sheet is not showing
@@ -171,23 +171,9 @@ def gate4_type_violation(rows: Sequence[LabelledPair]) -> Gate4:
     )
 
 
-#: §7.1. The 16 surfaces named to the annotator BEFORE labelling began. Nine came from
-#: DEFECTS.md with a direction attached -- GSH, ATN, CP, CPA, AITC as wrong; ICH, ATP, HCC, FXS
-#: as correct -- and the ten type-violating pairs were shown as a table in the session that
-#: produced this design.
-#:
-#: ⛔ FIXED HERE, NOT RECOMPUTED. Deriving the split later from "which pairs does the code
-#: still know we mentioned" would drift with whatever happened to remain visible, which is the
-#: opposite of a pre-registration. If another pair is disclosed before labelling, it is added
-#: here and the addition is a visible change to the record.
-DISCLOSED_SURFACES = frozenset(
-    {
-        # DEFECTS.md's table, with a direction attached
-        "GSH", "ATN", "CP", "CPA", "AITC", "ICH", "ATP", "HCC", "FXS",
-        # DEF-0004's type-violation table, disclosed as flagged but not as an answer
-        "APT", "RA", "AT", "PCC", "BLM", "CD", "DIC",
-    }
-)  # fmt: skip
+#: Re-exported so a reader of the gates finds it where it is used. Defined in
+#: `acronym_export` because the export needs it too -- controls must avoid these rows.
+__all__ = ["DISCLOSED_SURFACES"]
 
 
 def split_by_disclosure(

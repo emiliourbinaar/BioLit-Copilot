@@ -21,6 +21,36 @@ from typing import Any
 #: with a different fix, and collapsing it would file it as a plain mislink.
 ACRONYM_LABELS = frozenset({"correct", "wrong", "granularity", "cant_tell"})
 
+#: §7.1. The 17 surfaces named to the annotator BEFORE labelling began. Ten came from
+#: DEFECTS.md with a direction attached -- GSH, ATN, CP, CPA, AITC as wrong, ICH, ATP, HCC, FXS
+#: as correct, and IP as DEF-0001's headline example -- and the ten type-violating pairs were
+#: shown as a table in the session that produced this design.
+#:
+#: ⚠️ IP WAS MISSED ON THE FIRST PASS and the omission is kept in the record rather than
+#: quietly corrected. It is the entry's OPENING example, disclosed with a direction ("in an
+#: amiodarone pulmonary-toxicity corpus IP is interstitial pneumonitis"), and it was left out
+#: because the list was compiled from the entry's summary table instead of its prose. It
+#: surfaced only when a regenerated control draw put `Incontinentia Pigmenti` in as a donor
+#: concept -- i.e. by looking at the output, not by re-reading the list.
+#:
+#: NAD is deliberately NOT here. §3 names it as a concept whose canonical name repeats its own
+#: acronym, which is a fact about the sheet's legibility and carries no signal about whether
+#: the link is right. The test is whether the ANSWER was signalled, not whether the surface
+#: was typed.
+#:
+#: ⛔ FIXED HERE, NOT RECOMPUTED. Deriving the split later from "which pairs does the code
+#: still know we mentioned" would drift with whatever happened to remain visible, which is the
+#: opposite of a pre-registration. If another pair is disclosed before labelling, it is added
+#: here and the addition is a visible change to the record.
+DISCLOSED_SURFACES = frozenset(
+    {
+        # DEFECTS.md's table, with a direction attached
+        "GSH", "ATN", "CP", "CPA", "AITC", "ICH", "ATP", "HCC", "FXS", "IP",
+        # DEF-0004's type-violation table, disclosed as flagged but not as an answer
+        "APT", "RA", "AT", "PCC", "BLM", "CD", "DIC",
+    }
+)  # fmt: skip
+
 
 @dataclass(frozen=True)
 class PairEvidence:
@@ -127,7 +157,14 @@ def gather_pairs(
     ]
 
 
-def choose_controls(pairs: list[PairEvidence], *, n: int, seed: int) -> list[PairEvidence]:
+def choose_controls(
+    pairs: list[PairEvidence],
+    *,
+    n: int,
+    seed: int,
+    exclude_surfaces: frozenset[str] | set[str] = frozenset(),
+    exclude_concepts: frozenset[str] | set[str] = frozenset(),
+) -> list[PairEvidence]:
     """Deliberately mispaired rows: a real surface with a real concept from a different pair.
 
     The surface keeps its OWN contexts. A control wearing the donor's contexts would be
@@ -137,15 +174,40 @@ def choose_controls(pairs: list[PairEvidence], *, n: int, seed: int) -> list[Pai
     ⚠️ The donor concept is drawn from a pair with a DIFFERENT surface, and the result is
     checked against the recipient's own concept: two pairs can share a concept, and a
     "control" that accidentally restates the real link would be scored as annotator error.
+
+    ⛔ §7.1 EXCLUSIONS, ON BOTH SIDES. Gate 2 is what makes every other reading attributable,
+    so a control the annotator can reject from MEMORY corrupts the one gate the pass cannot
+    afford to lose. A control on a disclosed SURFACE is rejectable because they were told what
+    it means; a control wearing a disclosed CONCEPT is rejectable because they were told that
+    concept is a known bogus linking target. The first draw put 3 of 8 controls on disclosed
+    surfaces, which is why this is a parameter and not a comment.
+
+    ⚠️ THE EXCLUSION HAS ITS OWN COST, and it is accepted rather than hidden: an annotator who
+    knows this rule can infer that any row on a disclosed surface is real. That is much weaker
+    than the leak it replaces -- knowing a row is not a control says nothing about which of
+    `correct`, `wrong` or `granularity` it is, which is the entire judgment.
     """
-    if len(pairs) < 2:
-        raise ValueError(f"choose_controls: need at least 2 pairs to mispair, got {len(pairs)}")
+    eligible = [
+        pair
+        for pair in pairs
+        if pair.surface not in exclude_surfaces and pair.concept_id not in exclude_concepts
+    ]
+    if len(eligible) < 2:
+        raise ValueError(
+            f"choose_controls: need at least 2 eligible pairs to mispair, got {len(eligible)} "
+            f"from {len(pairs)} after exclusions"
+        )
+    if len(eligible) < n:
+        raise ValueError(
+            f"choose_controls: asked for {n} controls but only {len(eligible)} pairs survive "
+            "the §7.1 exclusions; drawing fewer would silently shrink Gate 2's denominator"
+        )
 
     rng = random.Random(seed)
-    chosen = rng.sample(pairs, k=min(n, len(pairs)))
+    chosen = rng.sample(eligible, k=n)
     controls = []
     for pair in chosen:
-        donors = [other for other in pairs if other.concept_id != pair.concept_id]
+        donors = [other for other in eligible if other.concept_id != pair.concept_id]
         donor = rng.choice(donors)
         controls.append(
             replace(
@@ -346,7 +408,19 @@ def main(argv: list[str] | None = None) -> None:
     aliases = {cid: tuple(sorted(surfaces)) for cid, surfaces in by_concept.items()}
 
     pairs = gather_pairs(states, concept_labels=concept_labels, aliases=aliases)
-    controls = choose_controls(pairs, n=N_CONTROLS, seed=SEED)
+
+    # §7.1. Controls must avoid BOTH sides of what was already shown. The disclosed CONCEPTS
+    # are derived from the disclosed surfaces rather than listed separately: the tables that
+    # did the disclosing showed exactly those pairs, surface and concept together, so the
+    # derivation is the record rather than a second guess at it.
+    disclosed_concepts = {pair.concept_id for pair in pairs if pair.surface in DISCLOSED_SURFACES}
+    controls = choose_controls(
+        pairs,
+        n=N_CONTROLS,
+        seed=SEED,
+        exclude_surfaces=DISCLOSED_SURFACES,
+        exclude_concepts=disclosed_concepts,
+    )
     rows = build_rows(pairs, controls=controls, rng=random.Random(SEED))
     digest = rows_hash(rows)
 

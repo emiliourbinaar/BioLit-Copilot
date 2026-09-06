@@ -72,6 +72,28 @@ recorded as such in the manifest and nowhere else. Same precedent as the relevan
 cross-query distractors: a control has to be indistinguishable in the export or it measures
 nothing.
 
+⛔ **NO CONTROL MAY TOUCH THE §7.1 DISCLOSED SET, ON EITHER SIDE.** Not its surface, and not
+its concept. Gate 2 is what makes every other reading attributable, so a control the annotator
+can reject *from memory* rather than from the text corrupts the one gate this pass cannot
+afford to lose — and it corrupts it in the flattering direction, reading as discrimination.
+
+Both sides matter and the second is the less obvious one. A control on a disclosed **surface**
+is rejectable because the annotator was told what it means. A control wearing a disclosed
+**concept** is rejectable because they were told that concept is a known bogus linking target;
+recognising `Aphakia, congenital primary` from the `CPA` discussion primes the same reflex
+without a word of the passage being read.
+
+**This was caught on the built artifact, not in design.** The first draw put **3 of 8 controls
+on disclosed surfaces** (`ICH`, `DIC`, `APT`) and a fourth on a disclosed concept — nearly half
+of Gate 2's instrument answerable without reading. The exclusion is now enforced in
+`choose_controls` and asserted by a test.
+
+⚠️ **The exclusion has its own cost, accepted rather than hidden.** An annotator who knows this
+rule can infer that any row on a disclosed surface is a real row. That is a much weaker leak
+than the one it replaces: knowing a row is not a control says nothing about which of `correct`,
+`wrong` or `granularity` applies, which is the entire judgment. Gate 2's integrity is worth
+more than that inference.
+
 Without controls a permissive annotator and a broken linker produce the same numbers — the
 finding ADR-0018 contributed to this project's method, and the reason its π̂ readings were
 attributable where Phase 5's were not.
@@ -145,20 +167,34 @@ This is recorded as **DEF-0004**.
 
 ## 7. Limitations
 
-### 7.1 — ⛔ Sixteen of the 44 pairs were disclosed to the annotator before labelling
+### 7.1 — ⛔ Seventeen of the 44 pairs were disclosed to the annotator before labelling
 
 Larger and more damaging than the concentrated-prior caveat on the relevance pass, and stated
 first because it is the limitation that most constrains what these labels can support.
 
 **From `DEFECTS.md` (written 2026-09-05), named with a strong signal about their answer:**
 `GSH`, `ATN`, `CP`, `CPA`, `AITC` in the "wrong side of that coin" table; `ICH`, `ATP`, `HCC`,
-`FXS` named as correct.
+`FXS` named as correct; and `IP` as the entry's opening worked example.
 
 **From the session that produced this design:** the ten type-violating pairs were shown to the
 annotator as a table — `APT`, `GSH`, `CP`, `CPA`, `RA`, `AT`, `PCC`, `BLM`, `CD`, `DIC` — and
 two glosses were quoted verbatim, `CP` → cisplatin and `CPA` → cyclophosphamide.
 
-**Distinct pairs disclosed: 16 of 44 (36%).**
+**Distinct pairs disclosed: 17 of 44 (39%).**
+
+⚠️ **This list read 16 on its first writing, and `IP` was the omission.** It is DEF-0001's
+*opening* example, disclosed with a direction — "in an amiodarone pulmonary-toxicity corpus IP
+is interstitial pneumonitis" — and it was missed because the list was compiled from the entry's
+summary table rather than from its prose. It surfaced only when a regenerated control draw put
+`Incontinentia Pigmenti` in as a donor concept: **found by looking at the built artifact, not
+by re-reading the list.** The error is recorded here rather than silently corrected, because a
+disclosure list that can be wrong is exactly the thing §7.1 exists to make auditable.
+
+**`NAD` is deliberately excluded.** §3 names it as a concept whose canonical name repeats its
+own acronym, which is a fact about the sheet's legibility and carries no signal about whether
+the link is right. The test for this list is whether the **answer** was signalled, not whether
+the surface was typed — otherwise every surface named in passing inflates the contaminated
+denominator and understates what the pass established.
 
 **Why it happened, recorded rather than excused.** The type-violation finding was surfaced
 because the annotator had asked for a decision on whether to open DEF-0004, and that decision
@@ -168,8 +204,8 @@ the ten flagged pairs cannot test the flag, because the annotator was told which
 were.** Gate 4 is therefore descriptive only (§5), and DEF-0004 rests on the mechanical
 inconsistency — which needs no labels — rather than on agreement with these ones.
 
-**What survives.** Gate 3's rate is affected differently and less. Nine of the sixteen carry a
-disclosed *direction* (`GSH`, `ATN`, `CP`, `CPA`, `AITC` as wrong; `ICH`, `ATP`, `HCC`, `FXS`
+**What survives.** Gate 3's rate is affected differently and less. Ten of the seventeen carry a
+disclosed *direction* (`GSH`, `ATN`, `CP`, `CPA`, `AITC`, `IP` as wrong; `ICH`, `ATP`, `HCC`, `FXS`
 as correct); the other seven were disclosed only as type-violating, which §6 explicitly says
 does not determine the answer. **Gate 3 is reported with a disclosed/undisclosed split**, the
 same treatment §8.2 of the relevance design gave contaminated queries — reported separately,
