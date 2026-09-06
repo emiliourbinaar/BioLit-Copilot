@@ -179,6 +179,15 @@ def render_markdown(rows: Sequence[ExportRow], *, rows_hash: str, seed: int) -> 
     number of controls nor the strata. A reader who knew there were exactly eight could work
     backwards from the counts; the hash and seed are enough to reproduce the row set after
     labelling, which is when reproducibility is needed.
+
+    ⛔ THE PAPER COUNT IS DELIBERATELY NOT SHOWN, though `ExportRow` still carries it. Size is
+    not evidence about topical relevance -- it says nothing about whether `Isotretinoin | Acne
+    Vulgaris` answers a depression question -- but it reads as authority, and on that query the
+    largest cluster is the least on-query one. The risk is circular: if size pulls a label
+    toward `answers`, Gate 4 would then REWARD a size-based ranker, and ADR-0020 excluded size
+    as a signal precisely because it is the manufactured importance hierarchy that
+    `render_cluster`'s within-cluster rule forbids. Keeping the count on the machine side means
+    the finished labels can be checked post hoc for the very correlation this prevents.
     """
     lines = [
         "# Cluster relevance — blind annotation",
@@ -213,7 +222,7 @@ def render_markdown(rows: Sequence[ExportRow], *, rows_hash: str, seed: int) -> 
             "",
             f"**Cluster:** {row.chemical} — {row.disease}",
             "",
-            f"{row.n_papers} papers, {row.year_range}.",
+            f"**Years:** {'unknown' if row.year_range == 'year unknown' else row.year_range}",
             "",
             "```",
             "label:",

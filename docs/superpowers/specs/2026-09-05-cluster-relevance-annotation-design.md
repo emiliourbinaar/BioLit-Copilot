@@ -46,9 +46,37 @@ are §6's.
 
 **Unit:** one `(query, cluster)` pair. 83 real rows.
 
-The annotator sees the query, the cluster's two concept names, the paper count, and the year
-range. **Not** the cluster key's raw MeSH ids, and **not** the finding sentences — the judgment
-is about topical relevance, and reading the findings invites judging quality instead.
+The annotator sees the query, the cluster's two concept names, and the year range. **Not**
+the cluster key's raw MeSH ids, and **not** the finding sentences — the judgment is about
+topical relevance, and reading the findings invites judging quality instead.
+
+⛔ **AMENDED 2026-09-05, before any label was written.** This section originally showed the
+annotator **the paper count** as well, and §4's export format still carries it. It was removed
+from the annotator-facing sheet on the following argument, which was raised and accepted before
+labelling began.
+
+Cluster size is not evidence about topical relevance — it says nothing about whether
+`Isotretinoin | Acne Vulgaris` answers a depression question — but it reads as authority, and
+on that query the largest cluster is the least on-query one. **The risk is circular and lands
+exactly on Gate 4**: if size pulls a label toward `answers`, Gate 4 would then reward a
+size-based ranker, and ADR-0020 excluded size as a signal *precisely because* it is the
+manufactured importance hierarchy `render_cluster`'s within-cluster rule forbids. Validating a
+ranker against labels that were themselves nudged by the signal the ranker was forbidden to use
+would be circular in the way this project's gate discipline exists to prevent.
+
+Pure risk, no benefit: the count carries nothing a topical-relevance judgment needs.
+
+**It stays in `rows.jsonl` and the manifest**, which the annotator does not read. That is
+deliberate and useful: the finished labels can be checked post hoc for correlation with cluster
+size, which is a direct test of whether this contamination occurred anyway.
+
+⚠️ The **year range is still shown**, and it is the same class of risk one step weaker —
+ADR-0020 excludes recency from the score alongside size. It is retained because it was not
+raised, not because it was cleared; if the same argument is applied to it, the fix is the same
+one line. Recorded here so the asymmetry is a decision rather than an oversight.
+
+Removing the count changed no row: `rows_hash 2ace2b57aa8e387e` is identical before and after,
+because the frozen row set is unchanged and only its presentation moved.
 
 | label | meaning |
 |---|---|

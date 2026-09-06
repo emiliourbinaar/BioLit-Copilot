@@ -226,3 +226,23 @@ def test_every_label_the_schema_allows_is_offered_in_the_instructions():
 
     for label in RELEVANCE_LABELS:
         assert f"`{label}`" in sheet
+
+
+def test_the_sheet_does_not_show_the_paper_count():
+    """Cluster size is not evidence about topical relevance -- it says nothing about whether
+    `Isotretinoin | Acne Vulgaris` answers a depression question -- but it reads as authority,
+    and the largest cluster on that query is the least on-query one.
+
+    The risk is circular and specific: if size nudges a label toward `answers`, Gate 4 would
+    then REWARD a size-based ranker, and ADR-0020 excluded size as a signal precisely because
+    it is the manufactured importance hierarchy `render_cluster`'s rule forbids. Pure risk,
+    no benefit to the judgment being asked for.
+
+    It stays in `rows.jsonl` and the manifest, which the annotator does not read, so the
+    finished labels can be checked post hoc for exactly the correlation this prevents.
+    """
+    sheet = render_markdown(_rows(), rows_hash="deadbeef", seed=1)
+
+    assert "35" not in sheet
+    assert "35 papers" not in sheet
+    assert _rows()[0].n_papers == 35, "the count is still carried for the machine side"
