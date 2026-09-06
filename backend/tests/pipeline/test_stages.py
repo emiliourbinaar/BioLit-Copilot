@@ -1,3 +1,4 @@
+from biolit.canon.mesh_tree import MeshTree
 from biolit.cluster.pairing import SameSentencePairing
 from biolit.domain.enums import EntityLabel, LicenseTier, Source, TextType
 from biolit.domain.paper import Paper
@@ -226,7 +227,7 @@ def test_select_stage_drops_clusters_that_share_no_concept_with_the_query():
     on_query = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"])
     off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"])
 
-    kept, report = select_stage([on_query, off_query], _concepts("MESH:D008687"))
+    kept, report = select_stage([on_query, off_query], _concepts("MESH:D008687"), tree=MeshTree({}))
 
     assert kept == [on_query]
     assert report.status is StageStatus.completed
@@ -241,7 +242,7 @@ def test_select_stage_records_no_drop_key_when_every_cluster_is_on_query():
     happened to be empty."""
     cluster = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"])
 
-    kept, report = select_stage([cluster], _concepts("MESH:D008687"))
+    kept, report = select_stage([cluster], _concepts("MESH:D008687"), tree=MeshTree({}))
 
     assert kept == [cluster]
     assert report.dropped == {}
@@ -259,7 +260,9 @@ def test_select_stage_fails_open_when_the_query_resolved_to_no_concept_at_all():
         Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"]),
     ]
 
-    kept, report = select_stage(clusters, QueryConcepts(frozenset(), {}, ("wibble",)))
+    kept, report = select_stage(
+        clusters, QueryConcepts(frozenset(), {}, ("wibble",)), tree=MeshTree({})
+    )
 
     assert kept == clusters
     assert report.dropped == {}
@@ -276,7 +279,7 @@ def test_select_stage_does_not_rescue_a_query_that_filters_down_to_nothing():
     """
     off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"])
 
-    kept, report = select_stage([off_query], _concepts("MESH:D008687"))
+    kept, report = select_stage([off_query], _concepts("MESH:D008687"), tree=MeshTree({}))
 
     assert kept == []
     assert report.n_out == 0
@@ -320,3 +323,52 @@ def test_synthesis_stage_notes_no_repeats_when_every_paper_appears_once():
     _answer, report = synthesis_stage([cluster], records, papers)
 
     assert report.noted == {}
+
+
+def test_select_stage_reports_selection_and_ordering_as_two_distinguishable_facts():
+    """ADR-0020 folds ordering into this stage because it uses the identical signal, but the
+    two remain separate decisions and the ledger must not blur them: one says what was
+    REMOVED and on what basis, the other says the survivors were REORDERED. A single vague
+    line would make it impossible to tell from the record whether ordering happened at all.
+    """
+    on_query = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a"])
+    off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c"])
+
+    _kept, report = select_stage(
+        [on_query, off_query], _concepts("MESH:D008687"), tree=MeshTree({})
+    )
+
+    note = report.note or ""
+    assert "kept 1 of 2" in note
+    assert "concept overlap" in note
+    assert "ordered by relevance" in note
+    assert note.count(";") >= 1, "the two facts must be separately readable"
+
+
+def test_select_stage_orders_the_clusters_it_keeps_by_relevance():
+    """The whole point of ADR-0020. Before it, the lead was whichever survivor had the
+    alphabetically smallest MeSH id, which is uncorrelated with relevance by construction."""
+    alphabetically_first = Cluster(key="MESH:AAA|MESH:BBB", paper_ids=["a"])
+    on_query = Cluster(key="MESH:QC|MESH:QD", paper_ids=["b"])
+    tree = MeshTree({"MESH:QC": ["D01.1"], "MESH:AAA": ["D01.9"]})
+
+    kept, _report = select_stage(
+        [alphabetically_first, on_query], _concepts("MESH:QC", "MESH:QD"), tree=tree
+    )
+
+    assert kept[0] is on_query
+
+
+def test_select_stage_says_it_did_not_reorder_when_the_query_resolved_to_nothing():
+    """Fail-open must be honest about BOTH halves. With no concepts every cluster scores
+    identically, so nothing is reordered -- and a note claiming relevance ordering would
+    describe a sort that never consulted the query."""
+    clusters = [Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a"])]
+
+    _kept, report = select_stage(
+        clusters, QueryConcepts(frozenset(), {}, ("wibble",)), tree=MeshTree({})
+    )
+
+    note = report.note or ""
+    assert "unfiltered" in note.lower()
+    assert "not reordered" in note.lower()

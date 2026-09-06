@@ -11,6 +11,7 @@ count of that reads as a bug on first run. Every stage records what it dropped a
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+from biolit.canon.mesh_tree import MeshTree
 from biolit.cluster.group import cluster_papers
 from biolit.cluster.pairing import PairingStrategy
 from biolit.domain.paper import Paper
@@ -18,6 +19,7 @@ from biolit.domain.records import Cluster, Entity, ExtractedRecord
 from biolit.extract.base import build_record
 from biolit.extract.deterministic import SameSentenceAsEntitiesExtractor
 from biolit.query.concepts import QueryConcepts, cluster_matches
+from biolit.query.ranking import rank_clusters
 from biolit.state.pipeline import StageReport, StageStatus
 from biolit.synth.template import render_cluster
 
@@ -197,7 +199,7 @@ def cluster_stage(
 
 
 def select_stage(
-    clusters: Sequence[Cluster], concepts: QueryConcepts
+    clusters: Sequence[Cluster], concepts: QueryConcepts, *, tree: MeshTree
 ) -> tuple[list[Cluster], StageReport]:
     """Keep only clusters sharing a MeSH concept with the question. THE ONLY STAGE THAT
     CONSULTS THE QUERY after `esearch`.
@@ -208,11 +210,15 @@ def select_stage(
     Injury` inside the answer to "metformin and lactic acidosis", and `Amiodarone |
     Incontinentia Pigmenti` -- an abbreviation mislink -- inside the amiodarone one.
 
-    ⚠️ MEASURED EFFECT, so nobody over-reads this stage: it keeps 70 of the 83 clusters in
-    the frozen corpus. It removes off-topic material from the tail; it does NOT fix which
-    cluster leads. "isotretinoin and depression" keeps 5 of 5 and still opens on `Isotretinoin
-    | Acne Vulgaris`, because leading is an ORDERING property and `render_cluster` deliberately
-    carries no ranking. Ordering is a separate decision and needs its own ADR.
+    IT ALSO ORDERS THE SURVIVORS (ADR-0020), and the two are one call because they consume
+    the identical signal: selection thresholds concept overlap, ordering grades it. They stay
+    two facts in the ledger note, because they are two decisions.
+
+    Selection alone could never have fixed the lead. Clusters arrive in `sorted(by_key)` order,
+    so the lead was whichever SURVIVOR had the alphabetically smallest MeSH id -- `Bicarbonates`
+    D001639 before `Metformin` D008687. A filter changes which clusters survive; it cannot
+    change the sort, and measured on the frozen corpus a strictly tighter filter changed the
+    lead on 0 of 8 queries while emptying 2 of them outright.
 
     FAIL-OPEN on a query that resolved to nothing, because filtering on an empty concept set
     drops everything -- an untranslatable query would return no answer rather than an
@@ -230,10 +236,16 @@ def select_stage(
             note=(
                 "FAIL-OPEN: the question resolved to no MeSH concept, so clusters are "
                 "unfiltered. Filtering on an empty concept set would drop every cluster and "
-                f"return no answer at all. Unlinked terms: {', '.join(concepts.unresolved)}."
+                f"return no answer at all. Unlinked terms: {', '.join(concepts.unresolved)}; "
+                "NOT REORDERED -- with no query concepts every cluster scores identically, "
+                "so the order is the unchanged key order and means nothing about relevance."
             ),
         )
-    kept = [cluster for cluster in clusters if cluster_matches(cluster, concepts)]
+    kept = rank_clusters(
+        [cluster for cluster in clusters if cluster_matches(cluster, concepts)],
+        concepts,
+        tree=tree,
+    )
     dropped = len(clusters) - len(kept)
     return kept, StageReport(
         name=SELECT,
@@ -247,9 +259,15 @@ def select_stage(
         # the one case a reader most needs to see. `synthesis_stage` renders an empty list as
         # `answer is None`, which is a truthful "nothing here answers that".
         dropped={"off_query": dropped} if dropped else {},
+        # TWO FACTS, SEPARATELY READABLE. Selection and ordering are one call because they
+        # consume the identical signal -- selection thresholds it, ordering grades it -- but
+        # they remain two decisions (ADR-0020), and a single blurred line would leave a reader
+        # unable to tell from the record whether ordering happened at all.
         note=(
-            f"Kept clusters sharing a concept with the question "
-            f"({', '.join(sorted(concepts.evidence.values()))})."
+            f"kept {len(kept)} of {len(clusters)} by concept overlap with the question "
+            f"({', '.join(sorted(concepts.evidence.values()))}); "
+            "ordered by relevance to the query (ADR-0020: exact concept matches, then MeSH "
+            "hierarchy proximity, then key order; size is deliberately not a signal)."
         ),
     )
 
