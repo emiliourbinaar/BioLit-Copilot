@@ -309,7 +309,11 @@ any fix for one should be checked against the other.
 - **Status:** ⭐ **FIXED 2026-09-05 as a structural revision — and UNVALIDATED.** Proximity is
   now the maximum over sides that are not already exact matches. Verified mechanically only:
   queries whose clusters all tie fell from 4 of 8 to 2 of 8. **These labels are spent as a
-  blind test of the fix** and were not re-read; see ADR-0020's addendum.
+  blind test of the fix** and were not re-read; see ADR-0020's addendum. ⚠️ **Added 2026-09-06:**
+  they also come from a pass whose control instrument was later found compromised (ADR-0021), so
+  they could not have validated the fix even if spending them were permitted. **This fix rests
+  on the mechanical check and on nothing else** — not on a null result from the labels, which is
+  a different and weaker claim.
 - **Found by:** Gate 4 of the cluster-relevance annotation pass, which is what it was for.
 
 ### What was observed

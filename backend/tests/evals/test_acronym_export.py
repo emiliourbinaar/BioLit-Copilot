@@ -296,6 +296,14 @@ def test_no_control_shares_its_identity_with_any_other_row():
     ⚠️ ASSERTED ON THE BUILT ROW SET, not on the drawing logic. Both passes that shipped this
     defect INTENDED indistinguishable controls; what betrayed them was what the rows turned out
     to be, which only the artifact knows.
+
+    ⭐ THE PREDICATE WAS CHECKED AGAINST A KNOWN-SAFE DESIGN, not only against the two failures,
+    so it is not a rule tuned to the cases that produced it. Run over all three of this
+    project's annotation passes: ADR-0018's Alamri batch reports SAFE -- 5 distractors, 90
+    distinct papers over 45 rows, no shared identity and not even a shared single paper --
+    while the relevance pass reports 8 shared cluster keys and the acronym pass 8 shared
+    surfaces. A predicate that flagged all three would have been useless; this one separates
+    the sampled population from the exhaustive ones, which is exactly ADR-0021's claim.
     """
     pairs = [_pair(f"S{i}", concept_id=f"MESH:D{i:05d}", concept_name=f"C{i}") for i in range(6)]
     outside = [_pair("ZZ", concept_id="MESH:D99999", concept_name="Elsewhere")]

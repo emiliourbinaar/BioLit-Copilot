@@ -10,8 +10,10 @@ extraction stack, each with its own eval harness and wired into a runnable CLI; 
 contradiction-detection harness whose 900-pair corpus and free baselines are built and whose
 paid arms were **retired by a pre-registered stop rule before they were ever called**; a
 deterministic Synthesis stage that ships because the LLM arm's *gate* was shown undecidable
-rather than because the arm lost; and query-conditioned selection and ordering, validated
-against a blind 91-row annotation with four gates fixed before any label existed. 21
+rather than because the arm lost; and query-conditioned selection and ordering, measured
+against a blind 91-row annotation whose four gates were fixed before any label existed — and
+whose control instrument later proved compromised, leaving **no attributable evidence of lead
+improvement** and the defect it found resting on mechanical verification alone. 21
 architecture decisions record what was measured and what was rejected, alongside a scope
 record (`docs/SCOPE.md`) for work deliberately not attempted and a defect log
 (`docs/DEFECTS.md`) for measured failures that are recorded rather than quietly carried —
@@ -191,19 +193,28 @@ CONTROL arm is structurally blind to defects only the TREATMENT arm can trigger.
 defects were found on that branch, and every one passed the end-to-end self-test both before
 and after its fix. ADR-0019.
 
-**The most recent reading survives its own contamination split, and is reported at the number
-that survives.** Query-conditioned ordering was validated against 91 blind rows — 83 real
-clusters plus 8 cross-query distractors, indistinguishable in the export — with four gates
-fixed before a single label existed. The sheet showed the question and two concept names and
-nothing else: no MeSH ids, no paper counts, no year ranges, because size and recency are
-signals the ranker is *forbidden* to use and a label nudged by either would let the gate reward
-them. Controls read 8/8 and `cant_tell` read 0/83, so the reading is attributable. The headline
-was **5/8 leads correct against a 3/8 baseline** — but three of the eight queries had their
-computed ordering disclosed in the ADR before labelling, and on the three clean queries the
-reading is **2/3 against a 2/3 baseline**. That split is recorded in the ADR's addendum rather
-than folded into a denominator that reads clean, and the hierarchy component specifically has
-**no empirical evidence either way, before or after its fix** — testing it needs a fresh label
-set, not a recomputation. ADR-0020, DEF-0003.
+**A validation pass was retired against itself, and the exact reason matters more than the
+verdict.** Query-conditioned ordering was measured against 91 blind rows — 83 real clusters
+plus 8 cross-query distractors — with four gates fixed before a single label existed. The sheet
+showed the question and two concept names and nothing else: no MeSH ids, no paper counts, no
+year ranges, because size and recency are signals the ranker is *forbidden* to use and a label
+nudged by either would let the gate reward them. The headline read **5/8 leads correct against
+a 3/8 baseline**; three of the eight queries had their computed ordering disclosed before
+labelling, and on the three clean queries it read **2/3 against a 2/3 baseline**.
+
+Then the control instrument itself failed. Every distractor was a real cluster shown under a
+foreign question, and the population is *exhaustive* — so **all 8 distractors duplicated a real
+row's cluster key**, and an annotator spotting the same concept pair twice knows one is planted
+without judging anything. Unlike a later pass with the same defect, these labels **cannot**
+distinguish that shortcut from genuine reading: each duplicated key read `off_topic` for the
+distractor and something else for its twin, which is what both produce (ADR-0021).
+
+⚠️ **The precise standing status, because the distinction is the whole point:** there is **no
+attributable evidence of lead improvement from these labels** — not a null result, but a
+compromised instrument — and **DEF-0003's fix stands on independent mechanical verification
+only.** "Inconclusive" would lose exactly that difference. What the pass *did* establish is
+unaffected, and it is not small: Gate 4 found DEF-0003, a real defect in the component it was
+built to score. ADR-0020, ADR-0021, DEF-0003.
 
 ## Development
 
