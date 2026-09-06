@@ -163,6 +163,69 @@ def rows_hash(rows: Sequence[ExportRow]) -> str:
     return hashlib.sha256(payload).hexdigest()[:16]
 
 
+#: Design §2. `cant_tell` is Gate 1's instrument, not a convenience escape hatch.
+RELEVANCE_LABELS = frozenset({"answers", "background", "off_topic", "cant_tell"})
+
+
+def render_markdown(rows: Sequence[ExportRow], *, rows_hash: str, seed: int) -> str:
+    """The annotator-facing sheet, in the exact block format `parse_annotations` reads.
+
+    Numbered `##` heading carrying the backticked `row_id`, then a fenced `label:`/`reason:`
+    stub -- matching `annotation_export._PAIR_HEADING` so that parser is reused UNCHANGED.
+    Reusing it is the point: it refuses a missing or unrecognised label rather than skipping
+    the block, and a silently dropped row moves a gate count directly.
+
+    ⚠️ EVERY ROW HAS THE SAME SHAPE, controls included, and the preamble names neither the
+    number of controls nor the strata. A reader who knew there were exactly eight could work
+    backwards from the counts; the hash and seed are enough to reproduce the row set after
+    labelling, which is when reproducibility is needed.
+    """
+    lines = [
+        "# Cluster relevance — blind annotation",
+        "",
+        f"Rows hash {rows_hash}, seed {seed}, {len(rows)} rows.",
+        "",
+        "Each row shows a **question** and one **cluster** — a chemical concept and a "
+        "disease concept that some set of papers discussed in the same sentence. Judge "
+        "whether that cluster is relevant to that question, and record one of:",
+        "",
+        "- `answers` — this cluster is part of what the question asked for.",
+        "- `background` — genuinely about the question's subject, but not what was asked: "
+        "the drug's indication, its main comparator, a co-occurring condition.",
+        "- `off_topic` — not what the question was about.",
+        "- `cant_tell` — the question, the concepts, or the pairing is too ambiguous to judge.",
+        "",
+        "Add a one-line reason. Judge each row on its own; do not go back and revise earlier "
+        "rows once later ones clarify the distinctions, because that turns a blind pass into "
+        "a calibrated one.",
+        "",
+        "Nothing on this sheet encodes the answer: every row has the same shape, whatever "
+        "the cluster is.",
+        "",
+        "---",
+        "",
+    ]
+    for index, row in enumerate(rows, start=1):
+        lines += [
+            f"## {index}. `{row.row_id}`",
+            "",
+            f"**Question:** {row.query}",
+            "",
+            f"**Cluster:** {row.chemical} — {row.disease}",
+            "",
+            f"{row.n_papers} papers, {row.year_range}.",
+            "",
+            "```",
+            "label:",
+            "reason:",
+            "```",
+            "",
+            "---",
+            "",
+        ]
+    return "\n".join(lines)
+
+
 DEFAULT_STATES = "data/synth/states"
 DEFAULT_OUT = "data/relevance"
 
@@ -215,6 +278,10 @@ def main(argv: list[str] | None = None) -> None:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     rows_path, manifest_path = out / "rows.jsonl", out / "manifest.json"
+    sheet_path = out / "sheet.md"
+    sheet_path.write_text(
+        render_markdown(rows, rows_hash=rows_hash(rows), seed=args.seed), encoding="utf-8"
+    )
     with rows_path.open("w", encoding="utf-8") as fh:
         for row in rows:
             fh.write(json.dumps(row.as_export()) + "\n")
@@ -240,6 +307,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     print(f"{len(clusters)} real rows + {len(distractors)} distractors = {len(rows)}")
     print(f"rows_hash {rows_hash(rows)}  seed {args.seed}")
+    print(f"wrote {sheet_path}   <-- ANNOTATE HERE")
     print(f"wrote {rows_path}")
     print(f"wrote {manifest_path}  <-- DO NOT OPEN until every label is written")
 

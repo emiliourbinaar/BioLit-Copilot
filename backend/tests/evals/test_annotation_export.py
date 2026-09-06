@@ -336,3 +336,18 @@ def test_parse_annotations_rejects_a_label_outside_the_four_allowed_verdicts():
 
     with pytest.raises(ValueError, match="contradicton"):
         parse_annotations(sheet)
+
+
+def test_an_unfilled_block_is_reported_as_missing_rather_than_reading_the_next_line():
+    r"""`label:\s*(\S+)` lets `\s*` cross the newline, so an UNFILLED stub captures the
+    following `reason:` as though it were the label. It still refuses -- the value is not a
+    known label -- but it refuses with a message naming a token the annotator never typed,
+    which sends them looking for a typo in a row they simply had not reached yet.
+
+    The blast radius is the diagnostic, not the verdict: both readings raise. That is why
+    this is fixed rather than merely noted, and why the fix cannot change any filled sheet.
+    """
+    sheet = "## 1. `r000`\n\n```\nlabel:\nreason:\n```\n"
+
+    with pytest.raises(ValueError, match="carries no `label:` line"):
+        parse_annotations(sheet)

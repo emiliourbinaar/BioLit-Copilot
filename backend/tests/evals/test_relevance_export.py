@@ -1,9 +1,11 @@
 import pytest
 
 from biolit_evals.relevance_export import (
+    RELEVANCE_LABELS,
     ExportRow,
     build_rows,
     choose_distractors,
+    render_markdown,
     rows_hash,
 )
 
@@ -153,3 +155,74 @@ def test_row_order_is_reproducible_from_the_seed():
 
     assert [r.query for r in first] == [r.query for r in again]
     assert [r.query for r in first] != [r.query for r in other]
+
+
+def _rows() -> list[ExportRow]:
+    return [
+        ExportRow(
+            "r000",
+            "metformin and lactic acidosis",
+            "Metformin",
+            "Acidosis, Lactic",
+            35,
+            "1977-2024",
+            "MESH:C1|MESH:D1",
+            False,
+        ),
+        ExportRow(
+            "r001",
+            "cisplatin nephrotoxicity",
+            "Warfarin",
+            "Hemorrhage",
+            0,
+            "year unknown",
+            "MESH:C9|MESH:D9",
+            True,
+        ),
+    ]
+
+
+def test_the_sheet_is_readable_by_the_existing_annotation_parser():
+    """Reuses `annotation_export.parse_annotations` UNCHANGED rather than growing a second
+    parser. That parser refuses a missing or unknown label instead of skipping the block,
+    which is the property both passes need: a silently dropped row moves a gate count."""
+    from biolit_evals.annotation_export import parse_annotations
+
+    sheet = (
+        render_markdown(_rows(), rows_hash="deadbeef", seed=1)
+        .replace("label:\nreason:", "label: answers\nreason: it does", 1)
+        .replace("label:\nreason:", "label: off_topic\nreason: unrelated", 1)
+    )
+
+    parsed = parse_annotations(sheet, allowed=RELEVANCE_LABELS)
+    assert parsed["r000"].label == "answers"
+
+
+def test_the_sheet_never_shows_the_mesh_ids_or_which_rows_are_controls():
+    """§2 and §3.4. The sheet is the artifact the annotator actually reads, so the no-ids and
+    indistinguishable-controls rules have to hold HERE, not only in the JSONL beside it."""
+    sheet = render_markdown(_rows(), rows_hash="deadbeef", seed=1)
+
+    assert "MESH:" not in sheet
+    assert "distractor" not in sheet.lower()
+    assert "control" not in sheet.lower()
+    assert sheet.count("label:") == 2, "every row gets the same stub, controls included"
+
+
+def test_the_preamble_does_not_disclose_how_many_rows_are_controls():
+    """Alamri's precedent: a reader who knew the exact control count could work backwards
+    from it. The hash and seed are enough to reproduce the row set afterwards."""
+    preamble = render_markdown(_rows(), rows_hash="deadbeef", seed=1).split("---")[0]
+
+    assert "deadbeef" in preamble
+    assert "8" not in preamble.replace("deadbeef", "")
+
+
+def test_every_label_the_schema_allows_is_offered_in_the_instructions():
+    """A label the annotator is never told about cannot be used, and `cant_tell` in
+    particular is Gate 1's whole instrument -- if it reads as an escape hatch nobody was
+    invited to use, a low rate would mean nothing."""
+    sheet = render_markdown(_rows(), rows_hash="h", seed=1)
+
+    for label in RELEVANCE_LABELS:
+        assert f"`{label}`" in sheet
