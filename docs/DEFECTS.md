@@ -113,3 +113,63 @@ context.
 It is logged here because it is not actually specific to that gate: it is the same root cause
 as DEF-0001 — a surface form is linked without reference to what the document is about — and
 any fix for one should be checked against the other.
+
+---
+
+## DEF-0003 — ADR-0020's hierarchy term is unreachable: every cluster the ranker sees scores proximity 0
+
+- **Date:** 2026-09-05
+- **Component:** `biolit.query.ranking._relevance_key`
+- **Status:** Recorded, not fixed. A structural revision is permitted by the annotation
+  design's §5, but see "Why this is not simply fixed" below.
+- **Found by:** Gate 4 of the cluster-relevance annotation pass, which is what it was for.
+
+### What was observed
+
+ADR-0020 scores a cluster as `(-exact_matches, min_tree_distance, key)`. The second term
+never varies. Measured over the frozen corpus, **four of eight queries produce a single
+distinct score across every cluster** — amiodarone, cisplatin, isotretinoin, lithium — so the
+ranker falls back entirely to the MeSH-id order it was built to replace.
+
+The mechanism, verified on `isotretinoin and depression`:
+
+```
+query concepts: [MESH:D003866 Depressive Disorder, MESH:D015474 Isotretinoin]
+  Acne Vulgaris              score=(-1, 0)   disease-side distance to D003866: None
+  Anxiety Disorders          score=(-1, 0)   disease-side distance to D003866: 3
+  Mental Disorders           score=(-1, 0)   disease-side distance to D003866: 2
+  Psychotic Disorders        score=(-1, 0)   disease-side distance to D003866: 4
+```
+
+The distances ADR-0020 relies on are computed correctly and then discarded. `_relevance_key`
+minimises over **every** (cluster side × query concept) pair, and the cluster's own chemical
+side *is* a query concept — `distance(Isotretinoin, Isotretinoin) == 0` — so the minimum is 0
+for every cluster and the disease-side signal never reaches the sort.
+
+⛔ **This is total, not partial.** `select_stage` keeps only clusters with at least one exact
+concept match, and any exact match contributes distance 0. **Every cluster the ranker is ever
+handed therefore scores proximity 0**, so the term is unreachable in production by
+construction. The score is operationally `(-exact_matches, key)`.
+
+### What that means for the reading it produced
+
+Gate 4a improved leads from 3/8 to 5/8, and **that improvement came entirely from the
+exact-match count**. Nothing in it is evidence about hierarchy proximity, which is the part of
+ADR-0020 the MeSH tree artifact exists to serve. The distances quoted in ADR-0020's decision
+section — Mental Disorders 2, Anxiety 3, Psychotic 4, Acne no shared tree — are correct
+readings of the tree and were never reachable by the code.
+
+### Why this is not simply fixed
+
+The fix is structural rather than a constant: proximity should describe the **residual** match
+quality of sides that are not already exact — a cluster is as good as its *worst*-matched
+side, so the term wants a max (or a sum) over sides rather than a min over all pairs. Under
+that reading, `Isotretinoin | Anxiety Disorders` scores 3 and `Isotretinoin | Acne Vulgaris`
+scores unmatched, which is the ordering ADR-0020 intended.
+
+⚠️ **But the labels this defect was found with are now spent as a blind test of any fix.** The
+design's §5 permits a revision that changes the score's structure and forbids one that tunes a
+constant, and a max-over-sides revision is squarely the permitted kind. It would still be
+measured against labels chosen *before* the defect was known but read *after* — so a re-run of
+Gate 4 is a weaker instrument than the one that produced this reading, and must be reported as
+such rather than quoted alongside it. That call belongs to the project owner, not to this log.

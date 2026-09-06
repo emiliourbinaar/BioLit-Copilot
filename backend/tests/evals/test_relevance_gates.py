@@ -4,6 +4,9 @@ from biolit_evals.relevance_gates import (
     LabelledRow,
     gate1_tractability,
     gate2_controls,
+    gate3_membership,
+    gate4a_leads,
+    gate4b_inversions,
     labels_hash,
     load_labels,
 )
@@ -43,8 +46,9 @@ def test_load_labels_refuses_a_manifest_row_missing_from_the_sheet():
     """The mirror failure, and the more dangerous one: a silently skipped row shrinks a gate
     denominator without changing any visible verdict."""
     manifest = {
-        "rows": dict(_MANIFEST["rows"], r002={"query": "q3", "cluster_key": "a|b",
-                                              "is_distractor": False})
+        "rows": dict(
+            _MANIFEST["rows"], r002={"query": "q3", "cluster_key": "a|b", "is_distractor": False}
+        )
     }
 
     with pytest.raises(ValueError, match="r002"):
@@ -70,7 +74,9 @@ def test_gate1_says_revise_schema_at_or_above_the_pre_registered_fifteen_percent
     """The pre-registered cut, read as it falls. At >= 15% the label definitions do not fit
     the data and the whole pass stops -- Gate 3's numbers are not computed at all, because a
     filter reading over rows the annotator could not judge is not interpretable."""
-    assert gate1_tractability(_rows(["cant_tell"] * 3 + ["answers"] * 17)).verdict == "REVISE_SCHEMA"
+    assert (
+        gate1_tractability(_rows(["cant_tell"] * 3 + ["answers"] * 17)).verdict == "REVISE_SCHEMA"
+    )
     assert gate1_tractability(_rows(["cant_tell"] * 2 + ["answers"] * 18)).verdict == "TRACTABLE"
 
 
@@ -99,8 +105,9 @@ def test_gate2_is_confounded_below_the_pre_registered_seven_of_eight():
 
 def test_labels_hash_tracks_content_not_order():
     # Seven reverse-inserted elements, per this repo's determinism-fixture convention.
-    rows = _rows(["answers", "background", "off_topic", "answers", "background",
-                  "off_topic", "answers"])
+    rows = _rows(
+        ["answers", "background", "off_topic", "answers", "background", "off_topic", "answers"]
+    )
 
     assert labels_hash(rows) == labels_hash(list(reversed(rows)))
     assert labels_hash(rows) != labels_hash(rows[:-1])
@@ -114,3 +121,76 @@ def test_labels_hash_changes_when_a_label_changes():
     edited = _rows(["answers"] * 6 + ["off_topic"])
 
     assert labels_hash(rows) != labels_hash(edited)
+
+
+def _row(row_id: str, query: str, key: str, label: str) -> LabelledRow:
+    return LabelledRow(row_id, query, key, False, label, "because")
+
+
+def test_gate3_counts_the_filter_against_the_labels():
+    rows = [
+        _row("r0", "q", "a|b", "answers"),
+        _row("r1", "q", "c|d", "background"),
+        _row("r2", "q", "e|f", "off_topic"),
+        _row("r3", "q", "g|h", "off_topic"),
+    ]
+
+    result = gate3_membership(rows, kept={"a|b", "c|d", "e|f"})
+
+    assert result.matrix[("kept", "answers")] == 1
+    assert result.matrix[("kept", "off_topic")] == 1
+    assert result.matrix[("dropped", "off_topic")] == 1
+    assert result.false_drops == []
+
+
+def test_gate3_names_every_false_drop_rather_than_reporting_a_rate():
+    """§5's pre-registered action. With 83 rows each case is individually inspectable, so
+    "an acceptable false-drop rate" is not a meaningful object here -- each dropped `answers`
+    cluster is a defect to diagnose to its cause, and the gate must hand them over by name."""
+    rows = [_row("r0", "q", "a|b", "answers"), _row("r1", "q", "c|d", "answers")]
+
+    result = gate3_membership(rows, kept={"c|d"})
+
+    assert [r.cluster_key for r in result.false_drops] == ["a|b"]
+
+
+def test_gate4a_asks_whether_the_query_leads_with_an_answers_cluster():
+    """Gate 4c runs FIRST and is what makes the question this simple: every query surviving
+    it has an `answers` cluster, so "the best tier available to this query" is always
+    `answers` and the two formulations coincide. Writing it as a `min` over available tiers
+    was dead generality, and dead generality in a gate is where a later reader misjudges what
+    was measured."""
+    labels = {"a|b": "answers", "c|d": "background", "e|f": "off_topic"}
+    rows = [_row(f"r{i}", "q", k, v) for i, (k, v) in enumerate(labels.items())]
+
+    assert gate4a_leads(rows, ranked={"q": ["a|b", "c|d", "e|f"]}).correct == ["q"]
+    assert gate4a_leads(rows, ranked={"q": ["c|d", "a|b", "e|f"]}).wrong == ["q"]
+
+
+def test_gate4c_separates_a_query_with_no_answers_cluster_from_a_ranking_failure():
+    """The distinction that keeps a linking defect from being scored as a ranking defect.
+    A query with no `answers` cluster anywhere did not rank badly -- the cluster that would
+    answer it does not exist, which belongs in DEFECTS.md."""
+    rows = [_row("r0", "q1", "a|b", "background"), _row("r1", "q2", "c|d", "answers")]
+
+    result = gate4a_leads(rows, ranked={"q1": ["a|b"], "q2": ["c|d"]})
+
+    assert result.no_answers_queries == ["q1"]
+    assert "q1" not in result.correct and "q1" not in result.wrong
+
+
+def test_gate4b_counts_inversions_only_between_differently_labelled_pairs():
+    """Ties are not errors. ADR-0020's rule is that clusters the labels grade equally are
+    correctly in any order, so counting them would score the ranker against a rule the ADR
+    explicitly declines to adopt."""
+    rows = [
+        _row("r0", "q", "a|b", "answers"),
+        _row("r1", "q", "c|d", "answers"),
+        _row("r2", "q", "e|f", "off_topic"),
+    ]
+
+    good = gate4b_inversions(rows, ranked={"q": ["a|b", "c|d", "e|f"]})
+    bad = gate4b_inversions(rows, ranked={"q": ["e|f", "a|b", "c|d"]})
+
+    assert (good.inversions, good.comparable_pairs) == (0, 2)
+    assert (bad.inversions, bad.comparable_pairs) == (2, 2)

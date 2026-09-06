@@ -102,9 +102,7 @@ def gate1_tractability(rows: Sequence[LabelledRow]) -> Gate1:
     """
     real = [row for row in rows if not row.is_distractor]
     cant_tell = sum(1 for row in real if row.label == "cant_tell")
-    verdict = (
-        "REVISE_SCHEMA" if real and cant_tell / len(real) >= CANT_TELL_LIMIT else "TRACTABLE"
-    )
+    verdict = "REVISE_SCHEMA" if real and cant_tell / len(real) >= CANT_TELL_LIMIT else "TRACTABLE"
     return Gate1(n_cant_tell=cant_tell, n=len(real), verdict=verdict)
 
 
@@ -131,8 +129,124 @@ def labels_hash(rows: Sequence[LabelledRow]) -> str:
     and a typo fix in one must not invalidate a frozen reading.
     """
     payload = json.dumps(
-        sorted((row.row_id, row.query, row.cluster_key, row.is_distractor, row.label)
-               for row in rows),
+        sorted(
+            (row.row_id, row.query, row.cluster_key, row.is_distractor, row.label) for row in rows
+        ),
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()[:16]
+
+
+#: Tier order for ordering readings. `cant_tell` is not a grade and is excluded (§2).
+_TIER = {"answers": 0, "background": 1, "off_topic": 2}
+
+
+@dataclass(frozen=True)
+class Gate3:
+    matrix: dict[tuple[str, str], int]
+    false_drops: list[LabelledRow]
+    n_kept: int
+    n_dropped: int
+
+
+@dataclass(frozen=True)
+class Gate4a:
+    correct: list[str]
+    wrong: list[str]
+    no_answers_queries: list[str]
+
+
+@dataclass(frozen=True)
+class Gate4b:
+    inversions: int
+    comparable_pairs: int
+    per_query: dict[str, tuple[int, int]]
+
+
+def gate3_membership(rows: Sequence[LabelledRow], *, kept: set[str]) -> Gate3:
+    """The filter's confusion matrix against the labels, plus every false drop BY NAME.
+
+    §5 pre-registers the action rather than a threshold: a dropped `answers` cluster is a
+    defect to diagnose to its cause, not a rate to tolerate. With 83 rows and 13 drops the
+    denominator cannot resolve a rate anyway -- one unexpected case moves it eight points --
+    so this design deliberately does not lean on one, and hands back the cases instead.
+    """
+    real = [row for row in rows if not row.is_distractor and row.label in _TIER]
+    matrix: dict[tuple[str, str], int] = {}
+    false_drops: list[LabelledRow] = []
+    for row in real:
+        side = "kept" if row.cluster_key in kept else "dropped"
+        matrix[(side, row.label)] = matrix.get((side, row.label), 0) + 1
+        if side == "dropped" and row.label == "answers":
+            false_drops.append(row)
+    return Gate3(
+        matrix=matrix,
+        false_drops=false_drops,
+        n_kept=sum(1 for row in real if row.cluster_key in kept),
+        n_dropped=sum(1 for row in real if row.cluster_key not in kept),
+    )
+
+
+def _labels_by_query(rows: Sequence[LabelledRow]) -> dict[str, dict[str, str]]:
+    out: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if not row.is_distractor and row.label in _TIER:
+            out.setdefault(row.query, {})[row.cluster_key] = row.label
+    return out
+
+
+def gate4a_leads(rows: Sequence[LabelledRow], *, ranked: Mapping[str, Sequence[str]]) -> Gate4a:
+    """Does each query lead with an `answers` cluster?
+
+    §5's Gate 4c is applied FIRST, and it is what makes the question this simple: a query with
+    no `answers` cluster at all is excluded and reported separately, because the cluster that
+    would answer it does not exist -- a retrieval or entity-linking failure belonging in
+    DEFECTS.md, not a ranking failure. Every query surviving 4c therefore HAS an `answers`
+    cluster, so "the best tier available to this query" is always `answers` and the two
+    formulations coincide. This was first written as a `min` over available tiers; that was
+    dead generality, and dead generality in a gate is where a later reader misjudges what was
+    measured.
+    """
+    by_query = _labels_by_query(rows)
+    correct, wrong, no_answers = [], [], []
+    for query, labels in sorted(by_query.items()):
+        order = [key for key in ranked.get(query, ()) if key in labels]
+        if not order:
+            continue
+        if not any(label == "answers" for label in labels.values()):
+            no_answers.append(query)
+            continue
+        (correct if labels[order[0]] == "answers" else wrong).append(query)
+    return Gate4a(correct=correct, wrong=wrong, no_answers_queries=no_answers)
+
+
+def gate4b_inversions(
+    rows: Sequence[LabelledRow], *, ranked: Mapping[str, Sequence[str]]
+) -> Gate4b:
+    """Pairs the ranker places in the opposite order to their labels.
+
+    TIES ARE NOT INVERSIONS and are not counted in the denominator. ADR-0020's rule is that
+    clusters the labels grade equally are correctly in any order, so scoring them would hold
+    the ranker to a criterion the ADR explicitly declines to adopt.
+
+    Reported as a raw count over comparable pairs, never as a bare rate: the pairs share
+    clusters and queries, so they are not independent and no interval would be honest.
+    """
+    by_query = _labels_by_query(rows)
+    per_query: dict[str, tuple[int, int]] = {}
+    for query, labels in sorted(by_query.items()):
+        order = [key for key in ranked.get(query, ()) if key in labels]
+        inversions = comparable = 0
+        for i, earlier in enumerate(order):
+            for later in order[i + 1 :]:
+                if labels[earlier] == labels[later]:
+                    continue
+                comparable += 1
+                if _TIER[labels[earlier]] > _TIER[labels[later]]:
+                    inversions += 1
+        per_query[query] = (inversions, comparable)
+    return Gate4b(
+        inversions=sum(i for i, _ in per_query.values()),
+        comparable_pairs=sum(c for _, c in per_query.values()),
+        per_query=per_query,
+    )
