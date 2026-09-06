@@ -244,8 +244,12 @@ six pairs disclosed only as type-violating, with no direction attached (`RA`, `A
 rosmarinic acid, prothrombin complex concentrate, bleomycin, conduct disorders.
 
 **A caveat on Gate 2 belongs with this reading rather than buried in the spec:** the controls
-were structurally identifiable by surface duplication (§7.4 of the design). The label pattern
-refutes the heuristic having been used, but the instrument was not clean.
+were structurally identifiable by surface duplication — every control kept its surface, and over
+a census that surface is already in the sheet as a real row. The label pattern refutes the
+shortcut having been used (four duplicated surfaces had *both* members marked `wrong`, which a
+duplicate-spotter cannot produce), but the instrument was not clean. Generalised as
+**ADR-0021**, which is a design-methodology finding rather than an entity-linking one and so
+lives in `DECISIONS.md` rather than here.
 
 See also **DEF-0004**, which the adjudication decomposes.
 

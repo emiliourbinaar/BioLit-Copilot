@@ -281,3 +281,31 @@ def test_controls_avoid_disclosed_surfaces_and_disclosed_concepts_on_both_sides(
     for control in controls:
         assert control.surface not in shown
         assert control.concept_id not in shown_concepts
+
+
+def test_no_control_shares_its_identity_with_any_other_row():
+    """⛔ ADR-0021's pre-flight assertion. A control is a real item shown in a wrong setting, so
+    it has an IDENTITY (the surface, held constant) and a SETTING (the concept, falsified). Over
+    an exhaustive population that identity is already in the sheet as a real row, and an
+    annotator who spots it twice knows one is planted without reading a passage.
+
+    This ran too late for the DEF-0001 pass -- all 8 controls duplicated a real surface, and the
+    defect was found in the built artifact after labelling. It is a test now so the next design
+    over a census population fails at build time instead.
+
+    ⚠️ ASSERTED ON THE BUILT ROW SET, not on the drawing logic. Both passes that shipped this
+    defect INTENDED indistinguishable controls; what betrayed them was what the rows turned out
+    to be, which only the artifact knows.
+    """
+    pairs = [_pair(f"S{i}", concept_id=f"MESH:D{i:05d}", concept_name=f"C{i}") for i in range(6)]
+    outside = [_pair("ZZ", concept_id="MESH:D99999", concept_name="Elsewhere")]
+
+    leaky = build_rows(pairs, controls=choose_controls(pairs, n=2, seed=3))
+    clean = build_rows(pairs, controls=outside)
+
+    def shared(rows):
+        real = {row.surface for row in rows if not row.is_control}
+        return {row.surface for row in rows if row.is_control} & real
+
+    assert shared(leaky), "re-pairing an in-population member IS the hazard -- pinned, not fixed"
+    assert not shared(clean), "a control drawn from outside the population shares no identity"

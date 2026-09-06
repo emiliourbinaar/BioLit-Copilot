@@ -249,6 +249,11 @@ spare surface to hide behind. A future pass draws control surfaces from acronym 
 census excludes — unlinked ones, or ones outside the length rule — so no control duplicates
 anything.
 
+⭐ **Generalised as ADR-0021**, which records the same defect in the 2026-09-05 relevance pass
+(where the labels *cannot* refute it), ADR-0018's Alamri pass as the contrasting case that
+never had it, and the one-line pre-flight assertion — *no control may share its held-constant
+field with any other row* — now enforced by a test rather than left to review.
+
 ### 7.2 — Single annotator, no second reading
 
 Unchanged from every previous pass in this project. No inter-annotator agreement is available
