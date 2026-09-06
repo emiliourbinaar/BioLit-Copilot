@@ -15,6 +15,95 @@ synthesis — consumes `canonical_id` and has no way to second-guess it.
 
 ---
 
+## DEF-0004 — A link whose concept type contradicts the mention's own NER label is never refused, because the linker is never told the label
+
+- **Date:** 2026-09-06
+- **Component:** `biolit.canon` — the `Linker` protocol and `DictionaryLinker`
+- **Status:** Recorded, not fixed. **Opened as a stub before the DEF-0001 adjudication runs**,
+  because the tradeoff below is true regardless of how those labels come out.
+- **Severity:** Wrong entity, silently, at full confidence — the same reader-visible damage as
+  DEF-0001, but with a **mechanically detectable** signature that DEF-0001's class does not have.
+
+### What was observed
+
+`data/canon/concept_labels.json.gz` types each concept `CHEMICAL` or `DISEASE`. Comparing that
+type against the NER label the mention already carries, across all eight frozen states:
+
+| | |
+|---|---|
+| linked mentions | 3,696 |
+| whose concept's own type contradicts the mention's NER label | **87 (2.4%)** |
+| — mention labelled `CHEMICAL` → concept typed `DISEASE` | 59 |
+| — mention labelled `DISEASE` → concept typed `CHEMICAL` | 28 |
+
+Within DEF-0001's population of short all-caps pairs: **10 of 44 pairs, 74 of 204 mentions**,
+including the largest pair by mention count.
+
+```
+26 mentions  APT  DISEASE  -> MESH:C071989 'APT'                              CHEMICAL
+ 9 mentions  GSH  CHEMICAL -> MESH:C563177 'Glucocorticoid-Remediable Aldo…'  DISEASE
+ 9 mentions  CP   CHEMICAL -> MESH:C566991 'Cleft Palate, Isolated, And Me…'  DISEASE
+ 8 mentions  CPA  CHEMICAL -> MESH:C537786 'Aphakia, congenital primary'      DISEASE
+ 8 mentions  RA   CHEMICAL -> MESH:D001172 'Arthritis, Rheumatoid'            DISEASE
+ 6 mentions  AT   CHEMICAL -> MESH:D001260 'Ataxia Telangiectasia'            DISEASE
+ 4 mentions  PCC  CHEMICAL -> OMIM:115700  'CATARACT 4, MULTIPLE TYPES'       DISEASE
+ 2 mentions  BLM  CHEMICAL -> MESH:D001816 'Bloom Syndrome'                   DISEASE
+ 1 mention   CD, 1 mention DIC  (pairs whose NER label varies across documents)
+```
+
+### Why it is possible
+
+**`concept_labels.json.gz` has no consumer anywhere in `src/`.** It was built for ADR-0012's
+embedding-fallback measurement, which was declined, and the artifact outlived the mechanism.
+
+The deeper reason is structural rather than an unset flag: the `Linker` protocol is
+
+```python
+def link(self, surface: str) -> LinkResult: ...
+```
+
+It receives the surface and nothing else. **The mention's label is never passed to the linker**,
+so this check is not switched off — it is unavailable on the shipped path. `EVAL_REPORT.md`
+records that "label-constraining helps slightly and costs nothing: +0.0017 F1 (0.7880 →
+0.7897)"; that was measured on a harness path that is not the one the pipeline runs.
+
+### ⚠️ What a violation proves, and what it does not
+
+**It proves an internal inconsistency, not a link error.** For `DIC` labelled `DISEASE` and
+linked to `Dacarbazine` (typed `CHEMICAL`), either the text means disseminated intravascular
+coagulation and the *link* is wrong, or it means the drug and the *NER label* is wrong. One of
+the two is wrong; which one requires reading the abstract.
+
+That distinction is why this entry claims 87 inconsistencies and **not** 87 wrong links.
+
+### Why not fixed here
+
+⛔ **The obvious fix is not free, and its cost lands on this project's dominant failure mode.**
+Refusing a type-violating link converts a wrong entity into a NIL — and Phase 3 measured the
+e2e NIL rate at **0.45 on the domain sample, 0.32 on BC5CDR**, recording the failure mode as
+*abstention, not error*. Trading precision for recall in the direction the bottleneck already
+runs is exactly the trade ADR-0011's rejection of dictionary enrichment turned on.
+
+It also cannot be measured here: these eight states have no gold, so both sides of the trade
+are unscoreable on them. The measurement belongs on BC5CDR, where a refused link that should
+have been kept shows up as a loss instead of disappearing.
+
+Per ADR-0013, the fix does not get built before that measurement exists. What this entry
+establishes is that the signal is present, free, and currently discarded.
+
+### To be updated
+
+The DEF-0001 adjudication
+(`docs/superpowers/specs/2026-09-06-acronym-adjudication-design.md`) labels all 44 pairs. When
+those labels exist, this entry gains **how many of the 10 flagged pairs were link errors versus
+NER-label errors** — new evidence added here, not a reason to have delayed opening it.
+
+⚠️ That reading will be **descriptive only**. The ten flagged pairs were shown to the annotator
+before labelling began, so their labels cannot serve as a blind test of the flag. See §7.1 of
+the design. This entry rests on the mechanical inconsistency, which needs no labels at all.
+
+---
+
 ## DEF-0001 — Short acronym surfaces link confidently to whichever concept owns that acronym in CTD, with no context check
 
 - **Date:** 2026-09-05
@@ -55,17 +144,30 @@ Across all eight frozen states (5,969 entity mentions):
 concept happens to own the acronym in CTD, not by anything about the document. Verified
 examples from the wrong side of that coin:
 
-| surface | linked to | in context almost certainly |
+| surface | linked to | what the abstract itself says |
 |---|---|---|
-| `GSH` | Glucocorticoid-Remediable Aldosteronism | glutathione |
-| `ATN` | Oculocutaneous albinism type 1 | acute tubular necrosis |
-| `CP` | Cleft Palate, Isolated, And Mental Retardation | creatine phosphokinase / cardiopulmonary |
-| `CPA` | Aphakia, congenital primary | cyproterone acetate |
-| `AITC` | 2,3,4-tri-O-acetylarabinopyranosyl isothiocyanate | allyl isothiocyanate |
+| `GSH` | Glucocorticoid-Remediable Aldosteronism | `…Malondialdehyde (MDA) and glutathione (GSH)` |
+| `ATN` | Oculocutaneous albinism type 1 | `…prior platinum-associated acute tubular necrosis (ATN)` |
+| `CP` | Cleft Palate, Isolated, And Mental Retardation | `…Apoptosis In Vivo and In Vitro. Cisplatin (CP)` |
+| `CPA` | Aphakia, congenital primary | `…methotrexate (MTX), cyclophosphamide (CPA)` |
+| `AITC` | 2,3,4-tri-O-acetylarabinopyranosyl isothiocyanate | `…(HEK)-293 cells. Allyl isothiocyanate (AITC)` |
 
-**How many of the 44 are wrong has not been measured**, and stating a defect rate would
-require adjudicating each pair against its source abstracts. That is a small, bounded
-labelling task; it is not done, and no rate is claimed here.
+⭐ **AMENDED 2026-09-06 — the third column was originally this entry's own guesses, headed "in
+context almost certainly", and two of the five were wrong.** `CP` was guessed as creatine
+phosphokinase / cardiopulmonary and is **cisplatin**; `CPA` was guessed as cyproterone acetate
+and is **cyclophosphamide**. The column now quotes the source abstracts verbatim instead.
+
+**This is the entry's own caution being vindicated in a specific way, and it is kept rather
+than tidied:** the entry refused to state a rate because the pairs had not been adjudicated,
+and the informal reading it did offer — on the five rows it was most confident about — was
+wrong on two. A rate derived from that reading would have been wrong in a way nothing would
+have caught.
+
+**How many of the 44 are wrong is still not measured.** The adjudication is designed and
+pre-registered in
+`docs/superpowers/specs/2026-09-06-acronym-adjudication-design.md`; no rate is claimed here
+until those labels exist. See also **DEF-0004**, which finds that 10 of these 44 pairs are
+flagged by an inconsistency the pipeline can already detect without any annotation.
 
 ### Why it is not a selection or synthesis defect
 
