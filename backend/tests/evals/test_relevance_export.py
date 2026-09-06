@@ -246,3 +246,21 @@ def test_the_sheet_does_not_show_the_paper_count():
     assert "35" not in sheet
     assert "35 papers" not in sheet
     assert _rows()[0].n_papers == 35, "the count is still carried for the machine side"
+
+
+def test_the_sheet_does_not_show_the_year_range():
+    """The same argument as the paper count, one step weaker and accepted on the same
+    grounds. ADR-0020 excludes recency from the ranking score alongside size, so a label
+    nudged by publication years would let Gate 4 reward a recency signal the ranker was
+    forbidden to use.
+
+    What remains on a row is the question and the two concepts -- exactly what a topical
+    relevance judgment needs and nothing that carries a competing signal. Years stay in
+    `rows.jsonl` for the same post-hoc correlation check as the count.
+    """
+    sheet = render_markdown(_rows(), rows_hash="deadbeef", seed=1)
+
+    assert "1977" not in sheet
+    assert "2024" not in sheet
+    assert "Years" not in sheet
+    assert _rows()[0].year_range == "1977-2024", "still carried for the machine side"

@@ -46,14 +46,15 @@ are §6's.
 
 **Unit:** one `(query, cluster)` pair. 83 real rows.
 
-The annotator sees the query, the cluster's two concept names, and the year range. **Not**
-the cluster key's raw MeSH ids, and **not** the finding sentences — the judgment is about
-topical relevance, and reading the findings invites judging quality instead.
+The annotator sees the query and the cluster's two concept names. Nothing else. **Not** the
+cluster key's raw MeSH ids, **not** the finding sentences — the judgment is about topical
+relevance, and reading the findings invites judging quality instead — and **not** the paper
+count or the year range.
 
 ⛔ **AMENDED 2026-09-05, before any label was written.** This section originally showed the
-annotator **the paper count** as well, and §4's export format still carries it. It was removed
-from the annotator-facing sheet on the following argument, which was raised and accepted before
-labelling began.
+annotator **the paper count and the year range** as well, and §4's export format still carries
+both. Both were removed from the annotator-facing sheet on the following argument, raised and
+accepted before labelling began.
 
 Cluster size is not evidence about topical relevance — it says nothing about whether
 `Isotretinoin | Acne Vulgaris` answers a depression question — but it reads as authority, and
@@ -70,13 +71,19 @@ Pure risk, no benefit: the count carries nothing a topical-relevance judgment ne
 deliberate and useful: the finished labels can be checked post hoc for correlation with cluster
 size, which is a direct test of whether this contamination occurred anyway.
 
-⚠️ The **year range is still shown**, and it is the same class of risk one step weaker —
-ADR-0020 excludes recency from the score alongside size. It is retained because it was not
-raised, not because it was cleared; if the same argument is applied to it, the fix is the same
-one line. Recorded here so the asymmetry is a decision rather than an oversight.
+**The year range went the same way, and the argument generalises cleanly.** ADR-0020's score
+excludes size *and* recency, because ordering must encode relevance to the query and no second
+criterion. Recency is the same shape as size one step weaker: publication years say nothing
+about whether a cluster answers a question, and a label nudged by them would let Gate 4 reward
+a recency signal the ranker is forbidden to use. The asymmetry was recorded here for one
+revision — count dropped, years retained — and then closed rather than left standing.
 
-Removing the count changed no row: `rows_hash 2ace2b57aa8e387e` is identical before and after,
-because the frozen row set is unchanged and only its presentation moved.
+**What a row now shows is the question and two concept names.** That is the whole input to the
+judgment being asked for, and every field carrying a competing signal has been removed.
+
+Neither removal changed a row: `rows_hash 2ace2b57aa8e387e` is identical across all three
+revisions, because the frozen row set never changed — only its presentation did. The hash
+covers the row set, not the rendering, which is why the pre-registration is unaffected.
 
 | label | meaning |
 |---|---|
