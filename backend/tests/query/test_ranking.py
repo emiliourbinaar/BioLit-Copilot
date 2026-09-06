@@ -110,3 +110,54 @@ def test_papers_inside_a_cluster_are_not_reordered():
     ranked = rank_clusters([cluster], _concepts("MESH:QC"), tree=TREE)
 
     assert ranked[0].paper_ids == ["z", "a", "m"]
+
+
+def test_an_exactly_matched_side_does_not_swamp_the_other_sides_distance():
+    """DEF-0003, the regression test. `_relevance_key` minimised over every (side x concept)
+    pair, and a cluster's own exactly-matched side gives distance(x, x) == 0, so the minimum
+    was 0 for every cluster and the hierarchy term never reached the sort.
+
+    It was TOTAL rather than partial: `select_stage` keeps only clusters with at least one
+    exact match, so every cluster the ranker is ever handed had a zero available. Measured on
+    the frozen corpus, four of eight queries produced a single distinct score across all their
+    clusters and fell back entirely to the MeSH-id order this was built to replace.
+    """
+    concepts = _concepts("MESH:QC", "MESH:QD")
+    near = _cluster("MESH:QC|MESH:NEAR")
+    far = _cluster("MESH:QC|MESH:FAR")
+    unrelated = _cluster("MESH:QC|MESH:UNRELATED")
+
+    ranked = rank_clusters([unrelated, far, near], concepts, tree=TREE)
+
+    assert ranked == [near, far, unrelated]
+
+
+def test_proximity_is_the_worst_unmatched_side_not_the_best():
+    """A cluster is only as on-topic as its least related side. Taking the best would let one
+    good side hide an unrelated one, which is the same shape as the defect above -- a single
+    strong signal masking everything else."""
+    tree = MeshTree(
+        {
+            "MESH:QC": ["D01.100"],
+            "MESH:QD": ["C10.100"],
+            "MESH:BOTHNEAR_A": ["D01.100.500"],
+            "MESH:BOTHNEAR_B": ["C10.100.500"],
+            "MESH:ONEBAD": ["F03.900"],
+        }
+    )
+    both_near = Cluster(key="MESH:BOTHNEAR_A|MESH:BOTHNEAR_B", paper_ids=["a"])
+    one_bad = Cluster(key="MESH:BOTHNEAR_A|MESH:ONEBAD", paper_ids=["a"])
+
+    ranked = rank_clusters([one_bad, both_near], _concepts("MESH:QC", "MESH:QD"), tree=tree)
+
+    assert ranked == [both_near, one_bad]
+
+
+def test_a_cluster_matching_the_query_on_both_sides_scores_perfect_proximity():
+    """No unmatched side means no residual distance. This must not become `inf` by an empty
+    max, which would sort the best possible cluster last."""
+    concepts = _concepts("MESH:QC", "MESH:QD")
+    both = _cluster("MESH:QC|MESH:QD")
+    one = _cluster("MESH:QC|MESH:NEAR")
+
+    assert rank_clusters([one, both], concepts, tree=TREE) == [both, one]

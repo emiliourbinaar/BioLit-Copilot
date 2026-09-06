@@ -120,8 +120,10 @@ any fix for one should be checked against the other.
 
 - **Date:** 2026-09-05
 - **Component:** `biolit.query.ranking._relevance_key`
-- **Status:** Recorded, not fixed. A structural revision is permitted by the annotation
-  design's §5, but see "Why this is not simply fixed" below.
+- **Status:** ⭐ **FIXED 2026-09-05 as a structural revision — and UNVALIDATED.** Proximity is
+  now the maximum over sides that are not already exact matches. Verified mechanically only:
+  queries whose clusters all tie fell from 4 of 8 to 2 of 8. **These labels are spent as a
+  blind test of the fix** and were not re-read; see ADR-0020's addendum.
 - **Found by:** Gate 4 of the cluster-relevance annotation pass, which is what it was for.
 
 ### What was observed
@@ -167,9 +169,15 @@ side, so the term wants a max (or a sum) over sides rather than a min over all p
 that reading, `Isotretinoin | Anxiety Disorders` scores 3 and `Isotretinoin | Acne Vulgaris`
 scores unmatched, which is the ordering ADR-0020 intended.
 
-⚠️ **But the labels this defect was found with are now spent as a blind test of any fix.** The
-design's §5 permits a revision that changes the score's structure and forbids one that tunes a
-constant, and a max-over-sides revision is squarely the permitted kind. It would still be
-measured against labels chosen *before* the defect was known but read *after* — so a re-run of
-Gate 4 is a weaker instrument than the one that produced this reading, and must be reported as
-such rather than quoted alongside it. That call belongs to the project owner, not to this log.
+⚠️ **The labels this defect was found with are spent as a blind test of the fix.** §5 permits a
+revision changing the score's structure and forbids one tuning a constant, and max-over-sides is
+squarely the permitted kind — but it would be measured against labels chosen *before* the defect
+was known and read *after*. **No Gate 4 re-run was performed**, and none should be quoted as
+validating this. Evidence about hierarchy proximity needs a fresh label set or queries outside
+these eight.
+
+**What the fix does not fix.** Two queries still tie across every cluster: `amiodarone pulmonary
+toxicity` and `cisplatin nephrotoxicity`. Their disease terms resolve to no MeSH concept even
+through NCBI, so the query is a lone chemical and every kept cluster carries it, while the
+disease sides share no tree with any chemical. That is a query-linking limit, not a scoring one,
+and it is recorded in ADR-0020's addendum rather than here.

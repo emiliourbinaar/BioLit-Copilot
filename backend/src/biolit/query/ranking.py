@@ -36,13 +36,32 @@ def _relevance_key(cluster: Cluster, concepts: QueryConcepts, tree: MeshTree) ->
     sides = cluster.key.split("|")
     exact = sum(1 for side in sides if side in concepts.ids)
 
-    distances = [
-        distance
+    # RESIDUAL match quality: how far are the sides that are NOT already exact matches?
+    #
+    # ⚠️ DEF-0003. This was once a `min` over every (side x concept) pair, and that made the
+    # whole term dead: a cluster's exactly-matched side gives `distance(x, x) == 0`, so the
+    # minimum was 0 for every cluster. It was total rather than partial, because `select_stage`
+    # only ever hands over clusters with at least one exact match. Four of eight frozen queries
+    # scored a single distinct value across all their clusters and fell back entirely to the
+    # MeSH-id order this exists to replace.
+    #
+    # MAX over the unmatched sides, not min: a cluster is only as on-topic as its LEAST related
+    # side, and taking the best would let one strong side hide an unrelated one -- the same
+    # masking shape as the defect itself. An empty max means every side matched exactly, which
+    # is the best possible cluster and scores 0 rather than infinity.
+    residual = [
+        min(
+            (
+                distance
+                for concept_id in concepts.ids
+                if (distance := tree.distance(side, concept_id)) is not None
+            ),
+            default=_NO_SHARED_TREE,
+        )
         for side in sides
-        for concept_id in concepts.ids
-        if (distance := tree.distance(side, concept_id)) is not None
+        if side not in concepts.ids
     ]
-    proximity = min(distances) if distances else _NO_SHARED_TREE
+    proximity = max(residual, default=0.0)
 
     # `cluster.key` last preserves `cluster_papers`'s reproducible-and-diffable guarantee for
     # clusters the score cannot separate.
