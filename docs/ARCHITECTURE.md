@@ -8,9 +8,24 @@ pipeline's `cluster_stage` populates it, closing the gap ADR-0013 left open.
 **The Critic is the one layer that is still a stub, and deliberately so.** Phase 5 ran its free
 half and stopped: Gate 2 measured its derived gold standard invalid and retired it unspent
 (ADR-0017), so there is no validated gold to build a Critic against. The pipeline therefore
-reports `critic` and `synthesis` as explicit `StageStatus.not_implemented` rather than returning
-an empty result — `contradictions: []` on its own is indistinguishable from "ran and found
-nothing", which is the distinction the stage ledger exists to preserve.
+reports `critic` as an explicit `StageStatus.not_implemented` rather than returning an empty
+result — `contradictions: []` on its own is indistinguishable from "ran and found nothing",
+which is the distinction the stage ledger exists to preserve.
+
+**Synthesis is built and deterministic (ADR-0019).** Gate A set out to decide whether an LLM
+arm earns that slot and could not: its comparative axes rank a one-word-per-paper index above a
+real characterisation, so no arm was ever bought and the design failure was established for $0.
+`synthesis_stage` renders every selected cluster from the source sentences and invents nothing.
+**Generative narrative synthesis over clusters is out of scope — see `SCOPE.md` SR-0001.**
+
+**The query is consulted exactly twice**: by `esearch`, and by `select_stage`. Until 2026-09-05
+it was consulted only once — `PipelineState.question` was set in `__main__` and read by nothing,
+so every cluster retrieval happened to produce went into the answer. `select_stage` keeps
+clusters sharing a MeSH concept with the question, using NCBI's own query translation because
+the local alias table NILs on terms users actually type (`depression`, `gastrointestinal
+bleeding`, `thyroid dysfunction`). ⚠️ It prunes an off-topic tail — 83 clusters to 70 on the
+frozen corpus — but it does **not** decide what an answer leads with; `render_cluster` carries
+no ranking by design, and changing that needs its own ADR.
 
 **The search for a replacement gold is closed, and that closes the paper-pair Critic with it
 (ADR-0018).** Six corpora across three structural families were measured; the best candidate
@@ -29,9 +44,9 @@ PubMed ──► extract_entities ──► canonicalize ──► licence gate 
            biolit.ner           biolit.canon     build_record      biolit.extract   biolit.cluster
            (Phase 2)            (Phase 3)        (Phase 1 rule)    (Phase 4)        (Phase 3)
 
-  ──► [ critic ]  ──────────►  [ synthesis ]
-      not_implemented           not_implemented
-      (ADR-0017, ADR-0018)      (never built)
+  ──► select ──────────────►  [ critic ]  ──────────►  synthesis
+      biolit.query                not_implemented          biolit.synth.template
+      (query ∩ cluster concepts)  (ADR-0017, ADR-0018)     (ADR-0019, deterministic)
 ```
 
 `biolit.pipeline` runs that left-to-right path over the real components and prints a per-stage

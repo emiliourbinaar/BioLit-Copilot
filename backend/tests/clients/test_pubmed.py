@@ -198,3 +198,88 @@ async def test_efetch_abstracts_makes_no_pmc_call(settings):
 
     assert got == {"11111111": ("Open abstract.", 2021)}
     assert route.called
+
+
+_ESEARCH_TRANSLATED = """<?xml version="1.0"?><eSearchResult>
+<IdList><Id>11111111</Id></IdList>
+<TranslationSet>
+<Translation><From>depression</From><To>"depressed"[All Fields] OR "depression"[MeSH Terms] OR
+"depressive disorder"[MeSH Terms] OR "depressions"[All Fields]</To></Translation>
+<Translation><From>isotretinoin</From><To>"isotretinoin"[Supplementary Concept] OR
+"isotretinoin"[All Fields]</To></Translation>
+</TranslationSet>
+</eSearchResult>"""
+
+
+@respx.mock
+async def test_esearch_detailed_returns_the_concept_terms_ncbi_translated_the_query_into(settings):
+    """NCBI resolves 'depression' to "depressive disorder"[MeSH Terms]; the local dictionary
+    resolves the bare word to nothing. That gap is the whole reason this method exists, so the
+    MeSH term must survive parsing even though it never appeared in the user's query."""
+    respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi").mock(
+        return_value=httpx.Response(200, text=_ESEARCH_TRANSLATED)
+    )
+    async with httpx.AsyncClient() as http:
+        result = await PubMedClient(http, settings).esearch_detailed("isotretinoin and depression")
+
+    assert result.pmids == ["11111111"]
+    assert "depressive disorder" in result.concept_terms
+    assert "isotretinoin" in result.concept_terms
+
+
+@respx.mock
+async def test_esearch_detailed_keeps_every_translated_term_and_lets_the_dictionary_decide(
+    settings,
+):
+    """A SUPERSEDED restriction, kept as a test so it cannot creep back.
+
+    This first dropped everything outside {MeSH Terms, Supplementary Concept, Pharmacological
+    Action}, reasoning that `[All Fields]` carries only inflections and could collide with an
+    unrelated alias. Measured across the eight frozen queries on 2026-09-05 that collision
+    never happened -- the wide policy adds exactly three concepts and all three are correct
+    (Hemorrhage, Acidosis, 3-hydroxy-3-methylglutaryl-coenzyme A) -- while the restriction
+    cost five on-query clusters, including `Aspirin | Hemorrhage` for an NSAIDs/GI-bleeding
+    question and the 9-paper `Lactic Acid | Acidosis` mechanism cluster. Inflections are
+    harmless here because they NIL in the dictionary; a hypothetical risk does not outrank a
+    measured cost.
+    """
+    respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi").mock(
+        return_value=httpx.Response(200, text=_ESEARCH_TRANSLATED)
+    )
+    async with httpx.AsyncClient() as http:
+        result = await PubMedClient(http, settings).esearch_detailed("isotretinoin and depression")
+
+    assert "depressed" in result.concept_terms
+    assert "depressive disorder" in result.concept_terms
+
+
+@respx.mock
+async def test_esearch_detailed_lists_each_translated_term_once(settings):
+    """`"isotretinoin"` arrives under two field tags in one translation and under more across
+    translations. A repeat costs a redundant dictionary lookup and, worse, makes the ledger's
+    reported query concepts read as though the query said the same thing twice."""
+    respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi").mock(
+        return_value=httpx.Response(200, text=_ESEARCH_TRANSLATED)
+    )
+    async with httpx.AsyncClient() as http:
+        result = await PubMedClient(http, settings).esearch_detailed("isotretinoin and depression")
+
+    assert result.concept_terms.count("isotretinoin") == 1
+
+
+@respx.mock
+async def test_esearch_detailed_reports_no_concept_terms_when_ncbi_translated_nothing(settings):
+    """An untranslated query is the fail-open trigger downstream, so "NCBI said nothing" must
+    be representable and must not be confused with an error."""
+    respx.get("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi").mock(
+        return_value=httpx.Response(
+            200,
+            text='<?xml version="1.0"?><eSearchResult><IdList>'
+            "<Id>11111111</Id></IdList></eSearchResult>",
+        )
+    )
+    async with httpx.AsyncClient() as http:
+        result = await PubMedClient(http, settings).esearch_detailed("zzzz")
+
+    assert result.pmids == ["11111111"]
+    assert result.concept_terms == ()

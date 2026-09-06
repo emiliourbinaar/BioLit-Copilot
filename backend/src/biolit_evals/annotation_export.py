@@ -222,8 +222,14 @@ ANNOTATOR_LABELS = frozenset(
 )
 
 _PAIR_HEADING = re.compile(r"^## \d+\.\s+`([^`]+)`\s*$", re.MULTILINE)
-_LABEL_LINE = re.compile(r"^\s*label:\s*(\S+)\s*$", re.MULTILINE)
-_REASON_LINE = re.compile(r"^\s*reason:\s*(.+?)\s*$", re.MULTILINE)
+# HORIZONTAL whitespace only (`[ \t]*`), never `\s*`, around the colon. `\s` matches a
+# newline, so `label:\s*(\S+)` reaches past an UNFILLED stub and captures the following
+# `reason:` as though the annotator had typed it as the label. Both spellings refuse --
+# neither value is a known label -- but the old one refused while naming a token that appears
+# nowhere in the annotator's input, sending them to hunt a typo in a row they had simply not
+# reached yet. No filled sheet parses differently under either spelling.
+_LABEL_LINE = re.compile(r"^[ \t]*label:[ \t]*(\S+)[ \t]*$", re.MULTILINE)
+_REASON_LINE = re.compile(r"^[ \t]*reason:[ \t]*(.+?)[ \t]*$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -232,8 +238,15 @@ class Annotation:
     reason: str
 
 
-def parse_annotations(sheet: str) -> dict[str, Annotation]:
+def parse_annotations(
+    sheet: str, *, allowed: frozenset[str] = ANNOTATOR_LABELS
+) -> dict[str, Annotation]:
     """Read the annotator's verdicts back out of the markdown sheet `main` wrote.
+
+    `allowed` is a parameter so a second annotation pass can reuse this instrument UNCHANGED
+    rather than growing a near-copy: `relevance_export` passes its own four labels. The
+    block format -- numbered `##` heading carrying a backticked id, fenced `label:`/`reason:`
+    stub -- is shared, and sharing the parser is what keeps two passes reading the same way.
 
     The inverse of `export_blind_sheet`. Both gates are COUNTS over what this returns, so a
     block this function silently skips or mis-reads moves a gate verdict directly. It
@@ -256,10 +269,9 @@ def parse_annotations(sheet: str) -> dict[str, Annotation]:
         if label_match is None:
             raise ValueError(f"pair {pair_id} carries no `label:` line")
         label = label_match.group(1)
-        if label not in ANNOTATOR_LABELS:
+        if label not in allowed:
             raise ValueError(
-                f"pair {pair_id} has label {label!r}, which is not one of "
-                f"{sorted(ANNOTATOR_LABELS)}"
+                f"pair {pair_id} has label {label!r}, which is not one of {sorted(allowed)}"
             )
 
         reason_match = _REASON_LINE.search(body)

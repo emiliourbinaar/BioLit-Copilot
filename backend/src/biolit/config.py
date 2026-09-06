@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     ner_score_threshold: float = 0.5
 
     mesh_artifact_path: str = "data/canon/mesh_aliases.json.gz"
+    #: Descriptor tree numbers for ADR-0020's relevance ordering. Built from
+    #: data/mesh/desc2026.gz by `python -m biolit.canon.build_mesh_tree`.
+    mesh_tree_artifact_path: str = "data/canon/mesh_tree.json.gz"
     ctd_chemicals_url: str = "https://ctdbase.org/reports/CTD_chemicals.tsv.gz"
     ctd_diseases_url: str = "https://ctdbase.org/reports/CTD_diseases.tsv.gz"
     ctd_chemicals_diseases_url: str = "https://ctdbase.org/reports/CTD_chemicals_diseases.tsv.gz"
