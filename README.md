@@ -11,7 +11,7 @@ contradiction-detection harness whose 900-pair corpus and free baselines are bui
 paid arms were **retired by a pre-registered stop rule before they were ever called**; a
 deterministic Synthesis stage that ships because the LLM arm's *gate* was shown undecidable
 rather than because the arm lost; and query-conditioned selection and ordering, validated
-against a blind 91-row annotation with four gates fixed before any label existed. 20
+against a blind 91-row annotation with four gates fixed before any label existed. 21
 architecture decisions record what was measured and what was rejected, alongside a scope
 record (`docs/SCOPE.md`) for work deliberately not attempted and a defect log
 (`docs/DEFECTS.md`) for measured failures that are recorded rather than quietly carried —
@@ -246,13 +246,14 @@ uv run python -m biolit_evals.baselines
 ## Reading order
 
 - `docs/EVAL_REPORT.md` — every number, its methodology, and its limitations
-- `docs/DECISIONS.md` — 20 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
+- `docs/DECISIONS.md` — 21 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
   findings, ADR-0017 closes Phase 5 as a negative result, ADR-0018 closes the replacement-gold
   search and records why a stratified null needs its own power calculation, ADR-0019 retires
   Synthesis Gate A as a finding about the gate, ADR-0020 orders clusters by relevance without
-  repealing the within-cluster no-ranking rule, and ADR-0016 collects six verification rules —
-  why a passing test is not evidence the suite would notice a regression, and why evidence
-  disclosed to an annotator has to be tracked rather than averaged away
+  repealing the within-cluster no-ranking rule, ADR-0021 records why an annotation control over
+  an exhaustive population cannot be a re-paired member of it, and ADR-0016 collects six
+  verification rules — why a passing test is not evidence the suite would notice a regression,
+  and why evidence disclosed to an annotator has to be tracked rather than averaged away
 - `docs/SCOPE.md` — work deliberately **not** attempted, with the reasoning that would have to
   be answered to reopen it. SR-0001 puts narrative synthesis out of scope and names the one
   framing that would be genuinely different
