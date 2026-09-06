@@ -14,7 +14,9 @@ rather than because the arm lost; and query-conditioned selection and ordering, 
 against a blind 91-row annotation with four gates fixed before any label existed. 20
 architecture decisions record what was measured and what was rejected, alongside a scope
 record (`docs/SCOPE.md`) for work deliberately not attempted and a defect log
-(`docs/DEFECTS.md`) for measured failures that are recorded rather than quietly carried.
+(`docs/DEFECTS.md`) for measured failures that are recorded rather than quietly carried —
+including a blind adjudication finding **52% of short acronym links wrong**, in a layer whose
+aggregate F1 is 0.78.
 
 **Total paid model spend across the whole project: $2.48** — Phase 4's extractor arm, ~1500
 calls, the one LLM arm ever authorised. Phase 5's Critic arms and Gate A's synthesis arm were
@@ -64,14 +66,14 @@ re-read to bless the fix: DEF-0003.
 | Layer | Module | Headline number |
 |---|---|---|
 | **Entity recognition** (Phase 2) | `biolit.ner` | F1 **0.8099** on the BC5CDR test split |
-| **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** |
+| **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** — but on short all-caps acronyms, adjudicated blind, **52% of links are wrong** (DEF-0001) |
 | **Clustering / pairing** (Phase 3) | `biolit.cluster` | same-sentence pairing F1 **0.6327**, ~halving downstream LLM calls |
 | **Sentence extraction** (Phase 4) | `biolit.extract` | deterministic control F1 **0.6238** — the LLM arm scored **0.3054** and was **not shipped** |
 | **Contradiction detection** (Phase 5) | `biolit.critic` | 900-pair corpus, 3 free baselines at chance — **gold proxy measured invalid (π̂ 0.067) and the paid run cancelled before it was ever called**; the replacement-gold search closed at π̂ 0.60 after six corpora |
 | **Query-conditioned selection** | `biolit.query` | clusters filtered and ordered against the asked question, fail-open and ledgered; query concepts come free from esearch's own `TranslationSet` |
 | **Synthesis** | `biolit.synth` | deterministic template, **shipped because the gate for its LLM rival was shown undecidable** (ADR-0019); each paper quoted once per answer |
 | **End-to-end pipeline** | `biolit.pipeline` | runnable CLI over the real components, with a per-stage drop ledger; the Critic remains an explicit `not_implemented` stub, not an empty result |
-| **Eval harness** | `biolit_evals` | 673 tests; every run appended to a committed JSONL log |
+| **Eval harness** | `biolit_evals` | 692 tests; every run appended to a committed JSONL log |
 
 ## The part worth reading
 
@@ -140,6 +142,41 @@ recording — the n was inherited from a **one-sample** stop rule and carried un
 a second is a new assumption.* One thing did work: cross-question distractor pairs, five extra
 rows, established that the annotator was not simply being strict — the first batch in the
 project where that confound is ruled out by measurement rather than assumed away.
+
+**An aggregate F1 can hide a class where the component is wrong more often than right.**
+Canonicalization scores linking F1 **0.7842**, and the number is real. But short all-caps
+acronyms — 204 linked mentions across eight queries — were adjudicated blind against their
+source abstracts, and **23 of 44 distinct (surface, concept) pairs are wrong: 52% by pair, 65%
+by mention.** `GSH` → *Glucocorticoid-Remediable Aldosteronism* where the abstract says
+glutathione; `CP` → *Cleft Palate* where it says cisplatin; `RA` → *Rheumatoid Arthritis* where
+it says rosmarinic acid. The cause is that a surface is linked to whichever concept owns that
+acronym in CTD, with nothing consulting the surrounding text. This is a **census** of those
+eight queries, not a sample, so no interval is quoted and none would mean anything.
+
+Two things make it worth reading past the number. **A free check already exists and is
+discarded:** the project's own concept-type table contradicts the mention's NER label on
+**87 of 3,696 links**, catching 10 of these 44 pairs at 10/10 precision — and it is unreachable
+because the `Linker` protocol takes a surface and is never told the label (DEF-0004). **And the
+obvious fix is still not obvious:** one of those ten, `AT`, is NER cutting the letters out of
+`ATO` (atorvastatin), so a type-constrained linker would score it a success and fix a span
+defect not at all. The fix stays unbuilt because refusing these links converts wrong entities
+into NILs, and abstention is already this project's measured dominant failure mode — a trade
+that has to be scored on BC5CDR, not asserted here.
+
+**That pass also cost the project a rule, and caught a defect in its own controls.** 17 of the
+44 pairs had been named — in the defect log, or in the design conversation — before labelling
+began, so the reading is reported **split**: 13/17 disclosed against **10/27 undisclosed**. The
+gap is explicitly *not* read as disclosure bias, because the disclosed set was selected for
+looking wrong in the first place, and selection and disclosure are confounded here in a way the
+design cannot separate. Having hit that shape twice, it is now **ADR-0016 rule 6**: evidence
+shown to an annotator before labelling gets tracked as a named constant and reported split,
+never averaged into one headline. Separately, the controls turned out to be **structurally
+identifiable** — each was built by re-pairing a real row and keeping its surface, and the
+population is a census, so every control duplicated a real row's surface and could be spotted
+without reading. The labels refute the shortcut having been used (four duplicated surfaces had
+*both* members marked wrong, which a duplicate-spotter cannot produce), but the gate is
+reported with the caveat attached rather than as clean: surviving on evidence found afterwards
+is not the same as being designed correctly.
 
 **A gate with no gold cannot certify generative quality, and that is structural.** Synthesis
 Gate A asked whether an LLM synthesiser earns the stage over the deterministic template, using
@@ -213,13 +250,15 @@ uv run python -m biolit_evals.baselines
   findings, ADR-0017 closes Phase 5 as a negative result, ADR-0018 closes the replacement-gold
   search and records why a stratified null needs its own power calculation, ADR-0019 retires
   Synthesis Gate A as a finding about the gate, ADR-0020 orders clusters by relevance without
-  repealing the within-cluster no-ranking rule, and ADR-0016 records why a passing test is not
-  evidence the suite would notice a regression
+  repealing the within-cluster no-ranking rule, and ADR-0016 collects six verification rules —
+  why a passing test is not evidence the suite would notice a regression, and why evidence
+  disclosed to an annotator has to be tracked rather than averaged away
 - `docs/SCOPE.md` — work deliberately **not** attempted, with the reasoning that would have to
   be answered to reopen it. SR-0001 puts narrative synthesis out of scope and names the one
   framing that would be genuinely different
 - `docs/DEFECTS.md` — measured defects in shipped components, recorded rather than carried
   quietly. Every entry so far is in entity linking, which is the project's dominant and
-  downstream-unrecoverable bottleneck
+  downstream-unrecoverable bottleneck. DEF-0001 carries the 52% acronym rate and the blind
+  adjudication behind it; DEF-0004 the free type check the linker cannot reach
 - `docs/ARCHITECTURE.md` — how the layers fit together
 - `docs/superpowers/specs/` and `docs/superpowers/plans/` — per-phase specs and plans
