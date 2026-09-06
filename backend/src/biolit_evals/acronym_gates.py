@@ -5,6 +5,8 @@ any label existed. The bands here are transcriptions of it, not choices made aft
 data, and none of them may move to match an observation.
 """
 
+import hashlib
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
@@ -234,3 +236,20 @@ def load_labels(sheet: str, manifest: Mapping[str, object]) -> list[LabelledPair
         )
         for row_id in sorted(annotations)
     ]
+
+
+def labels_hash(rows: Sequence[LabelledPair]) -> str:
+    """Content-addressed over the JUDGMENTS, stable across order.
+
+    `rows_hash` pins which rows were shown; this pins what was said about them, so a gate
+    recomputed against edited labels cannot claim the hash it was pre-registered against.
+    Reasons are excluded deliberately -- they are for a human reader, and a typo fix in one
+    must not invalidate a frozen reading.
+    """
+    payload = json.dumps(
+        sorted(
+            (row.row_id, row.surface, row.concept_id, row.is_control, row.label) for row in rows
+        ),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()[:16]

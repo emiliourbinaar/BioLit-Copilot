@@ -211,6 +211,44 @@ does not determine the answer. **Gate 3 is reported with a disclosed/undisclosed
 same treatment §8.2 of the relevance design gave contaminated queries — reported separately,
 never folded into a denominator that reads clean.
 
+### 7.4 — ⛔ The controls were structurally identifiable, and the design did it
+
+**Added 2026-09-06, after labelling.** A control is built by taking a real pair and swapping in
+another pair's concept, keeping the surface and its own passages. The population is a **census**
+(§1), so every surface is already in the sheet as a real row — which means **a control always
+duplicates a real row's surface, and the 8 duplicated surfaces in the sheet are exactly the 8
+controls**: `AH`, `ALD`, `DDAB`, `ES`, `GBS`, `HMG`, `IBS`, `OA`.
+
+An annotator noticing a surface twice with two different concepts knows one of them is planted,
+and controls are always wrong. **Gate 2's 8-of-8 reading is therefore not the clean instrument
+§4 claims.** This is a defect in the design, found after labelling, and it is recorded rather
+than argued away — §4's exclusion work protected the controls from *memory* and left them open
+to *structure*.
+
+**The label pattern is inconsistent with the heuristic having been used, and that is evidence
+rather than reassurance.** A duplicate-spotter reasons "one of these two is the plant, so the
+other is real" and marks the other `correct`. Instead:
+
+| surface | control member | real member |
+|---|---|---|
+| `AH` | wrong | **wrong** |
+| `ALD` | wrong | **wrong** |
+| `ES` | wrong | **wrong** |
+| `IBS` | wrong | **wrong** |
+| `HMG` | wrong | **granularity** |
+| `DDAB`, `GBS`, `OA` | wrong | correct |
+
+Four pairs where **both** members read wrong, and one where the real member read `granularity`,
+are what a reader who judged each row on its passage produces and what a duplicate-spotter
+cannot. Gate 2 is reported as `DISCRIMINATING` **with this caveat attached**, not as a clean
+verdict.
+
+**The fix for a census population is structural: controls must come from OUTSIDE the census.**
+Re-pairing an existing row cannot work when the population is exhaustive, because there is no
+spare surface to hide behind. A future pass draws control surfaces from acronym mentions the
+census excludes — unlinked ones, or ones outside the length rule — so no control duplicates
+anything.
+
 ### 7.2 — Single annotator, no second reading
 
 Unchanged from every previous pass in this project. No inter-annotator agreement is available

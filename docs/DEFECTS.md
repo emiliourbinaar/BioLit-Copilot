@@ -19,8 +19,10 @@ synthesis — consumes `canonical_id` and has no way to second-guess it.
 
 - **Date:** 2026-09-06
 - **Component:** `biolit.canon` — the `Linker` protocol and `DictionaryLinker`
-- **Status:** Recorded, not fixed. **Opened as a stub before the DEF-0001 adjudication runs**,
-  because the tradeoff below is true regardless of how those labels come out.
+- **Status:** Recorded, **not fixed**. Opened as a stub before the DEF-0001 adjudication ran,
+  because the tradeoff below is true regardless of how those labels came out; **decomposed
+  2026-09-06** once they existed — 8 of the 10 flagged pairs are link errors, 1 is an NER span
+  error and 1 is both.
 - **Severity:** Wrong entity, silently, at full confidence — the same reader-visible damage as
   DEF-0001, but with a **mechanically detectable** signature that DEF-0001's class does not have.
 
@@ -91,16 +93,51 @@ have been kept shows up as a loss instead of disappearing.
 Per ADR-0013, the fix does not get built before that measurement exists. What this entry
 establishes is that the signal is present, free, and currently discarded.
 
-### To be updated
+### ⭐ UPDATED 2026-09-06 — the decomposition, from the DEF-0001 labels
 
-The DEF-0001 adjudication
-(`docs/superpowers/specs/2026-09-06-acronym-adjudication-design.md`) labels all 44 pairs. When
-those labels exist, this entry gains **how many of the 10 flagged pairs were link errors versus
-NER-label errors** — new evidence added here, not a reason to have delayed opening it.
+**All ten flagged pairs were labelled `wrong`.** None was `correct`, `granularity` or
+`cant_tell`. Over the census the flag's precision is **10 / 10** and its recall over wrong pairs
+is **10 / 23** — it catches under half the errors, and misses nothing it fires on.
 
-⚠️ That reading will be **descriptive only**. The ten flagged pairs were shown to the annotator
-before labelling began, so their labels cannot serve as a blind test of the flag. See §7.1 of
-the design. This entry rests on the mechanical inconsistency, which needs no labels at all.
+⚠️ **DESCRIPTIVE ONLY, and the reason is not a formality.** The ten flagged pairs were shown to
+the annotator as a table before labelling, so these labels cannot be the blind test of the flag
+this was designed as (spec §7.1). This entry still rests on the mechanical inconsistency, which
+needs no labels. What *is* new evidence is the decomposition below, because the annotator was
+never told what any of these surfaces actually meant.
+
+**Which side was wrong — the link, or the NER label?** §"What a violation proves" said a
+violation identifies an inconsistency without saying which half caused it. The passages settle
+it for 8 of 10:
+
+| pair | what the passage says | at fault |
+|---|---|---|
+| `APT` | amiodarone-induced pulmonary toxicity | **link** |
+| `GSH` | glutathione | **link** |
+| `CP` | cisplatin | **link** |
+| `CPA` | cyclophosphamide | **link** |
+| `RA` | rosmarinic acid | **link** |
+| `PCC` | prothrombin complex concentrate | **link** |
+| `BLM` | bleomycin | **link** |
+| `DIC` | disseminated intravascular coagulation | **link** |
+| `AT` | *the letters `AT` taken out of `ATO` (atorvastatin)* | **NER span** |
+| `CD` | a chemical probe name in one passage; conduct disorders in the other | **both** |
+
+⛔ **`AT` is the case that stops the obvious fix from being obvious.** The mention is a
+*fragment of a longer token* — NER cut `AT` out of `ATO` — so no linking decision could have
+been right, and refusing the link would suppress a symptom while leaving a span defect
+upstream. A type-constrained linker would score this as a success and fix nothing.
+
+**What this does and does not change about the fix.** It strengthens the case that the signal is
+real: 8 of 10 are squarely link errors that a type check would have caught for free. It does
+**not** touch the reason the fix is not built here — refusing these links converts wrong
+entities into NILs, and abstention is already this project's dominant failure mode. That trade
+still needs BC5CDR, where both sides of it score.
+
+**One number in this entry made more precise.** The "74 of 204 mentions" above counts
+individually type-violating *mentions*; the ten flagged *pairs* carry **77** mentions in total.
+The two differ because `CD` and `DIC` are labelled inconsistently across documents, so some of
+their mentions violate and some do not. Both figures are correct about different things and the
+distinction is now stated rather than left for a reader to trip over.
 
 ---
 
@@ -108,7 +145,7 @@ the design. This entry rests on the mechanical inconsistency, which needs no lab
 
 - **Date:** 2026-09-05
 - **Component:** `biolit.canon` — `MeshDictionary.lookup` / `DictionaryLinker`
-- **Status:** Recorded, not fixed. No consumer-side workaround; see "Why not fixed here".
+- **Status:** ⭐ **MEASURED 2026-09-06** — 23 of 44 pairs (52.3%) and 132 of 204 mentions (64.7%) carry a wrong concept. Still **not fixed**; no consumer-side workaround, see "Why not fixed here".
 - **Severity:** Wrong entity, silently, at full confidence. `LinkResult.tiebroken` is `False`
   for these, so nothing downstream can tell them from a clean link.
 
@@ -163,11 +200,54 @@ and the informal reading it did offer — on the five rows it was most confident
 wrong on two. A rate derived from that reading would have been wrong in a way nothing would
 have caught.
 
-**How many of the 44 are wrong is still not measured.** The adjudication is designed and
-pre-registered in
-`docs/superpowers/specs/2026-09-06-acronym-adjudication-design.md`; no rate is claimed here
-until those labels exist. See also **DEF-0004**, which finds that 10 of these 44 pairs are
-flagged by an inconsistency the pipeline can already detect without any annotation.
+### ⭐ MEASURED 2026-09-06 — the rate, at last
+
+All 44 pairs were adjudicated blind against their source passages, plus 8 controls, under gates
+fixed before any label existed (`docs/superpowers/specs/2026-09-06-acronym-adjudication-design.md`;
+`rows_hash ad22f212d9a39b55`, `labels_hash 538e8b522f04b370`).
+
+| | per pair | per mention |
+|---|---|---|
+| **`wrong`** — the concept is not what the author meant | **23 / 44 (52.3%)** | **132 / 204 (64.7%)** |
+| `granularity` — right subject, wrong level (DEF-0002's shape) | 2 / 44 | 18 / 204 |
+| `correct` | 19 / 44 | 54 / 204 |
+| `cant_tell` | **0** | — |
+
+**A majority of these links are wrong, and the reader-facing figure is worse than the
+mechanism-facing one.** Per pair asks how often the mechanism errs; per mention asks how much
+wrong text a reader sees. The gap is not noise — the wrong pairs are the frequent ones, led by
+`APT` at 26 mentions.
+
+⚠️ **This is a CENSUS of these eight queries, not an estimate.** The 44 pairs are the complete
+enumeration of the class in this corpus, so there is no sampling distribution and **no interval
+is reported**. Whether 52% transfers to other queries is a question this design cannot answer.
+
+**Reported split, per ADR-0016 rule 6**, because 17 of the 44 were named to the annotator before
+labelling:
+
+| | pairs `wrong` | mentions `wrong` |
+|---|---|---|
+| disclosed (17) | 13 / 17 | 93 / 131 |
+| **undisclosed (27)** | **10 / 27** | **39 / 73** |
+
+⛔ **The gap between the two rows must NOT be read as disclosure bias.** The disclosed set was
+*selected for looking wrong* — `DEFECTS.md` picked known-bad examples and DEF-0004's flag picked
+inconsistencies — so a higher rate there is expected by construction, disclosure or not.
+Selection and disclosure are confounded and this design cannot separate them. What the split
+does establish is that **on 27 pairs carrying no prior disclosure at all, 10 are still wrong**.
+
+**Two signs the labels are independent judgment rather than an echo.** The annotator marked
+`ICH` as `granularity` where this entry had named it *correct* — reading intracranial
+haemorrhage as broader than `Cerebral Hemorrhage`, which is DEF-0002's exact shape. And for the
+six pairs disclosed only as type-violating, with no direction attached (`RA`, `AT`, `PCC`,
+`BLM`, `CD`, `DIC`), the recorded reasons name meanings that were never disclosed to them —
+rosmarinic acid, prothrombin complex concentrate, bleomycin, conduct disorders.
+
+**A caveat on Gate 2 belongs with this reading rather than buried in the spec:** the controls
+were structurally identifiable by surface duplication (§7.4 of the design). The label pattern
+refutes the heuristic having been used, but the instrument was not clean.
+
+See also **DEF-0004**, which the adjudication decomposes.
 
 ### Why it is not a selection or synthesis defect
 

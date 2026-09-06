@@ -6,6 +6,7 @@ from biolit_evals.acronym_gates import (
     gate2_controls,
     gate3_rate,
     gate4_type_violation,
+    labels_hash,
     load_labels,
     split_by_disclosure,
 )
@@ -151,3 +152,19 @@ def test_load_labels_refuses_drift_between_the_sheet_and_the_frozen_manifest():
     bigger = {"rows": dict(_MANIFEST["rows"], a001={**_MANIFEST["rows"]["a000"], "surface": "CP"})}
     with pytest.raises(ValueError, match="a001"):
         load_labels(_SHEET, bigger)
+
+
+def test_labels_hash_pins_the_judgments_not_merely_which_rows_were_shown():
+    """`rows_hash` already pins WHICH rows were shown; this pins what was said about them, so a
+    gate recomputed against edited labels cannot claim the hash it was registered against.
+
+    Reasons are excluded deliberately: they are for a human reader, and a typo fix in one must
+    not invalidate a frozen reading.
+    """
+    # Seven reverse-inserted elements, per this repo's determinism-fixture convention.
+    rows = _rows(["correct", "wrong", "granularity", "correct", "wrong", "granularity", "correct"])
+    edited = _rows(["correct", "wrong", "granularity", "correct", "wrong", "granularity", "wrong"])
+
+    assert labels_hash(rows) == labels_hash(list(reversed(rows)))
+    assert labels_hash(rows) != labels_hash(rows[:-1])
+    assert labels_hash(rows) != labels_hash(edited)
