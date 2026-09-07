@@ -11,6 +11,7 @@ count of that reads as a bug on first run. Every stage records what it dropped a
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
+from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.cluster.group import cluster_papers
 from biolit.cluster.pairing import PairingStrategy
@@ -199,7 +200,11 @@ def cluster_stage(
 
 
 def select_stage(
-    clusters: Sequence[Cluster], concepts: QueryConcepts, *, tree: MeshTree
+    clusters: Sequence[Cluster],
+    concepts: QueryConcepts,
+    *,
+    tree: MeshTree,
+    actions: PharmacologicalActions,
 ) -> tuple[list[Cluster], StageReport]:
     """Keep only clusters sharing a MeSH concept with the question. THE ONLY STAGE THAT
     CONSULTS THE QUERY after `esearch`.
@@ -241,10 +246,15 @@ def select_stage(
                 "so the order is the unchanged key order and means nothing about relevance."
             ),
         )
+    # ONE PREDICATE, BOTH DECISIONS (ADR-0022). `cluster_matches` and `_relevance_key` consume
+    # the identical `side_matches`, and they must: a cluster kept by the class relation but
+    # scored as a miss sorts below every background cluster, which on the frozen corpus put the
+    # three recovered statins clusters at 15-17 of 17.
     kept = rank_clusters(
-        [cluster for cluster in clusters if cluster_matches(cluster, concepts)],
+        [cluster for cluster in clusters if cluster_matches(cluster, concepts, actions=actions)],
         concepts,
         tree=tree,
+        actions=actions,
     )
     dropped = len(clusters) - len(kept)
     return kept, StageReport(
@@ -265,8 +275,10 @@ def select_stage(
         # unable to tell from the record whether ordering happened at all.
         note=(
             f"kept {len(kept)} of {len(clusters)} by concept overlap with the question "
-            f"({', '.join(sorted(concepts.evidence.values()))}); "
-            "ordered by relevance to the query (ADR-0020: exact concept matches, then MeSH "
+            f"({', '.join(sorted(concepts.evidence.values()))}), where a cluster side counts "
+            "as overlapping if it IS a query concept or belongs to a pharmacological class "
+            "the query named (ADR-0022, member->class only); "
+            "ordered by relevance to the query (ADR-0020: matched sides, then MeSH "
             "hierarchy proximity, then key order; size is deliberately not a signal)."
         ),
     )

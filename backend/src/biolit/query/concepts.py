@@ -27,6 +27,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from biolit.canon.mesh import LinkResult
+from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.domain.records import Cluster
 
 
@@ -67,8 +68,29 @@ def resolve_query_concepts(
     return QueryConcepts(ids=frozenset(ids), evidence=dict(ids), unresolved=tuple(unresolved))
 
 
-def cluster_matches(cluster: Cluster, concepts: QueryConcepts) -> bool:
-    """True when either side of the cluster key is a concept the query resolved to.
+def side_matches(side: str, concepts: QueryConcepts, actions: PharmacologicalActions) -> bool:
+    """True when this one side of a cluster key answers the query: it IS a query concept, or
+    it belongs to a pharmacological class the query named (ADR-0022).
+
+    ⚠️ MEMBER -> CLASS ONLY, and the asymmetry is structural rather than enforced. The lookup
+    is keyed on the SIDE, so a cluster carrying `Atorvastatin` answers a question about
+    HMG-CoA reductase inhibitors, while a question about Atorvastatin does not pull in the
+    class -- the class descriptor declares no action of its own, so there is nothing to match
+    on. The reverse direction has no demonstrated consumer (ADR-0013) and is not built.
+
+    THE SAME PREDICATE ORDERS AS FILTERS. `_relevance_key` calls this too, and it must: a
+    cluster kept only by the class relation but scored as an exact-match miss sorts BELOW
+    every merely-background cluster. Measured on the frozen corpus, filtering on this while
+    ranking on identity alone puts the three recovered statins clusters at positions 15-17 of
+    17, under seven background ones.
+    """
+    return side in concepts.ids or bool(actions.classes_of(side) & concepts.ids)
+
+
+def cluster_matches(
+    cluster: Cluster, concepts: QueryConcepts, *, actions: PharmacologicalActions
+) -> bool:
+    """True when either side of the cluster key answers the query.
 
     DELIBERATELY AN OR. Requiring both sides drops `Aspirin | Hemorrhage` from an
     NSAIDs/bleeding question and `Lactic Acid | Acidosis` from a metformin/lactic-acidosis
@@ -80,4 +102,4 @@ def cluster_matches(cluster: Cluster, concepts: QueryConcepts) -> bool:
     that an unfiltered run stays distinguishable in the ledger from a filtered one that
     happened to keep everything.
     """
-    return bool(set(cluster.key.split("|")) & concepts.ids)
+    return any(side_matches(side, concepts, actions) for side in cluster.key.split("|"))

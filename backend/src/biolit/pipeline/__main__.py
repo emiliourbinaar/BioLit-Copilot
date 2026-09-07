@@ -20,6 +20,7 @@ def main(argv: list[str] | None = None) -> None:
     from biolit.canon.canonicalize import canonicalize
     from biolit.canon.linker import DictionaryLinker
     from biolit.canon.mesh import MeshDictionary
+    from biolit.canon.mesh_actions import PharmacologicalActions
     from biolit.canon.mesh_tree import MeshTree
     from biolit.clients.pubmed import PubMedClient
     from biolit.cluster.pairing import SameSentencePairing
@@ -86,7 +87,10 @@ def main(argv: list[str] | None = None) -> None:
     # keeps clusters that share one. Free, deterministic, no LLM.
     concepts = resolve_query_concepts(found.concept_terms, lookup=linker.link)
     clusters, select_report = select_stage(
-        clusters, concepts, tree=MeshTree.from_artifact(settings.mesh_tree_artifact_path)
+        clusters,
+        concepts,
+        tree=MeshTree.from_artifact(settings.mesh_tree_artifact_path),
+        actions=PharmacologicalActions.from_artifact(settings.mesh_actions_artifact_path),
     )
     state.clusters = clusters
     state.stages.append(select_report)

@@ -1,3 +1,4 @@
+from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.cluster.pairing import SameSentencePairing
 from biolit.domain.enums import EntityLabel, LicenseTier, Source, TextType
@@ -14,6 +15,8 @@ from biolit.pipeline.stages import (
 )
 from biolit.query.concepts import QueryConcepts
 from biolit.state.pipeline import StageStatus
+
+NO_ACTIONS = PharmacologicalActions({})
 
 
 def _paper(pid: str, abstract: str | None, *, allowed: bool) -> Paper:
@@ -227,7 +230,9 @@ def test_select_stage_drops_clusters_that_share_no_concept_with_the_query():
     on_query = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"])
     off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"])
 
-    kept, report = select_stage([on_query, off_query], _concepts("MESH:D008687"), tree=MeshTree({}))
+    kept, report = select_stage(
+        [on_query, off_query], _concepts("MESH:D008687"), tree=MeshTree({}), actions=NO_ACTIONS
+    )
 
     assert kept == [on_query]
     assert report.status is StageStatus.completed
@@ -242,7 +247,9 @@ def test_select_stage_records_no_drop_key_when_every_cluster_is_on_query():
     happened to be empty."""
     cluster = Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a", "b"])
 
-    kept, report = select_stage([cluster], _concepts("MESH:D008687"), tree=MeshTree({}))
+    kept, report = select_stage(
+        [cluster], _concepts("MESH:D008687"), tree=MeshTree({}), actions=NO_ACTIONS
+    )
 
     assert kept == [cluster]
     assert report.dropped == {}
@@ -261,7 +268,7 @@ def test_select_stage_fails_open_when_the_query_resolved_to_no_concept_at_all():
     ]
 
     kept, report = select_stage(
-        clusters, QueryConcepts(frozenset(), {}, ("wibble",)), tree=MeshTree({})
+        clusters, QueryConcepts(frozenset(), {}, ("wibble",)), tree=MeshTree({}), actions=NO_ACTIONS
     )
 
     assert kept == clusters
@@ -279,7 +286,9 @@ def test_select_stage_does_not_rescue_a_query_that_filters_down_to_nothing():
     """
     off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c", "d"])
 
-    kept, report = select_stage([off_query], _concepts("MESH:D008687"), tree=MeshTree({}))
+    kept, report = select_stage(
+        [off_query], _concepts("MESH:D008687"), tree=MeshTree({}), actions=NO_ACTIONS
+    )
 
     assert kept == []
     assert report.n_out == 0
@@ -335,7 +344,7 @@ def test_select_stage_reports_selection_and_ordering_as_two_distinguishable_fact
     off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["c"])
 
     _kept, report = select_stage(
-        [on_query, off_query], _concepts("MESH:D008687"), tree=MeshTree({})
+        [on_query, off_query], _concepts("MESH:D008687"), tree=MeshTree({}), actions=NO_ACTIONS
     )
 
     note = report.note or ""
@@ -353,7 +362,10 @@ def test_select_stage_orders_the_clusters_it_keeps_by_relevance():
     tree = MeshTree({"MESH:QC": ["D01.1"], "MESH:AAA": ["D01.9"]})
 
     kept, _report = select_stage(
-        [alphabetically_first, on_query], _concepts("MESH:QC", "MESH:QD"), tree=tree
+        [alphabetically_first, on_query],
+        _concepts("MESH:QC", "MESH:QD"),
+        tree=tree,
+        actions=NO_ACTIONS,
     )
 
     assert kept[0] is on_query
@@ -366,9 +378,31 @@ def test_select_stage_says_it_did_not_reorder_when_the_query_resolved_to_nothing
     clusters = [Cluster(key="MESH:D008687|MESH:D000140", paper_ids=["a"])]
 
     _kept, report = select_stage(
-        clusters, QueryConcepts(frozenset(), {}, ("wibble",)), tree=MeshTree({})
+        clusters, QueryConcepts(frozenset(), {}, ("wibble",)), tree=MeshTree({}), actions=NO_ACTIONS
     )
 
     note = report.note or ""
     assert "unfiltered" in note.lower()
     assert "not reordered" in note.lower()
+
+
+def test_select_stage_keeps_a_cluster_that_matches_only_through_its_pharmacological_class():
+    """ADR-0022 end to end, and the shape DEF-0002 named on the chemical side. "statins and
+    rhabdomyolysis" resolves to the CLASS; the clusters carry a MEMBER, and MeSH files members
+    by chemical structure (D03/D10) and classes by action (D27), so no tree walk connects them.
+
+    The ledger must say which rule kept them. A reader who sees `Atorvastatin` in the answer to
+    a question that never named Atorvastatin has no way to tell a class match from a linking
+    bug unless the note distinguishes them.
+    """
+    member = Cluster(key="MESH:D000069059|MESH:D012206", paper_ids=["a"])
+    off_query = Cluster(key="MESH:D003404|MESH:D006947", paper_ids=["b"])
+    actions = PharmacologicalActions({"MESH:D000069059": ["MESH:D019161"]})
+
+    kept, report = select_stage(
+        [member, off_query], _concepts("MESH:D019161"), tree=MeshTree({}), actions=actions
+    )
+
+    assert kept == [member]
+    assert report.dropped == {"off_query": 1}
+    assert "pharmacological" in (report.note or "").lower()

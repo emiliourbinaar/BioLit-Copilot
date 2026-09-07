@@ -17,9 +17,10 @@ rule actually lives, and this module never reaches inside a cluster.
 
 from collections.abc import Sequence
 
+from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.domain.records import Cluster
-from biolit.query.concepts import QueryConcepts
+from biolit.query.concepts import QueryConcepts, side_matches
 
 #: Sorts after every real distance. `MeshTree.distance` returns None for "no shared placement",
 #: which is a category rather than a magnitude, so it is mapped here at the point of sorting
@@ -27,23 +28,38 @@ from biolit.query.concepts import QueryConcepts
 _NO_SHARED_TREE = float("inf")
 
 
-def _relevance_key(cluster: Cluster, concepts: QueryConcepts, tree: MeshTree) -> tuple:
-    """Lexicographic: exact matches (more first), then hierarchy proximity, then key order.
+def _relevance_key(
+    cluster: Cluster, concepts: QueryConcepts, tree: MeshTree, actions: PharmacologicalActions
+) -> tuple:
+    """Lexicographic: matched sides (more first), then hierarchy proximity, then key order.
 
     No threshold anywhere. Each signal is ordinal and the sort consumes it as such, so there
-    is no constant to tune and none can be tuned against the relevance labels later.
+    is no constant to tune and none can be tuned against the relevance labels later. ADR-0022
+    keeps that property: `side_matches` is a set relation, not a distance with a cutoff, which
+    is the reason it was preferred over "tree distance <= k" for the same three clusters.
+
+    ⚠️ MATCHED, NOT EXACT (ADR-0022). A side counts here on the same test `select_stage` used
+    to keep the cluster, and the two must not diverge: a cluster admitted by the class relation
+    but scored as a miss sorts below every merely-background cluster, which on the frozen
+    corpus buried the three recovered statins clusters at 15-17 of 17.
     """
     sides = cluster.key.split("|")
-    exact = sum(1 for side in sides if side in concepts.ids)
+    matched = sum(1 for side in sides if side_matches(side, concepts, actions))
 
     # RESIDUAL match quality: how far are the sides that are NOT already exact matches?
     #
     # ⚠️ DEF-0003. This was once a `min` over every (side x concept) pair, and that made the
     # whole term dead: a cluster's exactly-matched side gives `distance(x, x) == 0`, so the
     # minimum was 0 for every cluster. It was total rather than partial, because `select_stage`
-    # only ever hands over clusters with at least one exact match. Four of eight frozen queries
+    # only ever hands over clusters with at least one MATCHED side. Four of eight frozen queries
     # scored a single distinct value across all their clusters and fell back entirely to the
     # MeSH-id order this exists to replace.
+    #
+    # ADR-0022 widened what "matched" means and the exclusion below widened with it, so the
+    # invariant is preserved rather than merely still true by luck. It has to be: a class
+    # member shares NO tree node with its class -- Atorvastatin sits in D03/D10, the statin
+    # class in D27 -- so a side matched by the class relation and left in the residual scores
+    # `inf` and sorts last. The wider filter would have made the ranker worse, not just unfixed.
     #
     # MAX over the unmatched sides, not min: a cluster is only as on-topic as its LEAST related
     # side, and taking the best would let one strong side hide an unrelated one -- the same
@@ -59,17 +75,21 @@ def _relevance_key(cluster: Cluster, concepts: QueryConcepts, tree: MeshTree) ->
             default=_NO_SHARED_TREE,
         )
         for side in sides
-        if side not in concepts.ids
+        if not side_matches(side, concepts, actions)
     ]
     proximity = max(residual, default=0.0)
 
     # `cluster.key` last preserves `cluster_papers`'s reproducible-and-diffable guarantee for
     # clusters the score cannot separate.
-    return (-exact, proximity, cluster.key)
+    return (-matched, proximity, cluster.key)
 
 
 def rank_clusters(
-    clusters: Sequence[Cluster], concepts: QueryConcepts, *, tree: MeshTree
+    clusters: Sequence[Cluster],
+    concepts: QueryConcepts,
+    *,
+    tree: MeshTree,
+    actions: PharmacologicalActions,
 ) -> list[Cluster]:
     """Return the clusters ordered by relevance. Adds nothing, removes nothing.
 
@@ -80,4 +100,4 @@ def rank_clusters(
     siblings rather than itself. Here that same relationship only demotes. A ranking error
     moves a cluster down the page; a filter error deletes it.
     """
-    return sorted(clusters, key=lambda cluster: _relevance_key(cluster, concepts, tree))
+    return sorted(clusters, key=lambda cluster: _relevance_key(cluster, concepts, tree, actions))

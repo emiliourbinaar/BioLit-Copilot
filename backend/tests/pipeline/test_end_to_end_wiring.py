@@ -1,3 +1,4 @@
+from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.cluster.pairing import SameSentencePairing
 from biolit.domain.enums import EntityLabel, LicenseTier, Source, TextType
@@ -14,6 +15,8 @@ from biolit.pipeline.stages import (
 )
 from biolit.query.concepts import QueryConcepts
 from biolit.state.pipeline import PipelineState, StageStatus
+
+NO_ACTIONS = PharmacologicalActions({})
 
 ABSTRACT = "Metformin therapy was associated with acidosis in this cohort."
 
@@ -82,7 +85,9 @@ def test_the_whole_pipeline_runs_and_the_ledger_accounts_for_every_paper():
     # `PipelineState.question` was write-only, and every cluster retrieval happened to
     # produce went into the answer regardless of what was asked.
     concepts = QueryConcepts(frozenset({"D008687"}), {"D008687": "metformin"}, ())
-    clusters, select_report = select_stage(clusters, concepts, tree=MeshTree({}))
+    clusters, select_report = select_stage(
+        clusters, concepts, tree=MeshTree({}), actions=NO_ACTIONS
+    )
     state.clusters = clusters
     state.stages.append(select_report)
     state.stages.append(critic_stub(len(clusters)))
