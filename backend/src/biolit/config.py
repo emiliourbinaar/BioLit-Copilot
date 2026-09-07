@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     #: Descriptor tree numbers for ADR-0020's relevance ordering. Built from
     #: data/mesh/desc2026.gz by `python -m biolit.canon.build_mesh_tree`.
     mesh_tree_artifact_path: str = "data/canon/mesh_tree.json.gz"
+    #: Pharmacological-action classes for ADR-0022's member->class match. Same source dump as
+    #: the tree, different relation: a drug class is NOT a tree ancestor of its members.
+    #: Built by `python -m biolit.canon.build_mesh_actions`.
+    mesh_actions_artifact_path: str = "data/canon/mesh_actions.json.gz"
     ctd_chemicals_url: str = "https://ctdbase.org/reports/CTD_chemicals.tsv.gz"
     ctd_diseases_url: str = "https://ctdbase.org/reports/CTD_diseases.tsv.gz"
     ctd_chemicals_diseases_url: str = "https://ctdbase.org/reports/CTD_chemicals_diseases.tsv.gz"
