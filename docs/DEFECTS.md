@@ -300,6 +300,22 @@ It is logged here because it is not actually specific to that gate: it is the sa
 as DEF-0001 — a surface form is linked without reference to what the document is about — and
 any fix for one should be checked against the other.
 
+**⭐ UPDATE 2026-09-07 — the SELECTION half of this shape is closed on the chemical side; the
+LINKING half is untouched.** Gate 3 of the relevance pass found the same granularity mismatch
+arriving at a different stage: `select_stage` deleted three `answers` clusters carrying
+`Atorvastatin` because the query resolved to the drug **class**, class-to-member on the
+chemical side. **ADR-0022 fixes that** — a cluster side now matches if it belongs to a
+pharmacological class the query named, and all three are recovered. ⚠️ **This is not a fix for
+the defect above, and the distinction is the point.** ADR-0022 changes what the *filter* does
+with two correctly-linked concepts whose granularity differs; DEF-0002 is about the *linker*
+producing the wrong concept from an ambiguous surface, and nothing here gives the linker any
+context it did not have. The disease side is also still open: no equivalent relation was built
+for diseases, and MeSH's `PharmacologicalAction` field only covers chemicals. **What ADR-0022
+does establish for any future attempt here: the MeSH tree cannot express a drug class's
+membership at all** — `Atorvastatin` is filed under chemical structure (D03/D10) and its class
+under actions and uses (D27), sharing no node — so a hierarchy walk is the wrong instrument for
+this half of the problem, whichever stage it is attempted at.
+
 ---
 
 ## DEF-0003 — ADR-0020's hierarchy term is unreachable: every cluster the ranker sees scores proximity 0

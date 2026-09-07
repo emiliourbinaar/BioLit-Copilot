@@ -216,6 +216,19 @@ only.** "Inconclusive" would lose exactly that difference. What the pass *did* e
 unaffected, and it is not small: Gate 4 found DEF-0003, a real defect in the component it was
 built to score. ADR-0020, ADR-0021, DEF-0003.
 
+Gate 3 found a second one, and closing it overturned the obvious fix. Three `answers` clusters
+carrying `Atorvastatin` were deleted under "statins and rhabdomyolysis" because the query
+resolves to the drug *class* — so walk the MeSH tree down from class to member and keep them.
+**You cannot.** `Atorvastatin` is filed under chemical structure (D03/D10) and
+`HMG-CoA Reductase Inhibitors` under chemical actions and uses (D27); they share no node, and
+the tree distance between a statin and the statin class is `None`. For drug classes the
+relation simply is not in the hierarchy — it is MeSH's `PharmacologicalAction` field, in a dump
+already on disk. Matching on it recovers all three, and because filtering more widely while
+scoring unchanged would have buried them at positions 15–17 of 17 beneath seven background
+clusters, the *same* predicate now drives both the filter and the ranker. ⚠️ Everything beyond
+"it recovers the three" re-reads labels already spent on DEF-0003, so it is reported as
+descriptive, not as validation. ADR-0022.
+
 ## Development
 
 ```bash
@@ -230,10 +243,12 @@ licence gate, deterministic extraction, clustering, query-conditioned selection 
 and synthesis. Free: no credential, no LLM call, no paid API:
 
 ```bash
-# One-time: build the MeSH tree-number artifact ADR-0020's ordering reads. No network —
-# it parses the NLM descriptor dump at data/mesh/desc2026.gz, which is gitignored along
-# with its output. 31,108 descriptors, 65,360 tree placements.
-uv run python -m biolit.canon.build_mesh_tree
+# One-time: build the two MeSH artifacts selection and ordering read. No network — both
+# parse the NLM descriptor dump at data/mesh/desc2026.gz, which is gitignored along with
+# their outputs. Both are REQUIRED: a missing one fails the run at SELECT rather than
+# degrading quietly.
+uv run python -m biolit.canon.build_mesh_tree     # 31,108 descriptors, 65,360 tree placements
+uv run python -m biolit.canon.build_mesh_actions  # 2,838 descriptors, 5,084 class memberships
 
 uv run python -m biolit.pipeline --query "metformin and lactic acidosis" --max-papers 20
 # add --json-out run.json to dump the full PipelineState
@@ -257,12 +272,14 @@ uv run python -m biolit_evals.baselines
 ## Reading order
 
 - `docs/EVAL_REPORT.md` — every number, its methodology, and its limitations
-- `docs/DECISIONS.md` — 21 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
+- `docs/DECISIONS.md` — 22 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
   findings, ADR-0017 closes Phase 5 as a negative result, ADR-0018 closes the replacement-gold
   search and records why a stratified null needs its own power calculation, ADR-0019 retires
   Synthesis Gate A as a finding about the gate, ADR-0020 orders clusters by relevance without
   repealing the within-cluster no-ranking rule, ADR-0021 records why an annotation control over
-  an exhaustive population cannot be a re-paired member of it, and ADR-0016 collects six
+  an exhaustive population cannot be a re-paired member of it, ADR-0022 records that a drug
+  class is not a tree ancestor of its members — so the fix everyone reaches for first is
+  impossible — and ADR-0016 collects six
   verification rules — why a passing test is not evidence the suite would notice a regression,
   and why evidence disclosed to an annotator has to be tracked rather than averaged away
 - `docs/SCOPE.md` — work deliberately **not** attempted, with the reasoning that would have to
