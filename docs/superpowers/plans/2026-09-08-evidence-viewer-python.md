@@ -290,7 +290,14 @@ class FixtureCluster(BaseModel):
     paper_ids: list[str]
     rank: int
     matched: int
-    proximity: float
+    #: ⚠️ `float | None`, NOT `float`, and the None is meaningful rather than defensive.
+    #: `_relevance_key` maps "no shared tree placement" to `inf` purely so `sorted` puts it
+    #: last, but JSON has no Infinity: `model_dump_json` writes `null` and a `float`-typed
+    #: field then REFUSES to reload it. `MeshTree.distance` already returns None for exactly
+    #: this case and its docstring insists it is "a category rather than a magnitude", so the
+    #: fixture restores the category instead of inventing a large number the frontend would
+    #: sort numerically. Measured: 8 of 17 statins clusters carry it.
+    proximity: float | None
     #: Present only where a frozen relevance label exists. The viewer MUST mark these as
     #: annotation labels from a pass whose control instrument was later found compromised
     #: (ADR-0021) -- never as ground truth the pipeline achieved.
@@ -775,6 +782,9 @@ def project_run(
     for rank, cluster in enumerate(state.clusters, start=1):
         matched, proximity = relevance_score(cluster, concepts, tree=tree, actions=actions)
         sides = cluster.key.split("|")
+        # inf is a sort-time stand-in for "no shared tree placement"; JSON cannot carry it and
+        # a float-typed field cannot reload the `null` it becomes. Restore the category.
+        finite = None if proximity == float("inf") else proximity
         clusters.append(
             FixtureCluster(
                 key=cluster.key,
@@ -782,7 +792,7 @@ def project_run(
                 paper_ids=list(cluster.paper_ids),
                 rank=rank,
                 matched=matched,
-                proximity=proximity,
+                proximity=finite,
                 label=labels.get(cluster.key),
             )
         )
@@ -854,6 +864,42 @@ def test_every_cluster_paper_resolves_to_a_stub_carrying_licence_and_doi():
 
 Run: `uv run pytest tests/evals/test_fixture_export.py -q`
 Expected: 2 passed.
+
+- [ ] **Step 6b: Add the round-trip test via Edit** (added after a pre-dispatch audit found the
+  fixture could be written but not read back)
+
+```python
+def test_a_cluster_with_no_shared_tree_survives_a_json_round_trip():
+    """⚠️ THE DEFECT THIS PINS, found before it shipped. `_relevance_key` uses `inf` to mean
+    "no shared tree placement" so that `sorted` puts it last. JSON has no Infinity:
+    `model_dump_json` writes `null`, and a `float`-typed field then REFUSES to reload it —
+    so the generator would emit fixtures the freshness check could not read, and the published
+    file would silently lose the distinction. Measured: 8 of 17 statins clusters score `inf`.
+
+    `MeshTree.distance` already returns None for this case and calls it "a category rather than
+    a magnitude", so `None` restores the original meaning rather than inventing a sentinel.
+    """
+    state = PipelineState(question="q")
+    state.clusters = [Cluster(key="MESH:A|MESH:B", paper_ids=[])]
+
+    run = project_run(
+        state,
+        slug="s",
+        concepts=_no_concepts(),
+        tree=MeshTree({}),
+        actions=PharmacologicalActions({}),
+        names={},
+        labels={},
+        findings=[],
+        generated_at="2026-09-08T00:00:00+00:00",
+    )
+
+    assert run.clusters[0].proximity is None, "inf must become the category, not null-as-float"
+    reloaded = FixtureRun.model_validate_json(run.model_dump_json())
+    assert reloaded.clusters[0].proximity is None
+```
+
+Add `FixtureRun` to the `biolit_evals.fixture_models` import line in the test file.
 
 - [ ] **Step 7: Add the ledger-integrity test via Edit**
 
