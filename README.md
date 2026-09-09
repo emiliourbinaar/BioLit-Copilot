@@ -22,7 +22,8 @@ where the corpus is thinnest. 23 architecture decisions record what was
 measured and what was rejected, alongside a scope record (`docs/SCOPE.md`) for work
 deliberately not attempted and a defect log (`docs/DEFECTS.md`) with five entries — four in
 entity linking, one in clustering — including a blind adjudication finding **52% of short
-acronym links wrong**, in a layer whose aggregate F1 is 0.78.
+acronym links wrong** (a census; **10 of 27 wrong on the pairs never disclosed to the
+annotator**), in a layer whose aggregate F1 is 0.78.
 
 **Total paid model spend across the whole project: $2.48** — Phase 4's extractor arm, ~1500
 calls, the one LLM arm ever authorised. Phase 5's Critic arms and Gate A's synthesis arm were
@@ -72,7 +73,7 @@ re-read to bless the fix: DEF-0003.
 | Layer | Module | Headline number |
 |---|---|---|
 | **Entity recognition** (Phase 2) | `biolit.ner` | F1 **0.8099** on the BC5CDR test split |
-| **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** — but on short all-caps acronyms, adjudicated blind, **52% of links are wrong** (DEF-0001) |
+| **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** — but on short all-caps acronyms, adjudicated blind, **52% of links are wrong** (census of 44 pairs; **10/27 wrong on the undisclosed pairs** — DEF-0001) |
 | **Clustering / pairing** (Phase 3) | `biolit.cluster` | same-sentence pairing F1 **0.6327**, ~halving downstream LLM calls |
 | **Sentence extraction** (Phase 4) | `biolit.extract` | deterministic control F1 **0.6238** — the LLM arm scored **0.3054** and was **not shipped** |
 | **Contradiction detection** (Phase 5) | `biolit.critic` | 900-pair corpus, 3 free baselines at chance — **gold proxy measured invalid (π̂ 0.067) and the paid run cancelled before it was ever called**; the replacement-gold search closed at π̂ 0.60 after six corpora |
@@ -285,6 +286,11 @@ uv run python -m biolit_evals.baselines
 
 ## Reading order
 
+- ⭐ **`docs/RETROSPECTIVE.md` — start here.** The project's whole arc in one place: what was
+  tried, what failed and why, what shipped and on what evidence, and the standing rules each
+  mistake bought. It includes an explicit evidence tier per shipped component, and the six
+  occasions on which the thing that broke was the *measuring instrument* rather than the
+  component under test
 - `docs/EVAL_REPORT.md` — every number, its methodology, and its limitations
 - `docs/DECISIONS.md` — 23 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
   findings, ADR-0017 closes Phase 5 as a negative result, ADR-0018 closes the replacement-gold
