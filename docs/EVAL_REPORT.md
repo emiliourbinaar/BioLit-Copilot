@@ -2476,7 +2476,244 @@ claim-level gold standard is worth pursuing**; that case has not been made eithe
 **Fix the endpoint confound before any re-annotation, whatever the design becomes.** The current
 sheet trades a known bias for an unmeasured one, and only the first was in the spec.
 
-## Pending
+## Post-phase: query-conditioned selection and ordering, and the 91-row blind annotation
+
+Everything from here down is post-Phase-5 work on the assembled pipeline. It is measured the
+same way, and two of the three passes below are negative results about the *measurement*
+rather than about the thing being measured.
+
+`select_stage` made the pipeline consult the question for the first time — until 2026-09-05,
+`PipelineState.question` was set in `__main__` and read by nothing, so every cluster retrieval
+happened to produce went into the answer. It keeps clusters sharing a MeSH concept with the
+question and then orders them by relevance (ADR-0020).
+
+**The annotation, pre-registered in full before any label existed.** 83 real clusters from the
+eight frozen queries plus **8 cross-query distractors**, 91 rows. The sheet showed the question
+and two concept names and **nothing else** — no MeSH ids, no paper counts, no year ranges —
+because size and recency are signals the ranker is *forbidden* to use, and a label nudged by
+either would let the gate reward exactly what the design excludes. Four gates were fixed in
+writing beforehand. Labels and results are committed at `evals/gold/relevance_labels.jsonl`
+and `evals/relevance_runs.jsonl` (`rows_hash` 2ace2b57aa8e387e, `labels_hash` c3d5a1d694ad80ae).
+
+| gate | reading | verdict |
+|---|---|---|
+| **1 — tractability** | `cant_tell` **0 of 83** | `TRACTABLE` |
+| **2 — control discrimination** | **8 of 8** distractors labelled `off_topic` | `DISCRIMINATING` — ⚠️ later withdrawn, see below |
+| **3 — filter confusion matrix** | kept: 25 `answers`, 43 `background`, 2 `off_topic`; dropped: **3 `answers`**, 9 `background`, 1 `off_topic` | — |
+| **4a — lead correctness** | ranked **5 of 8**, MeSH-id baseline **3 of 8** | ⚠️ does not survive the split |
+| **4b — pairwise inversions** | ranked **92**, baseline **102**, over 178 comparable pairs | — |
+
+**Gate 3's three false drops are named, not summarised:** `Atorvastatin | Muscle Weakness`,
+`| Muscular Diseases`, `| Myalgia` — all labelled `answers`, all deleted. They are the subject
+of ADR-0022 below. Note also that **`background` dominates the kept set (43 of 70)**, which is
+what makes "admits off-topic clusters" a weak test at this scale: only **3 of 83** clusters are
+`off_topic` at all, before any filtering.
+
+⚠️ **Gate 4a does not survive its pre-registered contamination split.** Both leads the ranker
+fixed — `metformin and lactic acidosis` and `warfarin and bleeding risk` — were queries whose
+current leads had been named and argued about before labelling. **On the three queries clean
+under both disclosure sections the reading is 2/3 before and 2/3 after: the ranker changed
+nothing there.** 5/8 must never be quoted without this.
+
+### Gate 4 found a defect in the component it was built to score (DEF-0003)
+
+The hierarchy term was **unreachable by construction**. `_relevance_key` minimised over every
+(cluster side × query concept) pair; a cluster's exactly-matched side gives `distance(x, x) ==
+0`; and the filter only ever passes clusters with at least one match — so **every cluster
+scored proximity 0** and the term never reached the sort. Four of eight queries produced a
+single distinct score across all their clusters. The headline improvement Gate 4a had just
+produced came *entirely* from the exact-match term.
+
+Fixed structurally (proximity is now the maximum over unmatched sides) and **verified
+mechanically only**: all-tied queries fell from 4 of 8 to 2 of 8. The labels are recorded as
+**spent** for that question rather than re-read to bless the fix.
+
+### Then the control instrument itself failed (ADR-0021)
+
+Every distractor was a real cluster shown under a foreign question, and this pass annotates an
+**exhaustive** population — all 83 clusters from those eight queries. So **all 8 distractors
+duplicate a real row's cluster key**, and an annotator noticing the same concept pair twice
+knows one of them is planted without judging anything.
+
+⛔ **These labels cannot distinguish the shortcut from genuine reading.** Every duplicated key
+read `off_topic` for the distractor and something else for its twin — which is what a
+duplicate-spotter produces *and* what correct judgment produces. Gate 2's `DISCRIMINATING`
+verdict is therefore withdrawn as support for attributability.
+
+**Standing validation status, stated precisely because a softer word loses the distinction:**
+there is **no attributable evidence of lead improvement from these labels**. That is not
+"inconclusive" and it is not a null result — a null would mean the ranker was measured fairly
+and did not help. The instrument that made the reading attributable was itself defective, so
+the measurement does not bear on the question either way. **DEF-0003's fix stands on the
+mechanical check and nothing else.**
+
+---
+
+## The acronym adjudication: a census in which a majority of links are wrong
+
+A blind census of every short all-caps acronym pair in the frozen corpus: **44 distinct
+(surface, concept) pairs over 204 linked mentions**, plus 8 controls. Not a sample — **no
+interval is quoted and none would mean anything.** Results committed at
+`evals/gold/acronym_labels.jsonl` and `evals/acronym_runs.jsonl` (`rows_hash` ad22f212d9a39b55,
+`labels_hash` 538e8b522f04b370).
+
+**Three labels, not binary:** `correct` / `wrong` / `granularity`, plus `cant_tell` as a
+tractability gate outside the rate. Collapsing `granularity` into `wrong` would misclassify
+DEF-0002's failure shape as a plain link error, and that distinction is the one this project's
+adjudications have consistently valued. **Gate 1's limit is 0.25, deliberately not the
+relevance pass's 0.15** — ADR-0018 recorded the exact mistake of carrying a constant calibrated
+for one question into a second, and nine of the 44 pairs carry no in-document gloss at all.
+
+| | by pair | by mention |
+|---|---|---|
+| `correct` | 19 | 54 |
+| **`wrong`** | **23 (52.3%)** | **132 (64.7%)** |
+| `granularity` | 2 | 18 |
+| total | 44 | 204 |
+
+`cant_tell` **0 of 44** (`TRACTABLE`); controls **8 of 8** rejected (`DISCRIMINATING`).
+
+**Reported split, per ADR-0016 rule 6.** 17 of the 44 pairs had been named before labelling —
+nine in the defect log with a direction attached, ten as DEF-0004's type-violation table:
+
+| | wrong / pairs | wrong / mentions |
+|---|---|---|
+| disclosed (17) | 13 / 17 | 93 / 131 |
+| **undisclosed (27)** | **10 / 27** | **39 / 73** |
+
+⛔ **The gap must NOT be read as disclosure bias.** The disclosed set was selected for looking
+wrong in the first place, so a higher rate there is expected by construction, disclosure or
+not. Selection and disclosure are confounded and this design cannot separate them. What the
+split *does* establish is that **on 27 pairs carrying no prior disclosure at all, 10 are still
+wrong.**
+
+⚠️ **ADR-0021 applies here too** — the 8 controls were built by re-pairing in-population
+surfaces, so the 8 surfaces appearing twice in the sheet are exactly the 8 controls. **Unlike
+the relevance pass, these labels can tell the two apart and they pass:** four duplicated
+surfaces had *both* members marked `wrong` and a fifth had its real member marked
+`granularity`, which a duplicate-spotter ("one of these is the plant, so the other is fine")
+cannot produce.
+
+### DEF-0004: a free check exists and is unreachable
+
+`data/canon/concept_labels.json.gz` types each concept `CHEMICAL` or `DISEASE`. Compared
+against the NER label the mention already carries, across all eight frozen states: **87 of
+3,696 linked mentions (2.4%) contradict their own mention's label**, 59 of them `CHEMICAL` to
+`DISEASE`. Ten of the 44 adjudicated pairs are flagged, and **all ten read `wrong`** — 10/10
+precision.
+
+⚠️ **Gate 4 returns a contingency table and computes no test statistic**, deliberately. The
+flag was shown to the annotator before labelling, so these labels cannot be the blind test of
+it the gate was designed to be; a rate, chi-square or lift figure would read as evidence for
+the screening signal. DEF-0004 rests on the mechanical inconsistency, which needs no labels.
+
+**Decomposed after labelling: 8 of the 10 are link errors, 1 is an NER span error, 1 is both.**
+The span case is `AT` — NER cutting the letters out of `ATO` (atorvastatin) — which a
+type-constrained linker would score a success while fixing nothing. The check is unreachable
+because the `Linker` protocol receives a surface and is never told the label.
+
+---
+
+## Pharmacological-class matching, and a validation that could not be run
+
+### ADR-0022: the fix everyone reaches for first is impossible
+
+Gate 3's three false drops all carry `Atorvastatin` while the query resolves to the drug
+**class**. The obvious repair is to walk the MeSH tree from class to member. **It cannot be
+done.** `Atorvastatin` is filed at `D03.383.129.578.075` and `D10.251.450.200` — chemical
+structure — while `HMG-CoA Reductase Inhibitors` sits under `D27`, Chemical Actions and Uses.
+They share no node, and `MeshTree.distance` returns `None`. For drug classes the relation is
+not in the hierarchy; it is the `PharmacologicalAction` field of the same dump — **2,838
+descriptors, 5,084 memberships**, no new download.
+
+Measured on the frozen 83-cluster corpus:
+
+| variant | kept | recovers the 3? | `off_topic` admitted |
+|---|---|---|---|
+| baseline | 70 | — | — |
+| tree distance <= 1 | 71 | 1 of 3 | 0 |
+| tree distance <= 2 | 73 | yes | 0 |
+| **pharmacological action** | **75** | **yes** | **0** |
+
+Tree distance <= 2 was rejected **on principle, not on its numbers**: it rescues the three
+through the *disease* side by coincidence of this corpus, and `k` is a constant whose only
+justification is that it reproduces the labelled rows. The action predicate has no constant.
+
+⚠️ **One predicate serves both the filter and the ranker, and that is the decision.** Widening
+membership alone places the three recovered clusters at **positions 15, 16 and 17 of 17**,
+below seven `background` ones, because they score `matched == 0`. A cluster nobody can find is
+not recovered.
+
+⛔ **The ordering evidence is DESCRIPTIVE ONLY.** Everything except "it recovers the three named
+false drops" re-reads labels already spent for DEF-0003.
+
+### ADR-0023: the fresh label set could not be built
+
+Two label sets were already unusable — one to disclosure, one to control duplication — so a
+third needed queries never run or discussed. **The bar was fixed before the screen ran: at
+least ~8 of 25 candidates productive** (at least 8 clusters each).
+
+The screen's blindness is **enforced by the import graph**, not by intent:
+`biolit_evals/relevance_screen.py` imports nothing from `biolit`, and a test spawns a fresh
+interpreter and asserts the ranker is absent from `sys.modules`. Verified to fail on a
+*transitive* import, not merely a direct one. That construction also forces the right metric:
+`select_stage`'s kept-count differs between arms (70 against 75), so a screen that could import
+the filter could screen on a quantity the arm changes.
+
+**Four of 25 cleared the floor.** Not a bad draw — cluster yield collapses in proportion to how
+collective the drug term is, and the mechanism under test fires only at the collective end:
+
+| stratum | queries | licensed papers | clusters | `no_cluster` | rankable pairs |
+|---|---|---|---|---|---|
+| action class *(ADR-0022 fires)* | 14 | 295 | 54 | **74%** | 198 |
+| structural class *(tree fires, ADR-0022 inert)* | 6 | 117 | 21 | 53% | 49 |
+| single agent *(both inert)* | 5 | 116 | 34 | **31%** | 106 |
+
+**353 rankable pairs across 25 new queries, against 593 across the original 8.** Six queries
+produced zero clusters. `Anti-Bacterial Agents`, the largest action class in MeSH at 209
+members, produced two. The stratum that would isolate ADR-0022 from the tree term has **no
+eligible member at all** — its best query yields 7 against a floor of 8.
+
+⚠️ **A disclosure about this pass's own threshold.** `MIN_CLUSTERS = 8` was fixed before the 14
+new candidates ran but **after the yields of the first 11 were visible**, and it falls exactly
+between two seen values. The conclusion is robust in the direction that matters: at a floor of
+7 the count is 6 of 25, still short of the pre-registered bar.
+
+**No arm disagreement was ever scored.** ADR-0022's ordering claim is not merely unvalidated
+but not validatable by this instrument at reasonable cost.
+
+### DEF-0005: the upstream cause
+
+Re-running three empty queries at **150 papers instead of 40** — 3.75x the literature — moved
+cluster counts from 0/1/0 to 7/9/3 while leaving attrition essentially unchanged at **85%, 86%
+and 91%**. Yield is linear in papers at a very bad constant.
+
+⚠️ **The proximate cause is the sentence boundary, not the linker**, and the first draft of that
+entry got it wrong. On `anticoagulants and intracranial hemorrhage`, **12 of 19 records carry
+both a linked chemical and a linked disease and 0 clusters formed**; `tamoxifen` carries both
+in 29 of 30 and forms 8. The collective-terminology component is real but secondary, visible in
+*which* surfaces fail to link — `doac`, `ppis`, `ppi`, `inhibitors`, `mmf`.
+
+### Reproducing these
+
+```bash
+# All free: no credential, no LLM, no paid API. Both MeSH artifacts are required.
+uv run python -m biolit.canon.build_mesh_tree
+uv run python -m biolit.canon.build_mesh_actions
+uv run python -m biolit_evals.relevance_export --seed 20260905
+uv run python -m biolit_evals.relevance_gates      # after hand-annotation
+uv run python -m biolit_evals.acronym_export --seed 20260906
+uv run python -m biolit_evals.acronym_gates        # after hand-annotation
+```
+
+⚠️ The relevance and ADR-0023 measurements depend on NCBI's `TranslationSet` for the queries,
+cached under `data/` which is **gitignored**. NCBI's translation can drift, so a later rerun
+may not reproduce these counts exactly; regenerate the cache first and expect drift rather than
+assuming a regression.
+
+---
+
+## Pending — what Phase 5 leaves behind
 
 **Phase 5 is closed as a negative result — ADR-0017.** What remains below is what a future phase
 inherits, not work in progress.
@@ -2495,7 +2732,14 @@ inherits, not work in progress.
   match, Fisher p = 0.12) must be fixed before any re-annotation, whatever the design becomes.
 - **A second annotator** is the only way to separate proxy failure from annotator strictness.
   Not obtainable within this project's constraints; recorded as a limitation.
-- **A known defect, deliberately not fixed:** `PubMedClient.efetch` raises on an HTTP 404 from
+- ⭐ **FIXED 2026-08-31, and the entry is kept rather than deleted so the trail stays readable.**
+  What follows described the state at Phase 5. `_fetch_licences` now calls `efetch db=pmc` on
+  the standard eutils host — which returns the publisher's own `<permissions>` block, so the
+  Phase 1 rule *"never infer rights from PMC presence"* survives intact — and wraps it in
+  `except httpx.HTTPError: return {}`. A licence lookup that cannot answer degrades to "no
+  licence known", which the gate reads as a refusal; it can no longer take the whole fetch
+  down. The dead OA endpoint is gone from the codebase entirely. **The original text:**
+  `PubMedClient.efetch` raised on an HTTP 404 from
   the PMC OA service, which is the normal answer for an article outside the OA subset. One such
   article kills the whole call; it reproduced on the first 20 PMIDs of this corpus. The respx
   suite covers the 200-with-`<error>` body and has no 404 cassette — the same shape as the
