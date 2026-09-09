@@ -8,10 +8,107 @@ them, which buries a standing defect in the prose of a decision about something 
 entry here is a claim about behaviour that has been *verified against real data*, with the
 verification shown. A suspicion is not a defect entry.
 
-**Every entry so far is in entity linking.** That is the project's known dominant bottleneck
-(Phase 3: e2e NIL rate 0.45 on the domain sample, 0.32 on BC5CDR), and it is where a defect
-does the most damage, because everything downstream — pairing, clustering, selection,
-synthesis — consumes `canonical_id` and has no way to second-guess it.
+**Every entry through DEF-0004 is in entity linking.** That is the project's known dominant
+bottleneck (Phase 3: e2e NIL rate 0.45 on the domain sample, 0.32 on BC5CDR), and it is where
+a defect does the most damage, because everything downstream — pairing, clustering, selection,
+synthesis — consumes `canonical_id` and has no way to second-guess it. **DEF-0005 is the first
+entry in the clustering layer**, and it is there because the loss it measures happens *after*
+linking succeeds.
+
+---
+
+## DEF-0005 — Same-sentence clustering collapses on class-referring prose: a paper that says "anticoagulation" rather than "warfarin" produces no cluster at all, and the attrition is flat in paper count
+
+- **Date:** 2026-09-08
+- **Component:** `biolit.cluster` — `SameSentencePairing`, downstream of linking rather than in it
+- **Status:** Recorded, not fixed. Measured on 25 queries × 40 papers, run 2026-09-07/08.
+
+A cluster requires a linked chemical and a linked disease **in the same sentence**. Literature
+about a drug *class* refers to the class collectively — "anticoagulation", "DOACs", "PPI
+therapy", "immunosuppression" — rather than naming a member, and papers retrieved by a
+class-level query lose their chemical–disease pairs at a rate that scales with how collective
+the drug term is. The disease side links normally throughout.
+
+⚠️ **THE PROXIMATE CAUSE IS THE SENTENCE BOUNDARY, NOT THE LINKER, and the first draft of this
+entry got that wrong.** The obvious story — "the class term NILs, so there is no chemical" — is
+not what the records show. On `anticoagulants and intracranial hemorrhage`, **12 of 19 records
+carry BOTH a linked chemical and a linked disease, and 0 clusters formed.** The entities exist
+and are linked; they never land in one sentence. Compare `tamoxifen and endometrial cancer`,
+29 of 30 records with both, 8 clusters.
+
+| query | records | with linked chemical | with linked disease | with **both** | clusters |
+|---|---|---|---|---|---|
+| anticoagulants / ICH | 19 | 12 | 19 | **12** | **0** |
+| immunosuppressants / OI | 19 | 14 | 18 | **14** | **0** |
+| PPIs / C. difficile | 30 | 20 | 29 | **20** | **1** |
+| tamoxifen / endometrial | 30 | 29 | 30 | **29** | **8** |
+| clozapine / agranulocytosis | 20 | 18 | 17 | **17** | **6** |
+
+The collective-terminology component is real but secondary, and it shows up in *which* surfaces
+fail to link: the most frequent unlinked chemical surfaces on exactly these queries are the
+class abbreviations — **`doac`, `ppis`, `ppi`, `inhibitors`, `mmf`**. So the class term does go
+unlinked; the papers simply also contain named agents that link fine, in other sentences,
+discussing other things.
+
+**The gradient is monotone in how collective the drug term is**, which is what makes this a
+mechanism rather than a set of unlucky queries:
+
+| query drug term | queries | licensed papers | clusters | `no_cluster` |
+|---|---|---|---|---|
+| single agent (`clozapine`, `tamoxifen`, `vancomycin`) | 5 | 116 | 34 | **31%** |
+| structural class (`fluoroquinolones`, `tetracyclines`) | 6 | 117 | 21 | 53% |
+| pharmacological action class (`anticoagulants`, `immunosuppressive agents`) | 14 | 295 | 54 | **74%** |
+
+Worst individual cases, all at 40 papers: `anticoagulants and intracranial hemorrhage` **19 of
+19 papers dropped, 0 clusters**; `immunosuppressive agents and opportunistic infections` 19 of
+19, 0 clusters; `proton pump inhibitors and Clostridioides difficile infection` 28 of 30, 1
+cluster. `Anti-Bacterial Agents` — the largest pharmacological class in MeSH at 209 members —
+yielded **2 clusters from 15 licensed papers**.
+
+⚠️ **IT IS NOT A SAMPLING PROBLEM, and this is the part that took a measurement to establish.**
+Re-running three of the empty queries at 150 papers instead of 40 — 3.75× the literature —
+moved cluster counts from 0/1/0 to 7/9/3 while leaving the attrition rate essentially
+unchanged: 85%, 86%, 91%. **Yield is linear in papers at a very bad constant**, so buying more
+literature buys proportionally more of the same loss rather than escaping it.
+
+**Related to DEF-0001, and deliberately not folded into it.** Both are failures to resolve a
+surface to the right concept, but the shape differs and so would any fix. DEF-0001 is *acronym
+ambiguity* — a short surface that maps confidently to the wrong concept, producing a **wrong
+link**. This is *collective terminology* — a surface naming a class or a therapy rather than an
+agent, producing **no link and therefore no pair**. One ships a bad answer; the other ships no
+answer, silently, with a completed-looking stage ledger. A context-aware linker might fix
+DEF-0001 and do nothing here, because there is often no specific agent in the sentence to
+recover.
+
+**Why it was found, and what it cost.** It surfaced while building a fresh label set to
+validate ADR-0022's ordering claim, and it is the reason that validation could not be run:
+ADR-0022's mechanism fires on exactly the class-referring queries this defect empties. See
+**ADR-0023**. The defect is recorded here rather than there because it is independent of
+ADR-0022 — it caps recall on any class-level question the system is asked, whether or not
+anything is being validated.
+
+⭐ **THIS GIVES ADR-0013's ALTERNATIVE (4) ITS FIRST DEMONSTRATED CONSUMER.** That ADR listed
+"loosen same-sentence to same-paragraph or an N-token window" as **"not measured, not
+rejected"** — a cheap sweep with no reason to run it, since the 77.0% figure capped what any
+pairing tweak could win *on BC5CDR*. The table above is a reason: on class-level queries the
+loss is specifically at the sentence boundary, with both endpoints present and linked. ⚠️ That
+is a motivation to **measure** the sweep, not evidence it would work — ADR-0013's headroom
+argument still stands, and a wider window trades precision for exactly the recall it buys.
+
+⚠️ **A SECOND, SEPARATE THING VISIBLE IN THE SAME DATA, recorded because it was seen rather
+than because it was investigated.** The unlinked chemical surfaces include obvious NER span
+fragments: **`ofiban`** (from tirofiban), **`tiapine`** (quetiapine), **`zaril`** (Clozaril),
+**`oides`** (Clostridioides), **`clo`**, **`do`**, **`tir`**. That is span-boundary
+fragmentation, not collective terminology and not a linking-vocabulary gap, and it is not
+counted or characterised here. It is noted so it is not rediscovered as part of this defect; it
+needs its own measurement before it is worth an entry.
+
+⚠️ **What is NOT claimed.** No fix is proposed. Whether a class mention could be resolved to
+the agent a paper is actually about is untested, and is a linking question rather than a
+pairing one. **The yield gradient is measured and robust; the mechanism is only partly
+resolved** — the sentence-boundary component is demonstrated by the table above, the
+collective-terminology component is supported by the unlinked-surface evidence but not
+quantified, and their relative weight is unknown.
 
 ---
 

@@ -13,7 +13,8 @@ deterministic Synthesis stage that ships because the LLM arm's *gate* was shown 
 rather than because the arm lost; and query-conditioned selection and ordering, measured
 against a blind 91-row annotation whose four gates were fixed before any label existed — and
 whose control instrument later proved compromised, leaving **no attributable evidence of lead
-improvement** and the defect it found resting on mechanical verification alone. 21
+improvement** and the defect it found resting on mechanical verification alone, and a follow-up attempt to validate the
+later pharmacological-class fix that closed as a negative result about the instrument. 23
 architecture decisions record what was measured and what was rejected, alongside a scope
 record (`docs/SCOPE.md`) for work deliberately not attempted and a defect log
 (`docs/DEFECTS.md`) for measured failures that are recorded rather than quietly carried —
@@ -75,7 +76,7 @@ re-read to bless the fix: DEF-0003.
 | **Query-conditioned selection** | `biolit.query` | clusters filtered and ordered against the asked question, fail-open and ledgered; query concepts come free from esearch's own `TranslationSet` |
 | **Synthesis** | `biolit.synth` | deterministic template, **shipped because the gate for its LLM rival was shown undecidable** (ADR-0019); each paper quoted once per answer |
 | **End-to-end pipeline** | `biolit.pipeline` | runnable CLI over the real components, with a per-stage drop ledger; the Critic remains an explicit `not_implemented` stub, not an empty result |
-| **Eval harness** | `biolit_evals` | 692 tests; every run appended to a committed JSONL log |
+| **Eval harness** | `biolit_evals` | 704 tests; every run appended to a committed JSONL log |
 
 ## The part worth reading
 
@@ -229,6 +230,16 @@ clusters, the *same* predicate now drives both the filter and the ranker. ⚠️
 "it recovers the three" re-reads labels already spent on DEF-0003, so it is reported as
 descriptive, not as validation. ADR-0022.
 
+Validating that ordering claim then failed, and the failure is the more useful result. Two
+prior label sets were spent — one to disclosure, one to a broken control — so a third needed
+queries never run or discussed. Twenty-five were resolved and run behind a screen whose
+blindness is enforced by the import graph rather than by intent: it imports nothing from
+`biolit`, and a test spawns a fresh interpreter and asserts the ranker is absent from
+`sys.modules`. **Four cleared the productivity floor.** Not a bad draw — cluster yield collapses
+in proportion to how collective the drug term is (`no_cluster` 31% for single agents, 74% for
+drug classes), and this mechanism fires only on the collective end. No arm disagreement was
+ever scored. ADR-0023, DEF-0005.
+
 ## Development
 
 ```bash
@@ -272,14 +283,15 @@ uv run python -m biolit_evals.baselines
 ## Reading order
 
 - `docs/EVAL_REPORT.md` — every number, its methodology, and its limitations
-- `docs/DECISIONS.md` — 22 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
+- `docs/DECISIONS.md` — 23 ADRs, newest first; ADR-0013 and ADR-0015 carry the standing
   findings, ADR-0017 closes Phase 5 as a negative result, ADR-0018 closes the replacement-gold
   search and records why a stratified null needs its own power calculation, ADR-0019 retires
   Synthesis Gate A as a finding about the gate, ADR-0020 orders clusters by relevance without
   repealing the within-cluster no-ranking rule, ADR-0021 records why an annotation control over
   an exhaustive population cannot be a re-paired member of it, ADR-0022 records that a drug
   class is not a tree ancestor of its members — so the fix everyone reaches for first is
-  impossible — and ADR-0016 collects six
+  impossible — ADR-0023 closes its validation as a negative result about the instrument rather
+  than the fix, and ADR-0016 collects six
   verification rules — why a passing test is not evidence the suite would notice a regression,
   and why evidence disclosed to an annotator has to be tracked rather than averaged away
 - `docs/SCOPE.md` — work deliberately **not** attempted, with the reasoning that would have to
