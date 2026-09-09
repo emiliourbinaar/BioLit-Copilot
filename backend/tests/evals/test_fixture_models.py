@@ -25,7 +25,7 @@ def test_a_paper_stub_refuses_an_abstract_rather_than_dropping_it():
             license="cc_by",
             license_tier="open",
             extraction_allowed=True,
-            abstract="BACKGROUND: Clozapine is the gold standard...",  # pyright: ignore
+            abstract="BACKGROUND: Clozapine is the gold standard...",  # pyright: ignore[reportCallIssue]
         )
 
 
@@ -46,5 +46,5 @@ def test_the_run_model_forbids_extras_too_so_the_guard_is_not_only_on_the_stub()
             answer="",
             papers={},
             findings=[],
-            abstracts={"pmid": "text"},  # pyright: ignore
+            abstracts={"pmid": "text"},  # pyright: ignore[reportCallIssue]
         )
