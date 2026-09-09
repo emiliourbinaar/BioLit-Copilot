@@ -28,20 +28,19 @@ from biolit.query.concepts import QueryConcepts, side_matches
 _NO_SHARED_TREE = float("inf")
 
 
-def _relevance_key(
-    cluster: Cluster, concepts: QueryConcepts, tree: MeshTree, actions: PharmacologicalActions
-) -> tuple:
-    """Lexicographic: matched sides (more first), then hierarchy proximity, then key order.
+def relevance_score(
+    cluster: Cluster,
+    concepts: QueryConcepts,
+    *,
+    tree: MeshTree,
+    actions: PharmacologicalActions,
+) -> tuple[int, float]:
+    """The two ordinal signals behind the sort, without the sort's negation.
 
-    No threshold anywhere. Each signal is ordinal and the sort consumes it as such, so there
-    is no constant to tune and none can be tuned against the relevance labels later. ADR-0022
-    keeps that property: `side_matches` is a set relation, not a distance with a cutoff, which
-    is the reason it was preferred over "tree distance <= k" for the same three clusters.
-
-    ⚠️ MATCHED, NOT EXACT (ADR-0022). A side counts here on the same test `select_stage` used
-    to keep the cluster, and the two must not diverge: a cluster admitted by the class relation
-    but scored as a miss sorts below every merely-background cluster, which on the frozen
-    corpus buried the three recovered statins clusters at 15-17 of 17.
+    Exposed so a consumer can DISPLAY why a cluster ranks where it does. It is deliberately
+    the same computation `_relevance_key` consumes rather than a parallel one: a second
+    implementation of a score is a second thing to keep in step, and this project has already
+    recorded what happens when a displayed number and a computed number drift apart.
     """
     sides = cluster.key.split("|")
     matched = sum(1 for side in sides if side_matches(side, concepts, actions))
@@ -77,10 +76,22 @@ def _relevance_key(
         for side in sides
         if not side_matches(side, concepts, actions)
     ]
-    proximity = max(residual, default=0.0)
+    return matched, max(residual, default=0.0)
 
-    # `cluster.key` last preserves `cluster_papers`'s reproducible-and-diffable guarantee for
-    # clusters the score cannot separate.
+
+def _relevance_key(
+    cluster: Cluster, concepts: QueryConcepts, tree: MeshTree, actions: PharmacologicalActions
+) -> tuple:
+    """Lexicographic: matched sides (more first), then hierarchy proximity, then key order.
+
+    No threshold anywhere. Each signal is ordinal and the sort consumes it as such, so there
+    is no constant to tune and none can be tuned against the relevance labels later. ADR-0022
+    keeps that property: `side_matches` is a set relation, not a distance with a cutoff.
+
+    `cluster.key` last preserves `cluster_papers`'s reproducible-and-diffable guarantee for
+    clusters the score cannot separate.
+    """
+    matched, proximity = relevance_score(cluster, concepts, tree=tree, actions=actions)
     return (-matched, proximity, cluster.key)
 
 
