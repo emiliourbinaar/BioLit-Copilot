@@ -1014,7 +1014,11 @@ FEATURED: dict[str, str] = {
 }
 
 DEFAULT_OUT = "../frontend/src/fixtures"
-DEFAULT_MAX_PAPERS = 40
+#: 60, matching the frozen corpus this project's published numbers come from -- measured,
+#: not guessed: its eight runs retrieved 58-60 papers each. An earlier draft of this plan
+#: said 40 while asserting a cluster count taken from a 58-paper run, which is not a check
+#: a 40-paper run can pass.
+DEFAULT_MAX_PAPERS = 60
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -1184,7 +1188,23 @@ cd backend
 PYTHONIOENCODING=utf-8 uv run python -m biolit_evals.fixture_export
 ```
 
-Expected: four lines, one per slug. **`statins-rhabdomyolysis` must report 17 clusters** — if it reports 12, the MeSH actions artifact was not built and ADR-0022 is not in effect.
+⛔ **DO NOT ASSERT A CLUSTER COUNT.** An earlier draft of this plan demanded "17 clusters", a
+figure taken from the frozen corpus. Live NCBI returns a different paper set on a different day
+— ADR-0023 and spec §3 both say so — so an exact count is not something a fresh run can be
+required to reproduce, and demanding one makes a correct run look broken.
+
+**Check CONTENT instead, because content is what the fixture is for.** `statins-rhabdomyolysis`
+exists to show ADR-0022 recovering clusters that carry a class MEMBER where the query resolved
+to the CLASS. So the acceptance check is: **at least one `Atorvastatin | …` cluster must be
+present** in the generated fixture.
+
+Verify it by loading the fixture and collecting `" | ".join(c["concept_names"])` for every
+cluster, then filtering for names starting with `Atorvastatin |`. Print the total cluster count
+and every member-side cluster found.
+
+Zero `Atorvastatin | …` clusters means the pharmacological-action artifact is not in effect and
+the fixture does not show what it was chosen to show — stop and report. Any count difference
+from an earlier run is **expected drift, not a failure**; report the number, do not assert on it.
 
 - [ ] **Step 3: Verify the invariant on real output**
 
