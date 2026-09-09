@@ -131,8 +131,10 @@ class PubMedClient:
         consumer that never reads full text has no use for text_type, license, or a full-text
         pointer, and obtaining them costs one extra HTTP request per article carrying a PMC
         id -- which at NCBI's unkeyed 3 req/s is the dominant cost of a multi-thousand-paper
-        fetch, and is currently fatal besides: the OA service answers 404 for an article
-        outside the OA subset, and `request_with_retry` raises for status.
+        fetch. (It was also fatal when this was written: the dead OA service answered 404 for
+        any article outside the OA subset and `request_with_retry` raises for status. That is
+        no longer true -- `_fetch_licences` degrades to an empty map instead -- so cost is now
+        the whole reason, not merely the surviving one.)
 
         Year comes from JournalIssue/PubDate/Year and may be None; it is here because the
         spec requires per-class publication-year distributions to be reported regardless of

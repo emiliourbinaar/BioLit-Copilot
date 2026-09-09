@@ -13,13 +13,16 @@ deterministic Synthesis stage that ships because the LLM arm's *gate* was shown 
 rather than because the arm lost; and query-conditioned selection and ordering, measured
 against a blind 91-row annotation whose four gates were fixed before any label existed — and
 whose control instrument later proved compromised, leaving **no attributable evidence of lead
-improvement** and the defect it found resting on mechanical verification alone, and a follow-up attempt to validate the
-later pharmacological-class fix that closed as a negative result about the instrument. 23
-architecture decisions record what was measured and what was rejected, alongside a scope
-record (`docs/SCOPE.md`) for work deliberately not attempted and a defect log
-(`docs/DEFECTS.md`) for measured failures that are recorded rather than quietly carried —
-including a blind adjudication finding **52% of short acronym links wrong**, in a layer whose
-aggregate F1 is 0.78.
+improvement** and the defect it found resting on mechanical verification alone.
+
+**Once more after that, the instrument was the thing that broke.** A follow-up fix for
+class-level drug queries could not be validated at all: the attempt to build a clean label set
+for it closed as a negative result about the instrument, because the mechanism fires exactly
+where the corpus is thinnest. 23 architecture decisions record what was
+measured and what was rejected, alongside a scope record (`docs/SCOPE.md`) for work
+deliberately not attempted and a defect log (`docs/DEFECTS.md`) with five entries — four in
+entity linking, one in clustering — including a blind adjudication finding **52% of short
+acronym links wrong**, in a layer whose aggregate F1 is 0.78.
 
 **Total paid model spend across the whole project: $2.48** — Phase 4's extractor arm, ~1500
 calls, the one LLM arm ever authorised. Phase 5's Critic arms and Gate A's synthesis arm were

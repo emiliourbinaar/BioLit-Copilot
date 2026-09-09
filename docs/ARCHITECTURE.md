@@ -23,9 +23,29 @@ it was consulted only once — `PipelineState.question` was set in `__main__` an
 so every cluster retrieval happened to produce went into the answer. `select_stage` keeps
 clusters sharing a MeSH concept with the question, using NCBI's own query translation because
 the local alias table NILs on terms users actually type (`depression`, `gastrointestinal
-bleeding`, `thyroid dysfunction`). ⚠️ It prunes an off-topic tail — 83 clusters to 70 on the
-frozen corpus — but it does **not** decide what an answer leads with; `render_cluster` carries
-no ranking by design, and changing that needs its own ADR.
+bleeding`, `thyroid dysfunction`). It prunes an off-topic tail — 83 clusters to **75** on the
+frozen corpus.
+
+**It also orders the survivors (ADR-0020), and the two are one call because they consume the
+identical signal** — selection thresholds concept overlap, ordering grades it. They stay two
+facts in the stage ledger, because they are two decisions. Filtering alone could never have
+fixed the lead: clusters arrive in `sorted(by_key)` order, so the lead was whichever survivor
+had the alphabetically smallest MeSH id, and a filter changes which clusters survive without
+changing the sort. ⚠️ **The within-cluster rule is untouched** — `render_cluster` still orders
+papers by year then id and carries no ranking; ADR-0020 extends that rule to clusters rather
+than repealing it, and cluster order now means exactly one thing, relevance to the question.
+
+**A cluster side matches the query if it IS a query concept or belongs to a pharmacological
+class the query named (ADR-0022, member→class only).** A drug class is not a tree ancestor of
+its members — `Atorvastatin` is filed under chemical structure and its class under chemical
+actions and uses, sharing no node — so this reads MeSH's `PharmacologicalAction` field, which
+needs a second build artifact (`build_mesh_actions`) alongside the tree.
+
+⛔ **Neither the ordering nor the class-matching has attributable label evidence.** The blind
+annotation that scored the ordering had a compromised control instrument (ADR-0021), and the
+attempt to build a fresh label set for the class matching closed as a negative result about the
+instrument (ADR-0023). Both ship on their design argument plus mechanical verification. See
+`EVAL_REPORT.md` and `DEFECTS.md` DEF-0003/DEF-0005.
 
 **The search for a replacement gold is closed, and that closes the paper-pair Critic with it
 (ADR-0018).** Six corpora across three structural families were measured; the best candidate
@@ -44,9 +64,12 @@ PubMed ──► extract_entities ──► canonicalize ──► licence gate 
            biolit.ner           biolit.canon     build_record      biolit.extract   biolit.cluster
            (Phase 2)            (Phase 3)        (Phase 1 rule)    (Phase 4)        (Phase 3)
 
-  ──► select ──────────────►  [ critic ]  ──────────►  synthesis
+  ──► select + order ──────►  [ critic ]  ──────────►  synthesis
       biolit.query                not_implemented          biolit.synth.template
-      (query ∩ cluster concepts)  (ADR-0017, ADR-0018)     (ADR-0019, deterministic)
+      (concept overlap, exact or   (ADR-0017, ADR-0018)    (ADR-0019, deterministic)
+       pharmacological class;
+       then relevance order)
+      (ADR-0020, ADR-0022)
 ```
 
 `biolit.pipeline` runs that left-to-right path over the real components and prints a per-stage

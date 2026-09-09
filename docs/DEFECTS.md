@@ -385,7 +385,12 @@ rather have.
 
 - **Date:** 2026-09-04 (recorded in ADR-0019; moved here 2026-09-05 so it is findable)
 - **Component:** `biolit.canon` — same context-free lookup as DEF-0001
-- **Status:** Recorded, not fixed.
+- **Status:** **Recorded, not fixed — but PARTIALLY ROUTED AROUND downstream since 2026-09-07.**
+  The linking defect below is untouched. What changed is that `select_stage` no longer *drops*
+  clusters over one instance of this granularity mismatch on the chemical side (ADR-0022); the
+  disease side and the linker itself are unaffected. See the update at the end of this entry —
+  the status line is qualified rather than left reading clean, because a reader scanning
+  statuses would otherwise miss that half the observed damage is now handled elsewhere.
 
 A bare `TNF` resolves to the parent MeSH concept of a source's `TNF-α`, so concept
 **hierarchy** produces a false entity-hallucination positive by a different mechanism than
@@ -420,7 +425,13 @@ this half of the problem, whichever stage it is attempted at.
 - **Date:** 2026-09-05
 - **Component:** `biolit.query.ranking._relevance_key`
 - **Status:** ⭐ **FIXED 2026-09-05 as a structural revision — and UNVALIDATED.** Proximity is
-  now the maximum over sides that are not already exact matches. Verified mechanically only:
+  now the maximum over sides that are not already matched. ⚠️ **Wording updated 2026-09-08:
+  this said "not already *exact* matches", which ADR-0022 made imprecise** — a side now counts
+  as matched if it IS a query concept **or** belongs to a pharmacological class the query named,
+  and the residual exclusion widened with it. That was deliberate rather than incidental: a
+  class member shares no tree node with its class, so a matched-but-unexcluded side would score
+  `inf` and sort last — this defect's masking shape arriving through a new door. The invariant
+  is preserved rather than merely still true. Verified mechanically only:
   queries whose clusters all tie fell from 4 of 8 to 2 of 8. **These labels are spent as a
   blind test of the fix** and were not re-read; see ADR-0020's addendum. ⚠️ **Added 2026-09-06:**
   they also come from a pass whose control instrument was later found compromised (ADR-0021), so
