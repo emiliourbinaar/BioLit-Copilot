@@ -37,13 +37,13 @@ would want read first.
 | **Phase 3** — canonicalization | Can surfaces be linked to MeSH? | linking **F1 0.7842**, concept-level **0.7697** | Shipped | $0 |
 | ↳ dictionary enrichment | Would more MeSH aliases help? | **3 of 2514** missing surfaces rescued — CTD already contains MeSH's entry terms | **Rejected** | $0 |
 | ↳ embedding fallback | Would SapBERT rescue the NILs? | **+0.0200 F1** at **53.9%** mention precision — every second new link wrong | **Rejected** | $0 |
-| **Phase 3** — clustering | Does pairing need a relation extractor? | same-sentence **F1 0.6327** vs cross-product 0.5484; **40.3%** of gold relations lose an endpoint upstream first | Shipped; extractor **rejected** | $0 |
-| **Phase 4** — extraction | Does an LLM beat a positional heuristic? | LLM **0.3054** vs deterministic **0.6238**, identical budget | **Rejected** | **$2.48** |
+| **Phase 3** — clustering | Does pairing need a relation extractor? | same-sentence **paper-pair F1 0.6327** vs cross-product 0.5484; **40.3%** of gold relations lose an endpoint upstream first | Shipped; extractor **rejected** | $0 |
+| **Phase 4** — extraction | Does an LLM beat a positional heuristic? | LLM **sentence-selection F1 0.3054** vs deterministic **0.6238**, identical budget | **Rejected** | **$2.48** |
 | **Phase 5** — Critic | Is the derived gold standard valid? | **π̂ 0.067** on blind annotation; stop rule fired | **Retired unspent** | $0 |
-| ↳ replacement gold | Does any corpus support the paper-pair unit? | six corpora, three families; best **π̂ 0.60** with zero separation | **Closed** | $0 |
+| ↳ replacement gold | Does any corpus support the paper-pair unit? | six corpora, three families; best **π̂ 0.60** — annotator agreement, not an F1 — with zero separation | **Closed** | $0 |
 | **Gate A** — synthesis | Can a metric suite with no gold certify quality? | a one-word-per-paper `index` arm **dominates the template** on both comparative axes | **Gate retired**, template ships | $0 |
-| **Post-phase** — selection | Does consulting the question help? | 83 clusters → 75; a strictly tighter filter empties **2 of 8** answers | Shipped | $0 |
-| **Post-phase** — ordering | Does relevance ordering fix the lead? | Gate 4a **5/8 vs 3/8** — but **2/3 vs 2/3** on uncontaminated queries; control instrument later compromised | Shipped, **unvalidated** | $0 |
+| **Post-phase** — selection | Does consulting the question help? | 83 clusters → 75; a strictly tighter filter returns an **empty answer on 2 of the 8 queries** | Shipped | $0 |
+| **Post-phase** — ordering | Does relevance ordering fix the lead? | Gate 4a **leads correct 5 of 8, baseline 3 of 8** — but **2 of 3 vs 2 of 3** on uncontaminated queries; control instrument later compromised | Shipped, **unvalidated** | $0 |
 | **Post-phase** — acronym census | How wrong is linking on short acronyms? | **23 of 44 pairs (52.3%)**, **132 of 204 mentions (64.7%)** wrong | Defect recorded | $0 |
 | **Post-phase** — class matching | Can class-level queries be fixed? | 70 → **75** kept, three named false drops recovered, zero off-topic admitted | Shipped, ordering **unvalidated** | $0 |
 | ↳ its validation | Can a fresh label set score it? | **4 of 25** candidate queries productive; mechanism fires where yield collapses | **Closed as a negative result about the instrument** | $0 |
@@ -54,35 +54,39 @@ would want read first.
 
 **Act I — the layers hold up.** NER and canonicalization were built and measured against
 BC5CDR plus a blind in-domain sample annotated from scratch (ADR-0006, so the annotator could
-not be anchored by the model's output). F1 0.8099 and 0.7842. Nothing dramatic; the foundation
-is real, and every later negative result stands on it being real.
+not be anchored by the model's output). F1 0.8099 for NER, linking F1 0.7842 for
+canonicalization. Nothing dramatic; the foundation is real, and every later negative result
+stands on it being real.
 
 **Act II — the mechanisms that looked promising lost.** Three in a row. MeSH dictionary
 enrichment rescued 3 surfaces of 2514, because CTD already contained MeSH's entry terms — the
 alias gap was never an alias-coverage gap (ADR-0011). A SapBERT embedding fallback bought
 +0.0200 F1 at 53.9% mention precision, so every second link it added was wrong (ADR-0012). And
 chemical–disease relation extraction was priced *before* being built: same-sentence
-co-occurrence already captures 77.0% of a precision-perfect ceiling, and **40.3% of gold
-relations lose an endpoint before pairing is ever consulted** (ADR-0013). ⭐ That last number
+co-occurrence already captures 77.0% of a precision-perfect ceiling (a share of available
+headroom, not an accuracy), and **40.3% of gold relations lose an endpoint before pairing is
+ever consulted** (ADR-0013). ⭐ That last number
 became the project's dominant standing finding: **upstream entity loss is the binding
 constraint, and it is unrecoverable downstream.** No linker fixes a span NER missed; no pairing
 strategy pairs an entity that does not exist.
 
 **Act III — the one paid experiment, and it lost.** Phase 4 bought an LLM sentence extractor:
 ~1500 calls, $2.48, the only paid arm ever authorised. It scored **0.3054** against a
-deterministic control's **0.6238** at an identical selection budget, and a later sweep of
-seventeen free positional heuristics found **every budget-matched one of them beats it**
+deterministic control's **0.6238** on the same sentence-selection task at an identical budget,
+and a later sweep of seventeen free positional heuristics found **every budget-matched one
+of them beats it**
 (ADR-0015). Cost was not the reason it was rejected. It simply lost.
 
 **Act IV — Phase 5 stopped before spending anything.** The Critic needed a gold standard, and
 the CTD-derived proxy was measured before it was used: a blind annotation read **π̂ 0.067**,
 the pre-registered stop rule fired, and the paid arms were retired unspent (ADR-0017). The
 search for a replacement closed after six corpora across three structural families; the best
-candidate cleared every structural bar and still annotated at **π̂ 0.60 with zero separation**
-between its filtered and unfiltered subsets (ADR-0018). ⭐ The recurring failure was not the
-corpora but **the unit**: `ContradictionFinding(paper_id_a, paper_id_b, …)` asks two abstracts
-to be commensurable, and real literature separates its findings by population, dose, route and
-endpoint in ways that make most opposed-looking pairs genuinely compatible. Reviving the Critic
+candidate cleared every structural bar and still annotated at **π̂ 0.60** (agreement, not an
+F1) **with zero separation** between its filtered and unfiltered subsets (ADR-0018). ⭐ The
+recurring failure was not the corpora but **the unit**:
+`ContradictionFinding(paper_id_a, paper_id_b, …)` asks two abstracts to be commensurable, and
+real literature separates its findings by population, dose, route and endpoint in ways that
+make most opposed-looking pairs genuinely compatible. Reviving the Critic
 means changing the unit, which is a new spec rather than a next step.
 
 **Act V — the pipeline was assembled, and then the instruments started failing.** Selection and
@@ -105,7 +109,7 @@ claim — which had been corrected in place and never counted alongside the othe
 **1. A "ceiling" that the mechanism beat.** ADR-0013's spec claimed Arm A (gold entities, 1500
 docs) was a ceiling for Arm B (real pipeline, 500 docs). The arms ran on different corpora and
 were never comparable; made apples-to-apples they **invert** — Arm A restricted to Test-500
-scores F1 **0.5802**, *below* the real pipeline's **0.6327**. **The reusable rule:** any
+scores paper-pair F1 **0.5802**, *below* the real pipeline's **0.6327**. **The reusable rule:** any
 construction that improves recall by granting something correct, without touching what the
 system emits wrongly, bounds recall alone. *Before calling anything a ceiling, ask what it can
 make worse.*
@@ -171,8 +175,8 @@ gold-measured layers.
 |---|---|---|---|
 | `biolit.ner` | ✅ | **Gold-measured** | F1 0.8099 on BC5CDR test + blind in-domain sample |
 | `biolit.canon` | ✅ | **Gold-measured** | linking F1 0.7842 — ⚠️ but see DEF-0001: 52% wrong on short acronyms |
-| `biolit.cluster` | ✅ | **Gold-measured** | same-sentence F1 0.6327 against gold CID relations |
-| `biolit.extract` (deterministic) | ✅ | **Gold-measured** | 0.6238, beat the paid arm and 17 free heuristics |
+| `biolit.cluster` | ✅ | **Gold-measured** | same-sentence **paper-pair** F1 0.6327 against gold CID relations |
+| `biolit.extract` (deterministic) | ✅ | **Gold-measured** | **sentence-selection** F1 0.6238, beat the paid arm and 17 free heuristics |
 | Licence gate | ✅ | **Rule-verified** | one enforcement point; never infers rights from PMC presence |
 | `select_stage` filtering | ✅ | **Gold-measured (weakly)** | Gate 3's confusion matrix over 83 labelled clusters; 3 false drops found and later fixed |
 | **Cluster ordering (ADR-0020)** | ✅ | ⛔ **Design argument + mechanical check only** | **No attributable evidence of lead improvement.** Not a null result — the instrument that would have made the reading attributable was itself defective (ADR-0021). DEF-0003's fix rests on all-tied queries falling 4/8 → 2/8 and nothing else. |
