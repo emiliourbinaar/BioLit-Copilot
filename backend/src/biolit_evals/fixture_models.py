@@ -56,7 +56,14 @@ class FixtureCluster(BaseModel):
     paper_ids: list[str]
     rank: int
     matched: int
-    proximity: float
+    #: ⚠️ `float | None`, NOT `float`, and the None is meaningful rather than defensive.
+    #: `_relevance_key` maps "no shared tree placement" to `inf` purely so `sorted` puts it
+    #: last, but JSON has no Infinity: `model_dump_json` writes `null` and a `float`-typed
+    #: field then REFUSES to reload it. `MeshTree.distance` already returns None for exactly
+    #: this case and its docstring insists it is "a category rather than a magnitude", so the
+    #: fixture restores the category instead of inventing a large number the frontend would
+    #: sort numerically. Measured: 8 of 17 statins clusters carry it.
+    proximity: float | None
     #: Present only where a frozen relevance label exists. The viewer MUST mark these as
     #: annotation labels from a pass whose control instrument was later found compromised
     #: (ADR-0021) -- never as ground truth the pipeline achieved.
