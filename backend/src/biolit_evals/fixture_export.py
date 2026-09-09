@@ -235,12 +235,16 @@ def main(argv: list[str] | None = None) -> None:
         # someone can forget to run. A fixture must be impossible to WRITE unsanitised, not
         # merely checkable afterwards -- "we'll check later" is the exact shape of DEF-0006.
         # Content, not the literal word "abstract": a leak copies TEXT, not a field name.
+        # 10-word windows at stride 5, which catches any leaked run of >= 14 consecutive
+        # words. Not exhaustive, and deliberately not claimed to be: the primary guarantee is
+        # structural -- PaperStub has no abstract field at all -- and this is defence in depth
+        # behind it.
         blob = run.model_dump_json(indent=2)
         for paper in papers:
             if paper.extraction_allowed or not paper.abstract:
                 continue
             words = paper.abstract.split()
-            shingles = [" ".join(words[i : i + 10]) for i in range(0, max(len(words) - 10, 1), 25)]
+            shingles = [" ".join(words[i : i + 10]) for i in range(0, max(len(words) - 10, 1), 5)]
             leaked = [sh for sh in shingles if sh and sh in blob]
             if leaked:
                 raise RuntimeError(
