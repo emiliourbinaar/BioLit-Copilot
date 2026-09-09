@@ -13,7 +13,65 @@ bottleneck (Phase 3: e2e NIL rate 0.45 on the domain sample, 0.32 on BC5CDR), an
 a defect does the most damage, because everything downstream — pairing, clustering, selection,
 synthesis — consumes `canonical_id` and has no way to second-guess it. **DEF-0005 is the first
 entry in the clustering layer**, and it is there because the loss it measures happens *after*
-linking succeeds.
+linking succeeds. **DEF-0006 is the first that is not about the system being wrong at all** — it
+is about the system disclosing something it had correctly declined to use.
+
+---
+
+## DEF-0006 — `--json-out` serialises the abstracts of papers the licence gate refused: the gate's own justification for being the sole enforcement point lapsed when a second consumer of `Paper` was added
+
+- **Date:** 2026-09-08
+- **Component:** `biolit.pipeline.__main__.emit_run` — the enforcement point itself
+  (`biolit.extract.base.build_record`) is correct and unchanged
+- **Status:** Recorded, **not fixed**. Found while scoping a frontend; independent of it.
+- **Severity:** A rights defect, not an accuracy one — the first entry in this log that is not
+  about the system being wrong but about it disclosing something it declined to use.
+
+### What was observed
+
+`build_record` refuses a paper whose licence forbids extraction and returns `None`, suppressing
+the **whole** record rather than just the findings — because `Entity.text` and `Finding.text`
+both carry verbatim abstract substrings. That is correct and still works.
+
+⚠️ **But `PipelineState.candidate_papers` holds every retrieved `Paper`, abstract included,
+whether or not the gate refused it** — and `--json-out` serialises the entire state. Measured
+on a live `clozapine and agranulocytosis` run at 20 papers:
+
+| | |
+|---|---|
+| licence tiers present | `unknown` 8, `non_commercial` 5, `open` 7 |
+| papers the gate **refused** | **8 of 20** |
+| — of those, carrying a **verbatim abstract** in the JSON | **7** |
+| example | `license_tier='unknown'`, `license=None`, `abstract_len=2096` |
+
+### Why it happened, which is the transferable part
+
+The gate's docstring states its own sufficiency condition explicitly:
+
+> *"Sufficient as the only gate because `Paper` appears in exactly two contracts —
+> RetrieverOutput and ExtractorInput — so the Extractor is the last node that ever sees one."*
+
+⭐ **That was true when it was written, and it silently stopped being true.** `--json-out`
+arrived with the end-to-end pipeline and is a **third** consumer of `Paper` — one that reads
+`PipelineState` wholesale rather than through a node contract, so it was invisible to the
+reasoning above. **The defect is not that the argument was wrong; it is that the argument had a
+precondition and nothing checked it when the precondition changed.** A guard asserting that
+condition — no serialisation path emits a `Paper` the gate refused — would have failed the day
+`--json-out` was added.
+
+### What is NOT claimed
+
+**No artifact containing this has ever been published.** `backend/.gitignore` ignores `data/`
+wholesale, so no run state is committed, and the two run logs that *are* committed
+(`relevance_runs.jsonl`, `acronym_runs.jsonl`) carry gate readings and hashes, not text. The
+exposure is local-only today. It becomes real the moment a run artifact is shipped anywhere —
+which is exactly what a frontend fixture would do.
+
+**A second, softer point that this entry does not resolve: extraction permission is not
+redistribution permission.** Even the tiers the gate *allows* include `cc_by_nc_nd`, which
+permits redistribution with attribution but nothing else. Anything that displays abstract text
+publicly needs attribution and probably its own tier policy, and that is a separate decision
+from this defect.
 
 ---
 

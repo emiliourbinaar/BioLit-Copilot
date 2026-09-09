@@ -1,7 +1,7 @@
 # BioLit Copilot — Retrospective
 
 **What this document is.** The project's argument, end to end, in one place. Everything here
-is recorded somewhere else too — across 23 ADRs, 5 defect entries, a scope record and
+is recorded somewhere else too — across 23 ADRs, 6 defect entries, a scope record and
 `EVAL_REPORT.md` — but only in the order it happened to be discovered. This is the same
 material in the order it makes sense.
 
@@ -207,7 +207,7 @@ mistake is what makes them transferable.
 
 ## 7. Known defects
 
-All five are recorded rather than quietly carried. Full entries in `DEFECTS.md`.
+All six are recorded rather than quietly carried. Full entries in `DEFECTS.md`.
 
 | | What | Status |
 |---|---|---|
@@ -216,6 +216,7 @@ All five are recorded rather than quietly carried. Full entries in `DEFECTS.md`.
 | **DEF-0003** | ADR-0020's hierarchy term was unreachable — every cluster scored proximity 0 | **Fixed** structurally; **unvalidated** — mechanical check only |
 | **DEF-0004** | A link whose concept type contradicts the mention's own NER label is never refused | Not fixed. 87 of 3,696 links (2.4%); 10/10 precision on the adjudicated set. The check is free and **unreachable** — the `Linker` protocol never receives the label |
 | **DEF-0005** | Same-sentence clustering collapses on class-referring prose | Not fixed. `no_cluster` 74% on class queries vs 31% on single agents; **flat in paper count** |
+| **DEF-0006** | `--json-out` serialises abstracts of papers the licence gate refused | Not fixed. 7 of 8 refused papers carried a verbatim abstract. The gate is correct; its *sufficiency argument* lapsed when a third consumer of `Paper` appeared |
 
 ---
 
@@ -267,6 +268,6 @@ committed.
 
 ---
 
-*Companion documents: `DECISIONS.md` (23 ADRs, newest first) · `DEFECTS.md` (5 entries) ·
+*Companion documents: `DECISIONS.md` (23 ADRs, newest first) · `DEFECTS.md` (6 entries) ·
 `SCOPE.md` (work deliberately not attempted) · `EVAL_REPORT.md` (every number and its
 methodology) · `ARCHITECTURE.md` (how the layers fit together).*

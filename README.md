@@ -18,10 +18,10 @@ improvement** and the defect it found resting on mechanical verification alone.
 **Once more after that, the instrument was the thing that broke.** A follow-up fix for
 class-level drug queries could not be validated at all: the attempt to build a clean label set
 for it closed as a negative result about the instrument, because the mechanism fires exactly
-where the corpus is thinnest. 23 architecture decisions record what was
-measured and what was rejected, alongside a scope record (`docs/SCOPE.md`) for work
-deliberately not attempted and a defect log (`docs/DEFECTS.md`) with five entries — four in
-entity linking, one in clustering — including a blind adjudication finding **52% of short
+where the corpus is thinnest. 23 architecture decisions record what was measured and what was
+rejected, alongside a scope record (`docs/SCOPE.md`) for work deliberately not attempted and a
+defect log (`docs/DEFECTS.md`) with six entries — four in entity linking, one in clustering,
+one in licence handling — including a blind adjudication finding **52% of short
 acronym links wrong** (a census; **10 of 27 wrong on the pairs never disclosed to the
 annotator**), in a layer whose aggregate F1 is 0.78.
 
@@ -80,7 +80,7 @@ re-read to bless the fix: DEF-0003.
 | **Query-conditioned selection** | `biolit.query` | clusters filtered and ordered against the asked question, fail-open and ledgered; query concepts come free from esearch's own `TranslationSet` |
 | **Synthesis** | `biolit.synth` | deterministic template, **shipped because the gate for its LLM rival was shown undecidable** (ADR-0019); each paper quoted once per answer |
 | **End-to-end pipeline** | `biolit.pipeline` | runnable CLI over the real components, with a per-stage drop ledger; the Critic remains an explicit `not_implemented` stub, not an empty result |
-| **Eval harness** | `biolit_evals` | 704 tests; every run appended to a committed JSONL log |
+| **Eval harness** | `biolit_evals` | 705 tests; every run appended to a committed JSONL log |
 
 ## The part worth reading
 
