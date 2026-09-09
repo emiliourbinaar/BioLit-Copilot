@@ -5,15 +5,75 @@ the MeSH dictionary) or a free NCBI endpoint, so there is no pricing step and no
 authorization gate -- there is nothing to authorize.
 
 `main()` gets no direct unit test per project convention; every function it calls is
-tested in its own module.
+tested in its own module. `emit_run` is factored out of it precisely so the persist-before-
+display ordering below CAN be tested, because that ordering is a correctness property rather
+than presentation.
 """
+
+import sys
+from typing import TYPE_CHECKING, Any, TextIO
+
+if TYPE_CHECKING:
+    from biolit.domain.records import Cluster
+    from biolit.state.pipeline import PipelineState
+
+
+def _write(out: "TextIO", text: str) -> None:
+    """Write, degrading unencodable characters rather than failing the run.
+
+    A Windows console is cp1252, and biomedical answers carry `≥`, `μ`, `α` and en dashes as a
+    matter of course. Losing a completed run because its console cannot draw one glyph is not
+    a defensible trade, and `errors="replace"` is what every other terminal-facing tool does.
+    """
+    try:
+        out.write(text)
+    except UnicodeEncodeError:
+        encoding = getattr(out, "encoding", None) or "ascii"
+        out.write(text.encode(encoding, "replace").decode(encoding))
+
+
+def emit_run(
+    state: "PipelineState",
+    *,
+    query: str,
+    clusters: "list[Cluster]",
+    json_out: str | None,
+    out: "TextIO | None" = None,
+) -> None:
+    """PERSIST THE RUN, THEN DISPLAY IT. The order is the point.
+
+    ⚠️ It used to be the other way round, and that discarded completed runs. Everything
+    expensive -- retrieval, NER, the licence gate, extraction, clustering, selection -- is
+    finished by the time this is called, so anything that can fail here must not be able to
+    lose it. Measured on 2026-09-07: printing an answer containing `≥` to a cp1252 console
+    raised before `--json-out` was reached and threw away 5 of 11 runs, which read as NCBI
+    rate limiting until one was rerun with stderr visible.
+
+    Display is best-effort and persistence is not. `_write` degrades a character it cannot
+    encode; the artifact is byte-exact UTF-8 regardless of what the terminal can show.
+    """
+    from pathlib import Path
+
+    from biolit.pipeline.report import render_report
+
+    if json_out:
+        Path(json_out).write_text(state.model_dump_json(indent=2), encoding="utf-8")
+
+    stream: Any = out if out is not None else sys.stdout
+    _write(stream, f"query: {query!r}\n\n")
+    _write(stream, render_report(state.stages) + "\n")
+    for cluster in clusters:
+        _write(stream, f"\ncluster {cluster.key}: {', '.join(cluster.paper_ids)}\n")
+    if state.answer:
+        _write(stream, f"\n{state.answer}\n")
+    if json_out:
+        _write(stream, f"\nwrote {json_out}\n")
 
 
 def main(argv: list[str] | None = None) -> None:
     # Heavy imports local to main, same pattern as end_to_end.main (E402 exemption).
     import argparse
     import asyncio
-    from pathlib import Path
 
     import httpx
 
@@ -27,7 +87,6 @@ def main(argv: list[str] | None = None) -> None:
     from biolit.config import get_settings
     from biolit.ner.extract import extract_entities
     from biolit.ner.model import NerModel
-    from biolit.pipeline.report import render_report
     from biolit.pipeline.stages import (
         cluster_stage,
         critic_stub,
@@ -102,17 +161,7 @@ def main(argv: list[str] | None = None) -> None:
     state.answer = answer
     state.stages.append(synthesis_report)
 
-    print(f"query: {args.query!r}\n")
-    print(render_report(state.stages))
-    for cluster in clusters:
-        print(f"\ncluster {cluster.key}: {', '.join(cluster.paper_ids)}")
-
-    if answer:
-        print(f"\n{answer}")
-
-    if args.json_out:
-        Path(args.json_out).write_text(state.model_dump_json(indent=2), encoding="utf-8")
-        print(f"\nwrote {args.json_out}")
+    emit_run(state, query=args.query, clusters=clusters, json_out=args.json_out)
 
 
 if __name__ == "__main__":
