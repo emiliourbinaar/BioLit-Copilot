@@ -499,12 +499,18 @@ def source_pin() -> str:
     """A hex digest over every pinned module's normalised source, in declaration order."""
     digest = hashlib.sha256()
     for name in PINNED_MODULES:
-        spec = importlib.util.find_spec(name)
+        # `find_spec` RAISES ModuleNotFoundError when the PARENT package is missing and
+        # returns None when only the leaf is -- two shapes for the same mistake. Both mean the
+        # same thing here, so both become the same refusal.
+        try:
+            spec = importlib.util.find_spec(name)
+        except ModuleNotFoundError:
+            spec = None
         if spec is None or spec.origin is None:
             raise RuntimeError(
-                f"fixture_pin: cannot locate {name!r}. A pinned module was renamed or removed "
-                "without updating PINNED_MODULES, which would silently reduce what the pin "
-                "covers -- refusing rather than hashing a smaller set."
+                f"fixture_pin: cannot locate {name!r}. A pinned module was renamed or "
+                "removed without updating PINNED_MODULES, which would silently reduce what "
+                "the pin covers -- refusing rather than hashing a smaller set."
             )
         with open(spec.origin, encoding="utf-8") as handle:
             digest.update(name.encode())
@@ -532,11 +538,17 @@ def test_source_pin_is_stable_across_calls_and_refuses_a_missing_module(monkeypa
     """
     assert source_pin() == source_pin()
 
-    monkeypatch.setattr(
-        "biolit_evals.fixture_pin.PINNED_MODULES", ("biolit.query.ranking", "biolit.no.such")
-    )
-    with pytest.raises(RuntimeError, match="biolit.no.such"):
-        source_pin()
+    # Both shapes of "gone", because `find_spec` reports them differently: a missing LEAF
+    # returns None, while a missing PARENT package raises ModuleNotFoundError. Verified against
+    # the real interpreter -- find_spec("biolit.no.such") raises, find_spec(
+    # "biolit.query.no_such_module") returns None -- so testing only one would leave the other
+    # path unexercised and the pin silently able to crash instead of refusing.
+    for gone in ("biolit.query.no_such_module", "biolit.no.such"):
+        monkeypatch.setattr(
+            "biolit_evals.fixture_pin.PINNED_MODULES", ("biolit.query.ranking", gone)
+        )
+        with pytest.raises(RuntimeError, match="a pinned module was renamed"):
+            source_pin()
 ```
 
 Update imports to:
