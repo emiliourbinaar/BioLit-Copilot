@@ -762,7 +762,7 @@ def project_run(
     names: Mapping[str, str],
     labels: Mapping[str, str],
     findings: Sequence[FixtureFinding],
-    generated_at: str | None = None,
+    generated_at: str,
 ) -> FixtureRun:
     """Sanitised projection. Abstracts cannot survive it, because the schema has no field."""
     papers = {
@@ -800,7 +800,7 @@ def project_run(
         schema_version=SCHEMA_VERSION,
         slug=slug,
         query=state.question,
-        generated_at=generated_at or datetime.now(UTC).isoformat(),
+        generated_at=generated_at,
         source_pin=source_pin(),
         stages=list(state.stages),
         clusters=clusters,
@@ -1030,6 +1030,7 @@ def main(argv: list[str] | None = None) -> None:
     import asyncio
     import gzip
     import json
+    from datetime import UTC, datetime
     from pathlib import Path
 
     import httpx
@@ -1142,9 +1143,28 @@ def main(argv: list[str] | None = None) -> None:
             names=names,
             labels=labels.get(query, {}),
             findings=[],
+            generated_at=datetime.now(UTC).isoformat(),
         )
+        # ⛔ THE SPEC'S §5 REQUIREMENT, and it belongs HERE rather than in a verification step
+        # someone can forget to run. A fixture must be impossible to WRITE unsanitised, not
+        # merely checkable afterwards -- "we'll check later" is the exact shape of DEF-0006.
+        # Content, not the literal word "abstract": a leak copies TEXT, not a field name.
+        blob = run.model_dump_json(indent=2)
+        for paper in papers:
+            if paper.extraction_allowed or not paper.abstract:
+                continue
+            words = paper.abstract.split()
+            shingles = [" ".join(words[i : i + 10]) for i in range(0, max(len(words) - 10, 1), 25)]
+            leaked = [sh for sh in shingles if sh and sh in blob]
+            if leaked:
+                raise RuntimeError(
+                    f"{slug}: REFUSED paper {paper.id} leaked text into the fixture: "
+                    f"{leaked[0]!r}. Refusing to write. This is DEF-0006 reaching a public "
+                    "page; fix the projection rather than this check."
+                )
+
         path = out_dir / f"{slug}.json"
-        path.write_text(run.model_dump_json(indent=2), encoding="utf-8")
+        path.write_text(blob, encoding="utf-8")
         print(f"{slug}: {len(run.clusters)} clusters, {len(run.papers)} papers -> {path}")
 
     for slug in slugs:
