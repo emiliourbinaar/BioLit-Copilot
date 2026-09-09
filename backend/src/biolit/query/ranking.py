@@ -45,6 +45,11 @@ def relevance_score(
     sides = cluster.key.split("|")
     matched = sum(1 for side in sides if side_matches(side, concepts, actions))
 
+    # ⚠️ MATCHED, NOT EXACT (ADR-0022). A side counts here on the same test `select_stage` used
+    # to keep the cluster, and the two must not diverge: a cluster admitted by the class relation
+    # but scored as a miss sorts below every merely-background cluster, which on the frozen
+    # corpus buried the three recovered statins clusters at 15-17 of 17.
+
     # RESIDUAL match quality: how far are the sides that are NOT already exact matches?
     #
     # ⚠️ DEF-0003. This was once a `min` over every (side x concept) pair, and that made the
@@ -86,7 +91,8 @@ def _relevance_key(
 
     No threshold anywhere. Each signal is ordinal and the sort consumes it as such, so there
     is no constant to tune and none can be tuned against the relevance labels later. ADR-0022
-    keeps that property: `side_matches` is a set relation, not a distance with a cutoff.
+    keeps that property: `side_matches` is a set relation, not a distance with a cutoff, which
+    is the reason it was preferred over "tree distance <= k" for the same three clusters.
 
     `cluster.key` last preserves `cluster_papers`'s reproducible-and-diffable guarantee for
     clusters the score cannot separate.
