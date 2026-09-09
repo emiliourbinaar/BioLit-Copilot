@@ -169,12 +169,22 @@ remember to re-check.**
 
 `source_pin` is a hash over the modules that determine what a fixture *claims*:
 
+**The rule, stated so the set is derivable rather than remembered: pin every module whose
+behaviour determines a value the fixture displays.**
+
 | Module | Why it is pinned |
 |---|---|
 | `biolit/query/concepts.py` | decides which clusters match |
 | `biolit/query/ranking.py` | decides the order and the score shown |
 | `biolit/pipeline/stages.py` | produces every `StageReport` the site renders |
 | `biolit/cluster/pairing.py` | decides which clusters exist at all |
+| `biolit/synth/template.py` | ⭐ **renders the answer string, verbatim.** `stages.py` only imports and calls `render_cluster`, so pinning the orchestration covers none of the formatting |
+| `biolit/domain/licensing.py` | ⭐ the tier table and `extraction_allowed_for` — a change here moves both the `licence_gate` count in the ledger and the tier shown per paper |
+| `biolit/clients/pmc.py` | ⭐ `licences_by_pmcid` parses the publisher permissions block into the licence token every tier derives from |
+
+The last three were **missing from the first draft of this spec**, and the gap was real: a
+fixture could have shown a stale licence tier or stale answer formatting while the pin stayed
+green.
 
 ⚠️ **Hashed over the parsed AST with docstrings stripped, not over raw file bytes.** This repo's
 modules carry very heavy comments and docstrings that are edited constantly; a byte hash would
@@ -186,17 +196,28 @@ invalidate a fixture, and it should not.
 A test in the backend suite compares each committed fixture's `source_pin` against the current
 tree and **fails with the regeneration command in its message** when they differ.
 
-⚠️ **The consequence, stated rather than discovered:** changing any of those four modules turns
+⚠️ **The consequence, stated rather than discovered:** changing any of those seven modules turns
 the backend suite red, and the only way to green is a fixture regeneration that needs live
 NCBI. That is the intended cost — it is what "structurally hard to ship a stale claim" buys —
 but it means a behaviour change and a fixture refresh are now one unit of work. The *test*
 remains hermetic; only the *remedy* needs the network, so the project's "unit tests never touch
 the network" rule is intact.
 
-**Accepted limitation, stated rather than discovered later:** the pin catches changes to the four
-modules above. A change to the MeSH artifacts, the NER checkpoint, or NCBI's query translation
-changes the fixtures without changing the pin. Those are recorded in `generated_at` and are the
-same drift `ADR-0023` already documents; the pin is not claimed to cover them.
+**Accepted gaps, listed rather than left unstated.** The pin covers the seven modules above and
+nothing else. These change a fixture without changing the pin:
+
+1. ⚠️ **`biolit/clients/pubmed.py::_parse_article`**, which assigns `license`, `license_tier`,
+   `doi` and `title`. Deliberately **not** pinned: the module is 263 lines dominated by
+   transport — retry policy, `esearch`, `efetch`, XML plumbing — that changes for reasons having
+   nothing to do with what a fixture claims, so pinning it would fire constantly and a check
+   that cries wolf gets suppressed. **The available upgrade, if this gap ever bites: hash the
+   `_parse_article` AST subtree alone rather than the module.** The pin already normalises
+   through `ast.parse`, so that is a small extension, not a redesign.
+2. **The MeSH artifacts** (`mesh_tree`, `mesh_actions`, the alias dictionary) — data, not code.
+3. **The NER checkpoint.**
+4. **NCBI's query translation**, the same drift ADR-0023 documents.
+
+All four are recorded only by `generated_at`. What catches them is regeneration, not the pin.
 
 ---
 
