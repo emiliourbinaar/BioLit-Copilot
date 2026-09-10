@@ -28,7 +28,13 @@ and the wrong decades. It is also DEF-0007's actual cause.
 - **Date:** 2026-09-10
 - **Component:** `biolit.clients.pubmed` — `_parse_article` (the DOI) and `_pmc_id_of` (the PMC
   id, and through it the licence)
-- **Status:** Recorded, **not fixed**.
+- **Status:** **Parser FIXED 2026-09-10; consequences for past corpora NOT yet audited.** Both
+  lookups now read only the paper's own `PubmedData/ArticleIdList`, a cassette carrying a real
+  `<ReferenceList>` pins that, and the parsing functions are in the fixture pin by AST subtree.
+  Regenerated the same day, the four fixtures carry **0** DOIs that are not the paper's own and
+  **0** allowed papers without a PMC record of their own, across 237 papers, and `statins`
+  no longer collapses any paper. Every other corpus this client has touched is audited
+  separately, and no published number changes until that audit reports.
 - **Severity:** ⛔ **RIGHTS.** Papers were licensed on **another article's** Creative Commons
   licence and their abstracts quoted verbatim. That is the exact failure the licence gate exists
   to prevent, reached upstream of the gate, where no downstream check could see it. It also

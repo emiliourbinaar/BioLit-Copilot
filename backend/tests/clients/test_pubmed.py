@@ -112,6 +112,31 @@ async def test_an_http_error_from_the_permissions_call_refuses_rather_than_crash
 
 
 @respx.mock
+async def test_a_papers_identifiers_come_from_its_own_id_list_never_from_its_references(
+    settings,
+):
+    """⛔ DEF-0008, a RIGHTS defect. Searching the whole article with `.//ArticleIdList` read a
+    CITED paper's DOI as this paper's own (41.5% of 236 fixture papers), and -- for a paper with
+    no PMC record -- a cited article's PMC id, under whose licence the paper was then allowed.
+
+    The db=pmc route is deliberately UNMOCKED: respx fails any unmocked request, so a licence
+    lookup made under a reference's PMC id fails this test rather than passing unnoticed.
+    """
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_with_references.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["44444444"])
+    paper = papers[0]
+
+    assert paper.doi == "10.1000/the-papers-own"
+    assert paper.id == "10.1000/the-papers-own"
+    assert paper.full_text_pointer is None
+    assert paper.license is None
+    assert paper.extraction_allowed is False
+
+
+@respx.mock
 async def test_efetch_no_pmc_is_abstract_only(settings):
     respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
         return_value=httpx.Response(200, text=_cassette("pubmed_efetch_no_pmc.xml"))

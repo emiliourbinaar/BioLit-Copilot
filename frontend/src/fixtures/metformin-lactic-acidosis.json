@@ -1,0 +1,1051 @@
+{
+  "schema_version": 1,
+  "slug": "metformin-lactic-acidosis",
+  "query": "metformin and lactic acidosis",
+  "generated_at": "2026-09-10T23:09:04.284996+00:00",
+  "source_pin": "dca53c889d9d4951e520a22822f45e3d1eaf51d2fc7fa535cdf097b6305229ef",
+  "stages": [
+    {
+      "name": "retrieve",
+      "status": "completed",
+      "n_in": 60,
+      "n_out": 60,
+      "unit_in": "pmids",
+      "unit_out": "papers",
+      "dropped": {},
+      "noted": {
+        "no_abstract": 5
+      },
+      "note": null
+    },
+    {
+      "name": "ner_linking",
+      "status": "completed",
+      "n_in": 60,
+      "n_out": 1204,
+      "unit_in": "papers",
+      "unit_out": "entities",
+      "dropped": {},
+      "noted": {
+        "entity_unlinked": 386
+      },
+      "note": null
+    },
+    {
+      "name": "licence_gate",
+      "status": "completed",
+      "n_in": 60,
+      "n_out": 43,
+      "unit_in": "papers",
+      "unit_out": "papers",
+      "dropped": {
+        "licence_refused:none": 17
+      },
+      "noted": {},
+      "note": "Refused papers carry no Creative Commons licence in the publisher's permissions block (LicenseTier.unknown). This is the Phase 1 compliance rule working as designed, not a failure."
+    },
+    {
+      "name": "extract",
+      "status": "completed",
+      "n_in": 43,
+      "n_out": 43,
+      "unit_in": "records",
+      "unit_out": "records",
+      "dropped": {},
+      "noted": {
+        "zero_findings": 2
+      },
+      "note": null
+    },
+    {
+      "name": "cluster",
+      "status": "completed",
+      "n_in": 43,
+      "n_out": 24,
+      "unit_in": "records",
+      "unit_out": "clusters",
+      "dropped": {
+        "no_cluster": 2
+      },
+      "noted": {
+        "singleton_key": 96,
+        "no_pairs": 2
+      },
+      "note": null
+    },
+    {
+      "name": "select",
+      "status": "completed",
+      "n_in": 24,
+      "n_out": 17,
+      "unit_in": "clusters",
+      "unit_out": "clusters",
+      "dropped": {
+        "off_query": 7
+      },
+      "noted": {},
+      "note": "kept 17 of 24 by concept overlap with the question (acidosis, acidosis, lactic, metformin), where a cluster side counts as overlapping if it IS a query concept or belongs to a pharmacological class the query named (ADR-0022, member->class only); ordered by relevance to the query (ADR-0020: matched sides, then MeSH hierarchy proximity, then key order; size is deliberately not a signal)."
+    },
+    {
+      "name": "critic",
+      "status": "not_implemented",
+      "n_in": 17,
+      "n_out": 0,
+      "unit_in": "clusters",
+      "unit_out": "findings",
+      "dropped": {},
+      "noted": {},
+      "note": "Contradiction detection is not implemented. The CTD-derived gold standard was retired by Gate 2 (pi-hat = 0.067) and the re-scoped alternative was declined; see ADR-0017."
+    },
+    {
+      "name": "synthesis",
+      "status": "completed",
+      "n_in": 17,
+      "n_out": 17,
+      "unit_in": "clusters",
+      "unit_out": "answers",
+      "dropped": {},
+      "noted": {
+        "repeat_appearance": 69
+      },
+      "note": "Deterministic template (ADR-0019). Citation assembly is not yet built."
+    }
+  ],
+  "clusters": [
+    {
+      "key": "MESH:D008687|MESH:D000138",
+      "concept_names": [
+        "Metformin",
+        "Acidosis"
+      ],
+      "paper_ids": [
+        "10.1016/j.jaccas.2026.107733",
+        "10.15190/d.2026.6",
+        "10.3389/fphar.2025.1669831",
+        "10.3390/ijms27104631",
+        "10.5811/cpcem.50572",
+        "10.62838/jccm-2026-0017",
+        "10.7759/cureus.106919",
+        "10.7759/cureus.87316"
+      ],
+      "rank": 1,
+      "matched": 2,
+      "proximity": 0.0,
+      "label": "answers"
+    },
+    {
+      "key": "MESH:D008687|MESH:D000140",
+      "concept_names": [
+        "Metformin",
+        "Acidosis, Lactic"
+      ],
+      "paper_ids": [
+        "10.1002/ccr3.71607",
+        "10.1002/ccr3.72197",
+        "10.1002/prp2.70257",
+        "10.1016/j.aed.2025.07.001",
+        "10.1016/j.jaccas.2026.107733",
+        "10.1080/0886022X.2025.2586333",
+        "10.1093/ckj/sfaf286",
+        "10.1097/MD.0000000000045007",
+        "10.1097/MD.0000000000045197",
+        "10.1097/MS9.0000000000004949",
+        "10.1155/crcc/3478800",
+        "10.1159/000549646",
+        "10.1177/20420188261434647",
+        "10.1177/20420986261428996",
+        "10.1186/s12883-026-04824-6",
+        "10.1186/s13229-025-00691-z",
+        "10.1186/s41182-026-00973-z",
+        "10.1210/jcemcr/luag109",
+        "10.12998/wjcc.v13.i30.110820",
+        "10.15190/d.2026.6",
+        "10.3389/fmed.2025.1604360",
+        "10.3390/ijms27062757",
+        "10.3390/ijms27104631",
+        "10.3390/medicina62040776",
+        "10.5414/CNCS111965",
+        "10.62838/jccm-2026-0017",
+        "10.7759/cureus.102890",
+        "10.7759/cureus.103719",
+        "10.7759/cureus.104328",
+        "10.7759/cureus.105129",
+        "10.7759/cureus.106919",
+        "10.7759/cureus.89292",
+        "10.7759/cureus.89686",
+        "10.7759/cureus.95194",
+        "10.7759/cureus.97415"
+      ],
+      "rank": 2,
+      "matched": 2,
+      "proximity": 0.0,
+      "label": "answers"
+    },
+    {
+      "key": "MESH:D008687|MESH:D016883",
+      "concept_names": [
+        "Metformin",
+        "Diabetic Ketoacidosis"
+      ],
+      "paper_ids": [
+        "10.15190/d.2026.6",
+        "10.7759/cureus.106919"
+      ],
+      "rank": 3,
+      "matched": 1,
+      "proximity": 2.0,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D003681",
+      "concept_names": [
+        "Metformin",
+        "Dehydration"
+      ],
+      "paper_ids": [
+        "10.1155/crcc/3478800",
+        "10.1186/s41182-026-00973-z"
+      ],
+      "rank": 4,
+      "matched": 1,
+      "proximity": 4.0,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D007003",
+      "concept_names": [
+        "Metformin",
+        "Hypoglycemia"
+      ],
+      "paper_ids": [
+        "10.1002/ccr3.71607",
+        "10.1097/MS9.0000000000004949",
+        "10.3389/fphar.2025.1669831",
+        "10.3390/ijms27104631",
+        "10.7759/cureus.103719"
+      ],
+      "rank": 5,
+      "matched": 1,
+      "proximity": 4.0,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D003924",
+      "concept_names": [
+        "Metformin",
+        "Diabetes Mellitus, Type 2"
+      ],
+      "paper_ids": [
+        "10.1016/j.aed.2025.07.001",
+        "10.1177/20420188261434647",
+        "10.1177/20420986261428996",
+        "10.1186/s12883-026-04824-6",
+        "10.1210/jcemcr/luag109",
+        "10.1371/journal.pone.0337204",
+        "10.15190/d.2026.6",
+        "10.3390/ijms27041825",
+        "10.3390/medicina62040776",
+        "10.5414/CNCS111965",
+        "10.62838/jccm-2026-0017",
+        "10.7759/cureus.106919",
+        "10.7759/cureus.87316",
+        "10.7759/cureus.89292",
+        "10.7759/cureus.89686",
+        "10.7759/cureus.95194"
+      ],
+      "rank": 6,
+      "matched": 1,
+      "proximity": 5.0,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D019344|MESH:D000138",
+      "concept_names": [
+        "Lactic Acid",
+        "Acidosis"
+      ],
+      "paper_ids": [
+        "10.1186/s41182-026-00973-z",
+        "10.1210/jcemcr/luag109",
+        "10.14341/probl13618",
+        "10.5811/cpcem.50572",
+        "10.62838/jccm-2026-0017",
+        "10.7759/cureus.104328",
+        "10.7759/cureus.105129",
+        "10.7759/cureus.89686",
+        "10.7759/cureus.97415"
+      ],
+      "rank": 7,
+      "matched": 1,
+      "proximity": 8.0,
+      "label": "answers"
+    },
+    {
+      "key": "MESH:D019344|MESH:D000140",
+      "concept_names": [
+        "Lactic Acid",
+        "Acidosis, Lactic"
+      ],
+      "paper_ids": [
+        "10.1177/20420188261434647",
+        "10.3389/fmed.2025.1604360",
+        "10.7759/cureus.104328",
+        "10.7759/cureus.89686",
+        "10.7759/cureus.95194"
+      ],
+      "rank": 8,
+      "matched": 1,
+      "proximity": 8.0,
+      "label": "answers"
+    },
+    {
+      "key": "MESH:D001639|MESH:D000138",
+      "concept_names": [
+        "Bicarbonates",
+        "Acidosis"
+      ],
+      "paper_ids": [
+        "10.12998/wjcc.v13.i30.110820",
+        "10.7759/cureus.106919"
+      ],
+      "rank": 9,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D005947|MESH:D000138",
+      "concept_names": [
+        "Glucose",
+        "Acidosis"
+      ],
+      "paper_ids": [
+        "10.14341/probl13618",
+        "10.3390/ijms27104631"
+      ],
+      "rank": 10,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D000860",
+      "concept_names": [
+        "Metformin",
+        "Hypoxia"
+      ],
+      "paper_ids": [
+        "10.1177/20420986261428996",
+        "10.62838/jccm-2026-0017"
+      ],
+      "rank": 11,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D007022",
+      "concept_names": [
+        "Metformin",
+        "Hypotension"
+      ],
+      "paper_ids": [
+        "10.1097/MS9.0000000000004949",
+        "10.7759/cureus.106919"
+      ],
+      "rank": 12,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D012206",
+      "concept_names": [
+        "Metformin",
+        "Rhabdomyolysis"
+      ],
+      "paper_ids": [
+        "10.1371/journal.pone.0337204",
+        "10.3390/ijms27062757"
+      ],
+      "rank": 13,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D014839",
+      "concept_names": [
+        "Metformin",
+        "Vomiting"
+      ],
+      "paper_ids": [
+        "10.1097/MS9.0000000000004949",
+        "10.7759/cureus.106919"
+      ],
+      "rank": 14,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D018805",
+      "concept_names": [
+        "Metformin",
+        "Sepsis"
+      ],
+      "paper_ids": [
+        "10.1186/s41182-026-00973-z",
+        "10.62838/jccm-2026-0017",
+        "10.7759/cureus.102890",
+        "10.7759/cureus.104328"
+      ],
+      "rank": 15,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D051437",
+      "concept_names": [
+        "Metformin",
+        "Renal Insufficiency"
+      ],
+      "paper_ids": [
+        "10.1002/ccr3.71607",
+        "10.1016/j.jaccas.2026.107733",
+        "10.7759/cureus.97415"
+      ],
+      "rank": 16,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D008687|MESH:D058186",
+      "concept_names": [
+        "Metformin",
+        "Acute Kidney Injury"
+      ],
+      "paper_ids": [
+        "10.1093/ckj/sfaf286",
+        "10.1155/crcc/3478800",
+        "10.1186/s41182-026-00973-z",
+        "10.15190/d.2026.6",
+        "10.3389/fmed.2025.1604360",
+        "10.3390/ijms27104631",
+        "10.62838/jccm-2026-0017",
+        "10.7759/cureus.106919",
+        "10.7759/cureus.87316"
+      ],
+      "rank": 17,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    }
+  ],
+  "answer": "## MESH:D008687 — MESH:D000138\n8 papers, 2025–2026.\n\n- 2025 · Frontiers in pharmacology · PMID 40963686\n  \"INTRODUCTION: This article reports the successful treatment experience of refractory shock, acidosis, hypoglycemia, and multi-organ failure after overdose of reserpine, enalapril, and metformin, and aims to provide a reference for the rescue of patients with such poisoning.\"\n  \"CONCLUSION: The treatment of mixed drug poisoning involving reserpine, metformin, and enalapril is very challenging.\"\n- 2025 · Cureus · PMID 40761987\n  \"We report the case of a 73-year-old woman with type 2 diabetes mellitus (T2D) who developed severe high anion gap metabolic acidosis while on chronic metformin and dapagliflozin therapy.\"\n  \"Laboratory evaluation showed acute kidney injury and elevated metformin, lactic acid, and ketone blood levels.\"\n- 2026 · JACC. Case reports · PMID 41914935\n  \"BACKGROUND: Metformin-induced lactic acidosis can cause electrocardiographic (ECG) changes and precipitate cardiac arrest.\"\n  \"DISCUSSION: Metformin is a known instigator of lactic acidosis, particularly in patients with renal failure.\"\n  \"On rare occasion, such lactic acidosis secondary to metformin can produce lethal arrhythmias.\"\n  \"TAKE-HOME MESSAGE: It is crucial for providers to recognize metabolic acidosis as a precipitator of cardiac arrest and to identify patients who take metformin who are at risk for metformin-associated lactic acidosis.\"\n- 2026 · Discoveries (Craiova, Romania) · PMID 41948515\n  \"Metformin-associated lactic acidosis (MALA) is a rare but life-threatening complication of metformin therapy that most commonly occurs in the setting of acute kidney injury (AKI) and impaired drug clearance.\"\n  \"Given the widespread use of metformin for type 2 diabetes mellitus, recognition of precipitating factors for MALA remains critically important.\"\n  \"We report a case of severe euglycemic diabetic ketoacidosis (DKA) with refractory lactic acidosis in a patient with previously unrecognized obstructive uropathy due to recurrent nephrolithiasis causing bilateral hydronephrosis and severe AKI while on metformin therapy.\"\n  \"This case highlights the importance of early recognition of AKI from obstructive uropathy as a reversible precipitant of metformin accumulation and emphasizes the role of prompt renal replacement therapy in patients with severe MALA and refractory metabolic acidosis.\"\n- 2026 · International journal of molecular sciences · PMID 42196606\n  \"Metformin-associated lactic acidosis (MALA) involves mitochondrial Complex I inhibition, traditionally diagnosed via indirect markers.\"\n  \"A 65-year-old diabetic male presented with severe lactic acidosis, acute kidney injury, and profound hypoglycemia after intentionally overdosing on metformin (120 g), dapagliflozin (600 mg), and insulin glargine (300 U).\"\n  \"While hemodialysis cleared plasma metformin and resolved the acidosis, refractory hypoglycemia required high-dose IV glucose for over six days.\"\n  \"The protracted hypoglycemia was driven by a synergistic triad: metformin-inhibited gluconeogenesis, insulin glargine's prolonged depot effect, and dapagliflozin-induced persistent renal glucose wasting.\"\n- 2026 · Clinical practice and cases in emergency medicine · PMID 42377238\n  \"CASE REPORT: This is a notable presentation of metformin toxicity, as the 68-year-old male patient presented with an atypical chief complaint of dyspnea and no history of kidney disease.\"\n  \"Labs revealed anion gap metabolic acidosis from an accumulation of lactic acid and acute renal failure.\"\n  \"CONCLUSION: Emergency physicians should maintain metformin toxicity on the differential for patients on metformin presenting with dyspnea and anion gap metabolic acidosis with elevated serum lactic acid concentrations.\"\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  \"A 47-year-old male with type 2 diabetes on metformin and hypertension presented with profound hypoxemia, severe metabolic acidosis (pH unrecordable, lactate 17 mmol/L), and progressive cardiac dysfunction in the setting of presumed sepsis.\"\n  \"Lactic acidosis in this case was likely multifactorial, with metformin exposure as one potential contributor amid acute kidney injury, hypoperfusion, and possible septic elements.\"\n- 2026 · Cureus · PMID 42137698\n  \"Metformin-associated lactic acidosis (MALA) and euglycemic diabetic ketoacidosis (euDKA) are distinct causes of high anion gap metabolic acidosis, but their simultaneous occurrence is rare and may be overlooked when severe hyperlactatemia dominates the presentation.\"\n  \"We report the case of a 68-year-old man with type 2 diabetes mellitus treated with basal-bolus insulin, metformin, and linagliptin who presented with vomiting, confusion, fatigue, hypotension, and reduced level of consciousness.\"\n  \"Initial evaluation revealed profound acidemia (arterial pH 6.75), severe high anion gap metabolic acidosis (anion gap 51 mEq/L, bicarbonate <2 mEq/L), marked hyperlactatemia (19 mmol/L), significant ketonemia (beta-hydroxybutyrate >9.60 mmol/L), near-normal glucose (9.1 mmol/L), hyperkalemia (6.5 mEq/L), and severe acute kidney injury (creatinine 516 µmol/L).\"\n  \"Ongoing metformin exposure in the setting of acute kidney injury supported MALA, while marked ketonemia with near-normal glucose supported concurrent euDKA, likely precipitated by vomiting and reduced oral intake.\"\n  \"This case emphasizes that marked hyperlactatemia does not exclude a concurrent ketotic process and that early ketone measurement can materially change management in metformin-treated patients with persistent high anion gap acidosis.\"\n\n## MESH:D008687 — MESH:D000140\n35 papers, 2025–2026.\n\n- 2025 · Clinical case reports · PMID 41356654\n  \"Metformin usually does not provoke hypoglycemia and is well tolerated.\"\n  \"Despite this fact, metformin-associated lactic acidosis (MALA) remains one of the concerning side effects especially in the context of tissue hypoxia and pre-existing renal failure.\"\n- 2025 · AACE endocrinology and diabetes · PMID 41048693\n  \"Although metformin is the cornerstone of type 2 diabetes pharmacotherapy, its use in MELAS is discouraged owing to concerns of worsening lactic acidosis.\"\n  \"The objective of this report is to present a case where metformin use in MELAS was both clinically beneficial and safely tolerated.\"\n  \"Tapering of metformin to avoid potential lactic acidosis resulted in unacceptable hyperglycemia with fasting glucose in the range of 200 to 250 mg/dL.\"\n  \"DISCUSSION: Metformin can potentially increase lactic acidosis and neurologic manifestations in patients with mitochondrial disorders as reported previously; however, this is not a universal finding.\"\n  \"Metformin can be safely used in select patients with MELAS under appropriate clinical supervision.\"\n- 2025 · Renal failure · PMID 41287211\n  \"Metformin-associated lactic acidosis (MALA) is a life-threatening complication.\"\n- 2025 · Clinical kidney journal · PMID 41079154\n  \"BACKGROUND: Metformin-associated lactic acidosis (MALA) is a rare but potentially life-threatening complication of metformin therapy, often associated with acute kidney injury (AKI).\"\n- 2025 · Medicine · PMID 41054114\n  \"The present study aims to evaluate metformin-associated lactic acidosis (MALA) using real-world data from the Food and Drug Administration Adverse Event Reporting System (FAERS), providing reference for rational metformin use in clinical practice.\"\n- 2025 · Medicine · PMID 41189139\n  \"Metformin-associated lactic acidosis (MALA) was a rare but important adverse event of metformin therapy and carried a high mortality rate.\"\n- 2025 · Molecular autism · PMID 41291951\n  \"Preclinical and some clinical studies have suggested metformin may have therapeutic potential for FXS based on its mechanisms related to the disorder's pathophysiology.\"\n  \"Thirty-four participants aged 2-16 years with genetically confirmed FXS were randomized 1:1 to receive weight-adjusted metformin (250-1000 mg/day) or placebo.\"\n  \"Adverse event rates were comparable, with IGF-1 reduced (6.7%, p = 1), transient appetite loss (13.3%, p = 0.483) and lactic acidosis (26.7%, p = 0.330) resolving spontaneously in metformin group.\"\n  \"Although the primary endpoint was not met, these secondary findings support further investigation of metformin for targeted behavioral domains in individuals with FXS.\"\n- 2025 · World journal of clinical cases · PMID 41113081\n  \"BACKGROUND: Metformin is generally safe but can cause lactic acidosis and rarely organ dysfunction during overdose.\"\n  \"In stigmatized settings such conditions may go unrecognized This case illustrated severe complications from chronic metformin abuse in a young female with suspected anorexia nervosa, highlighting the need for integrated medical and psychiatric care.\"\n  \"To the best of our knowledge, this is only the second case report of multiple organ dysfunction syndrome (MODS) due to metformin toxicity.\"\n  \"CASE SUMMARY: Here, we reported a rare case of MODS involving four organs due to metformin abuse.\"\n  \"Labs revealed mixed high and normal anion gap metabolic acidosis from starvation ketosis and bicarbonate loss.\"\n  \"Further history revealed chronic metformin abuse (up to 3000 mg/day) for weight loss.\"\n  \"This case underscored the dangers of metformin misuse in eating disorders.\"\n  \"CONCLUSION: This case highlighted the potentially life-threatening consequences of surreptitious metformin abuse in the context of an underlying eating disorder.\"\n- 2025 · Frontiers in medicine · PMID 41179896\n  \"Lactic acidosis is a serious metabolic disorder characterized by an accumulation of lactate in the body, which can lead to a severe acid-base imbalance.\"\n  \"Metformin-associated lactic acidosis is a rare but life-threatening complication of metformin therapy, particularly in the setting of acute kidney injury or other conditions that impair lactate clearance.\"\n  \"In this case report, we present the remarkable survival of a patient who experienced severe metformin-associated lactic acidosis with a blood pH of 6.8 and a lactate level of 29 mmol/L, which are typically considered incompatible with life.\"\n- 2025 · Cureus · PMID 40904982\n  \"Metformin, a first-line agent in the treatment of type 2 diabetes mellitus, is widely favored for its efficacy and safety profile; however, under conditions of impaired renal function, it can lead to metformin-associated lactic acidosis (MALA), a rare but life-threatening complication.\"\n- 2025 · Cureus · PMID 40787182\n  \"Metformin-associated lactic acidosis (MALA) is a rare but potentially life-threatening adverse effect.\"\n  \"Extracorporeal treatment is generally recommended for severe MALA, defined by a lactate concentration >20 mmol/l, arterial pH ≤7.0, shock, or decreased level of consciousness.\"\n  \"We report a case of an 84-year-old Japanese man with autoimmune pancreatitis and type 2 diabetes who developed severe MALA while continuing metformin despite prolonged poor oral intake, and was successfully treated without dialysis.\"\n  \"On admission, the patient presented with hypothermia, shock, acute kidney injury (serum creatinine 5.93 mg/dl), hyperkalemia (serum potassium 7.7 mEq/l), and lactic acidosis (arterial pH 6.962, lactate 17 mmol/l), which later worsened to a lactate level of 26 mmol/l.\"\n  \"Acidosis resolved by 36 hours after admission, and the lactate level decreased to below 5 mmol/l by 44 hours.\"\n- 2025 · Cureus · PMID 41281028\n  \"A 66-year-old man with type 2 diabetes mellitus, treated with metformin, experienced loss of consciousness after bathing and consuming approximately 700 mL of beer (estimated 28 g of alcohol).\"\n  \"Arterial blood gas analysis revealed a pH of 7.33, a bicarbonate level of 16.2 mmol/L, and a lactate level of 7.4 mmol/L, consistent with lactic acidosis.\"\n  \"Metformin-associated lactic acidosis (MALA) was suspected, and he was admitted to the intensive care unit.\"\n  \"Despite fluid resuscitation, hypotension required a norepinephrine infusion, which was discontinued after 12 hours.\"\n- 2025 · Cureus · PMID 41278064\n  \"Metformin-induced lactic acidosis (MILA) is a rare but potentially life-threatening condition.\"\n  \"It is mainly related to metformin accumulation secondary to overdose or severe kidney failure.\"\n  \"Her laboratory investigations showed development of high anion gap metabolic acidosis, worsening lactatemia, and a drop in blood pressure despite supportive measures.\"\n- 2026 · Clinical case reports · PMID 41797748\n  \"Metformin, a widely prescribed and generally safe drug for diabetes mellitus, can rarely lead to metformin-associated lactic acidosis-a severe, potentially fatal complication.\"\n- 2026 · Pharmacology research & perspectives · PMID 42010803\n  \"These multifaceted mechanisms position metformin as a promising therapeutic candidate for a spectrum of disorders, from IBS to liver disorders.\"\n  \"This review synthesizes preclinical and clinical evidence supporting the therapeutic potential of metformin across GI pathologies-such as Helicobacter pylori infection, inflammatory bowel disease, colorectal cancer, and hepatocellular carcinoma-while elucidating its molecular mechanisms, such as AMPK/mTOR modulation, NF-κB inhibition, and gut barrier stabilization.\"\n  \"We critically evaluate combination therapies, ongoing clinical trials, and challenges, including lactic acidosis risk and GI intolerance to position metformin as a repurposed agent for GI disease management.\"\n- 2026 · JACC. Case reports · PMID 41914935\n  (quoted above)\n- 2026 · Annals of medicine and surgery (2012) · PMID 42254136\n  \"BACKGROUND: Metformin-associated lactic acidosis (MALA) is a rare but life-threatening complication of metformin overdose.\"\n  \"CASE PRESENTATION: A healthy 17-year-old female ingested 51 grams of metformin and presented with vomiting, hypotension, severe lactic acidosis, and hypoglycemia.\"\n  \"CONCLUSION: Metformin associated lactic acidosis typically presents with severe metabolic derangements and organ dysfunction; however, hypoglycemia remains an uncommon but important manifestation, likely related to impaired gluconeogenesis and glycogenolysis.\"\n- 2026 · Case reports in critical care · PMID 42147805\n  \"In elderly patients with diabetes and multiple comorbidities who are on complex medication regimens, semaglutide can lead to clinically significant dehydration at a rapid pace.\"\n  \"We report a case of a patient developing dehydration leading to acute kidney failure with life-threatening metformin-induced lactic acidosis.\"\n- 2026 · Gynecologic and obstetric investigation · PMID 41269915\n  \"UNLABELLED: <p>Background: In the field of polycystic ovary syndrome (PCOS), metformin and myo-inositol are frequently employed to treat the endocrine-metabolic aspects of the condition.\"\n  \"CONCLUSIONS AND OUTLOOK: Myo-inositol has a more acceptable safety profile than metformin, which is known to be associated with gastrointestinal adverse effects and, in rare cases, lactic acidosis.\"\n- 2026 · Therapeutic advances in endocrinology and metabolism · PMID 41948560\n  \"BACKGROUND: Metformin is the first-line pharmacological treatment for type 2 diabetes mellitus.\"\n  \"Metformin-associated lactic acidosis is uncommon; however, subclinical increases in lactate levels can yield considerable clinical consequences, warranting regular surveillance in high-risk patients.\"\n  \"Older patients had a higher prevalence of comorbidities such as heart failure (74 vs 55, p < 0.001) and renal disease (3 vs 1, p = 0.01) but received lower metformin doses compared to middle-aged patients.\"\n- 2026 · Therapeutic advances in drug safety · PMID 41804347\n  \"Metformin is a cornerstone medication and first-line therapy for type 2 diabetes mellitus (T2DM), with a well-established safety profile and widespread use over many years.\"\n  \"Recognized risk factors for metformin-associated lactic acidosis (MALA) include renal or hepatic impairment, excessive alcohol consumption, poorly controlled diabetes, ketosis, prolonged fasting, and conditions predisposing to hypoxia.\"\n- 2026 · BMC neurology · PMID 41877042\n  \"BACKGROUND: Metformin remains a first-line therapy for type 2 diabetes mellitus.\"\n  \"Metformin-induced extrapyramidal syndrome accompanied by encephalopathy is rare.\"\n  \"CASE PRESENTATION: We report a 60-year-old man on peritoneal dialysis (PD), for glomerulonephritis who developed metformin-induced encephalopathy shortly after initiating the drug for new-onset diabetes.\"\n  \"These features reflect a severe neuropsychiatric phenotype that has rarely been emphasized in previous reports of metformin-associated encephalopathy.\"\n  \"DISCUSSION: This case illustrates metformin-induced extrapyramidal syndrome with encephalopathy in a patient with ESRD on dialysis.\"\n  \"Proposed mechanisms include metformin-induced mitochondrial complex I inhibition, lactic acidosis exacerbating the accumulation of uremic toxins, and potential thiamine deficiency.\"\n  \"CONCLUSION: This case highlights that metformin can precipitate severe encephalopathy even when initiated in patients with ESRD on PD.\"\n- 2026 · Tropical medicine and health · PMID 42129892\n  \"BACKGROUND: Metformin-associated lactic acidosis (MALA) is a rare but fatal complication of metformin therapy, typically precipitated by acute kidney injury (AKI), dehydration, or sepsis.\"\n  \"Disrupted infrastructure led to poor oral intake, dehydration, and delayed presentation, with many patients continuing metformin despite acute illness.\"\n  \"At presentation, patients exhibited high-anion gap metabolic acidosis (pH range 6.78-7.31, peak lactate 24 mmol/L) and advanced AKI.\"\n  \"Severe MALA may occur despite therapeutic metformin dosing when acute illness, dehydration, and AKI coexist.\"\n- 2026 · JCEM case reports · PMID 42058699\n  \"Metformin is widely prescribed for type 2 diabetes mellitus and is generally considered safe.\"\n  \"However, metformin-associated lactic acidosis (MALA) is a rare but potentially fatal complication.\"\n  \"Initial arterial blood gas showed metabolic acidosis (pH 7.21, HCO3 - 12 mmol/L, lactate 8 mmol/L).\"\n  \"This case demonstrates that massive metformin overdose can overwhelm normal metabolic and clearance mechanisms, resulting in refractory lactic acidosis.\"\n- 2026 · Discoveries (Craiova, Romania) · PMID 41948515\n  (quoted above)\n- 2026 · International journal of molecular sciences · PMID 41898617\n  \"Metformin, fibrates, and febuxostat have been reported to improve DKD; however, caution is required when administering these drugs to patients with renal impairment due to concerns about the onset of lactic acidosis, rhabdomyolysis, and deterioration of renal function, respectively.\"\n- 2026 · International journal of molecular sciences · PMID 42196606\n  (quoted above)\n- 2026 · Medicina (Kaunas, Lithuania) · PMID 42075647\n  \"Background and Objactives: Metformin is the most widely prescribed glucose-lowering therapy worldwide and is generally considered safe in patients with chronic kidney disease (CKD) with estimated glomerular filtration rate (eGFR) ≥30 mL/min/1.73 m2.\"\n  \"We evaluated the association between metformin use and adverse clinical outcomes in very elderly patients with CKD and type 2 diabetes.\"\n  \"Metformin use was associated with a higher risk of ICU admission (HR 2.33; 95% CI 1.33-4.08), RRT initiation (HR 1.90; 95% CI 1.14-3.16), and lactic acidosis (HR 3.14; 95% CI 1.75-5.65).\"\n- 2026 · Clinical nephrology. Case studies · PMID 42164410\n  \"Metformin-associated lactic acidosis (MALA) is a rare phenomenon mostly described in the setting of impaired renal elimination or following an acute overdose.\"\n  \"While metformin is first-line treatment for type 2 diabetes mellitus, glucagon-like peptide-1 (GLP-1) receptor agonists and glucose-dependent insulinotropic polypeptide (GIP) and GLP-1 dual receptor agonists are frequent add-on agents.\"\n  \"We present a series of four critically ill patients with type 2 diabetes mellitus on high-dose metformin who presented with severe MALA following the introduction or dose escalation of a GLP-1 or GIP/GLP-1 dual receptor agonist, or during an acute gastrointestinal illness while also on a maintenance dose of a GLP-1 receptor agonist, requiring acute renal replacement therapy.\"\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  (quoted above)\n- 2026 · Cureus · PMID 41798450\n  \"Lactic acidosis was multifactorial, driven by sepsis from a diabetic foot infection, renal dysfunction, and metformin as a potential contributor.\"\n- 2026 · Cureus · PMID 41859615\n  \"Metformin poisoning is rare in the pediatric population but can lead to life-threatening metformin-associated lactic acidosis (MALA) and multiorgan failure, particularly when diagnosis or intervention is delayed.\"\n  \"It also highlights hypoglycemia as a rare but critical manifestation of severe metformin toxicity.\"\n- 2026 · Cureus · PMID 41909343\n  \"Labs showed acute kidney injury (AKI) (Cr 2.7 mg/dL), hyperkalemia [Potassium (K) 6.1 mmol/L], severe metabolic acidosis (bicarbonate 4 mmol/L), transaminitis [aspartate aminotransferase (AST) 424, alanine transaminase (ALT) 576], and lactate 18 mmol/L.\"\n  \"Medication review revealed metformin use, raising suspicion for metformin-associated lactic acidosis (MALA) in the setting of AKI.\"\n  \"This case illustrates multifactorial lactic acidosis: baseline elevation from liver metastases, superimposed type A lactic acidosis from sepsis, and type B lactic acidosis from metformin accumulation.\"\n  \"In patients with baseline lactic acidosis due to metastatic liver disease, sudden lactate spikes should prompt evaluation for reversible causes, including renal dysfunction and medication toxicity.\"\n- 2026 · Cureus · PMID 41994667\n  \"Metformin-associated lactic acidosis (MALA) is a rare but life-threatening complication of metformin therapy.\"\n  \"He presented with profound metabolic acidosis (pH 6.55), extreme lactate elevation to 29.9 mmol/L, acute kidney injury, and hemodynamic collapse requiring resuscitation.\"\n  \"This case challenges the assumption that neurological manifestations of MALA are uniformly reversible and expands the radiological spectrum of metformin-associated brain injury.\"\n- 2026 · Cureus · PMID 42137698\n  (quoted above)\n\n## MESH:D008687 — MESH:D016883\n2 papers, 2026.\n\n- 2026 · Discoveries (Craiova, Romania) · PMID 41948515\n  (quoted above)\n- 2026 · Cureus · PMID 42137698\n  (quoted above)\n\n## MESH:D008687 — MESH:D003681\n2 papers, 2026.\n\n- 2026 · Case reports in critical care · PMID 42147805\n  (quoted above)\n- 2026 · Tropical medicine and health · PMID 42129892\n  (quoted above)\n\n## MESH:D008687 — MESH:D007003\n5 papers, 2025–2026.\n\n- 2025 · Clinical case reports · PMID 41356654\n  (quoted above)\n- 2025 · Frontiers in pharmacology · PMID 40963686\n  (quoted above)\n- 2026 · Annals of medicine and surgery (2012) · PMID 42254136\n  (quoted above)\n- 2026 · International journal of molecular sciences · PMID 42196606\n  (quoted above)\n- 2026 · Cureus · PMID 41859615\n  (quoted above)\n\n## MESH:D008687 — MESH:D003924\n16 papers, 2025–2026.\n\n- 2025 · AACE endocrinology and diabetes · PMID 41048693\n  (quoted above)\n- 2025 · PloS one · PMID 41269930\n  \"BACKGROUND: Although metformin is the first-line medicine for type 2 diabetes (T2D), its safety profile in adolescents remains poorly understood.\"\n  \"This study seeks to investigate the adverse events linked to metformin use in adolescents diagnosed with T2D.\"\n  \"RESULTS: Of 17,956,653 FAERS reports, 80,187 involved metformin, including 973 in adolescents (10-19 years), with 174 cases were identified with a T2D indication.\"\n  \"Additionally, the study identified potential new signals not documented in metformin labeling, including areflexia, muscle weakness, ataxia, decreased vibratory sense, rhabdomyolysis, substance use, and axillary pain.\"\n  \"CONCLUSION: The study reveals a complex safety profile of metformin in adolescents with T2D, warranting further research to confirm risks.\"\n- 2025 · Cureus · PMID 40761987\n  (quoted above)\n- 2025 · Cureus · PMID 40904982\n  (quoted above)\n- 2025 · Cureus · PMID 40787182\n  (quoted above)\n- 2025 · Cureus · PMID 41281028\n  (quoted above)\n- 2026 · Therapeutic advances in endocrinology and metabolism · PMID 41948560\n  (quoted above)\n- 2026 · Therapeutic advances in drug safety · PMID 41804347\n  (quoted above)\n- 2026 · BMC neurology · PMID 41877042\n  (quoted above)\n- 2026 · JCEM case reports · PMID 42058699\n  (quoted above)\n- 2026 · Discoveries (Craiova, Romania) · PMID 41948515\n  (quoted above)\n- 2026 · International journal of molecular sciences · PMID 41751960\n  \"Metformin is widely used in type 2 diabetes, but its effects on oxidative and inflammatory pathways remain controversial.\"\n  \"Beyond glycemic control, it may promote lactic acidosis by impairing mitochondrial metabolism and pyruvate flux.\"\n- 2026 · Medicina (Kaunas, Lithuania) · PMID 42075647\n  (quoted above)\n- 2026 · Clinical nephrology. Case studies · PMID 42164410\n  (quoted above)\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  (quoted above)\n- 2026 · Cureus · PMID 42137698\n  (quoted above)\n\n## MESH:D019344 — MESH:D000138\n9 papers, 2025–2026.\n\n- 2025 · Cureus · PMID 40787182\n  (quoted above)\n- 2025 · Cureus · PMID 41278064\n  (quoted above)\n- 2026 · Tropical medicine and health · PMID 42129892\n  (quoted above)\n- 2026 · JCEM case reports · PMID 42058699\n  (quoted above)\n- 2026 · Problemy endokrinologii · PMID 42545322\n  \"Gluconeogenesis, a dual-purpose pathway in type 2 diabetes mellitus (T2DM), not only synthesizes glucose but also clears metabolic waste via the Cori cycle (lactate recycling through LDH, PC, PEPCK) and Alanine cycle (nitrogen disposal via ALT, GDH, urea cycle), preventing acidosis, ROS accumulation, and ammonia toxicity.\"\n  \"Multisystem consequences include musculoskeletal fatigue from ATP deficits, cognitive fog via neuroinflammation, atherosclerosis from endothelial dysfunction, hepatic fibrosis from urea cycle stress, and immune inflammaging impairing macrophage function.\"\n- 2026 · Clinical practice and cases in emergency medicine · PMID 42377238\n  (quoted above)\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  (quoted above)\n- 2026 · Cureus · PMID 41909343\n  (quoted above)\n- 2026 · Cureus · PMID 41994667\n  (quoted above)\n\n## MESH:D019344 — MESH:D000140\n5 papers, 2025–2026.\n\n- 2025 · Frontiers in medicine · PMID 41179896\n  (quoted above)\n- 2025 · Cureus · PMID 40787182\n  (quoted above)\n- 2025 · Cureus · PMID 41281028\n  (quoted above)\n- 2026 · Therapeutic advances in endocrinology and metabolism · PMID 41948560\n  (quoted above)\n- 2026 · Cureus · PMID 41909343\n  (quoted above)\n\n## MESH:D001639 — MESH:D000138\n2 papers, 2025–2026.\n\n- 2025 · World journal of clinical cases · PMID 41113081\n  (quoted above)\n- 2026 · Cureus · PMID 42137698\n  (quoted above)\n\n## MESH:D005947 — MESH:D000138\n2 papers, 2026.\n\n- 2026 · Problemy endokrinologii · PMID 42545322\n  (quoted above)\n- 2026 · International journal of molecular sciences · PMID 42196606\n  (quoted above)\n\n## MESH:D008687 — MESH:D000860\n2 papers, 2026.\n\n- 2026 · Therapeutic advances in drug safety · PMID 41804347\n  (quoted above)\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  (quoted above)\n\n## MESH:D008687 — MESH:D007022\n2 papers, 2026.\n\n- 2026 · Annals of medicine and surgery (2012) · PMID 42254136\n  (quoted above)\n- 2026 · Cureus · PMID 42137698\n  (quoted above)\n\n## MESH:D008687 — MESH:D012206\n2 papers, 2025–2026.\n\n- 2025 · PloS one · PMID 41269930\n  (quoted above)\n- 2026 · International journal of molecular sciences · PMID 41898617\n  (quoted above)\n\n## MESH:D008687 — MESH:D014839\n2 papers, 2026.\n\n- 2026 · Annals of medicine and surgery (2012) · PMID 42254136\n  (quoted above)\n- 2026 · Cureus · PMID 42137698\n  (quoted above)\n\n## MESH:D008687 — MESH:D018805\n4 papers, 2026.\n\n- 2026 · Tropical medicine and health · PMID 42129892\n  (quoted above)\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  (quoted above)\n- 2026 · Cureus · PMID 41798450\n  (quoted above)\n- 2026 · Cureus · PMID 41909343\n  (quoted above)\n\n## MESH:D008687 — MESH:D051437\n3 papers, 2025–2026.\n\n- 2025 · Clinical case reports · PMID 41356654\n  (quoted above)\n- 2025 · Cureus · PMID 41278064\n  (quoted above)\n- 2026 · JACC. Case reports · PMID 41914935\n  (quoted above)\n\n## MESH:D008687 — MESH:D058186\n9 papers, 2025–2026.\n\n- 2025 · Clinical kidney journal · PMID 41079154\n  (quoted above)\n- 2025 · Frontiers in medicine · PMID 41179896\n  (quoted above)\n- 2025 · Cureus · PMID 40761987\n  (quoted above)\n- 2026 · Case reports in critical care · PMID 42147805\n  (quoted above)\n- 2026 · Tropical medicine and health · PMID 42129892\n  (quoted above)\n- 2026 · Discoveries (Craiova, Romania) · PMID 41948515\n  (quoted above)\n- 2026 · International journal of molecular sciences · PMID 42196606\n  (quoted above)\n- 2026 · Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures) · PMID 42153113\n  (quoted above)\n- 2026 · Cureus · PMID 42137698\n  (quoted above)",
+  "papers": {
+    "10.34067/KID.0000001379": {
+      "title": "Metformin-Associated Lactic Acidosis and Relative Euglycemic Ketoacidosis Precipitated by a Glucagon-Like Peptide-1 Receptor Agonist: A Case Report and Literature Review.",
+      "journal": "Kidney360",
+      "year": 2026,
+      "doi": "10.34067/KID.0000001379",
+      "pmid": "42696402",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.14341/probl13618": {
+      "title": "Metformin's disruption of gluconeogenesis in type 2 diabetes impairments of the cori and alanine cycles as hidden drivers of metabolic waste accumulation, NF-κBHIF-1α-mediated low-grade inflammation, and multisystem dysfunction.",
+      "journal": "Problemy endokrinologii",
+      "year": 2026,
+      "doi": "10.14341/probl13618",
+      "pmid": "42545322",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.5811/cpcem.50572": {
+      "title": "Atypical Presentation of Metformin-associated Lactic Acidosis: A Case Report.",
+      "journal": "Clinical practice and cases in emergency medicine",
+      "year": 2026,
+      "doi": "10.5811/cpcem.50572",
+      "pmid": "42377238",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1007/s13730-026-01146-x": {
+      "title": "A case of metformin-associated encephalopathy in a patient undergoing maintenance hemodialysis.",
+      "journal": "CEN case reports",
+      "year": 2026,
+      "doi": "10.1007/s13730-026-01146-x",
+      "pmid": "42289604",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1097/MS9.0000000000004949": {
+      "title": "Early hemodialysis in pediatric metformin overdose with severe lactic acidosis and recurrent hypoglycemia: a case report and literature review.",
+      "journal": "Annals of medicine and surgery (2012)",
+      "year": 2026,
+      "doi": "10.1097/MS9.0000000000004949",
+      "pmid": "42254136",
+      "license": "cc_by_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.61882/zwq4sh57": {
+      "title": "Efficacy and Safety of Oral Antidiabetic Drugs in People with Diabetes and Chronic Kidney Disease: A Systematic Review.",
+      "journal": "Iranian journal of kidney diseases",
+      "year": 2025,
+      "doi": "10.61882/zwq4sh57",
+      "pmid": "42234904",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3390/ijms27104631": {
+      "title": "Diagnosing Metformin Intoxication with High-Resolution Platelet Respirometry: A Case Report.",
+      "journal": "International journal of molecular sciences",
+      "year": 2026,
+      "doi": "10.3390/ijms27104631",
+      "pmid": "42196606",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.ejphar.2026.179017": {
+      "title": "Metformin-associated lactic acidosis: Bridging pharmacokinetic determinants, metabolic pathways, and clinical outcomes.",
+      "journal": "European journal of pharmacology",
+      "year": 2026,
+      "doi": "10.1016/j.ejphar.2026.179017",
+      "pmid": "42178010",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.5414/CNCS111965": {
+      "title": "Co-prescription of metformin and glucagon-like peptide-1 receptor agonists and metformin-associated lactic acidosis: A case series.",
+      "journal": "Clinical nephrology. Case studies",
+      "year": 2026,
+      "doi": "10.5414/CNCS111965",
+      "pmid": "42164410",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.62838/jccm-2026-0017": {
+      "title": "Venoarterial extracorporeal membrane oxygenation as bridge support for refractory catecholamine-resistant shock and severe lactic acidosis in a patient with metformin exposure and multifactorial contributors: A case report.",
+      "journal": "Journal of critical care medicine (Universitatea de Medicina si Farmacie din Targu-Mures)",
+      "year": 2026,
+      "doi": "10.62838/jccm-2026-0017",
+      "pmid": "42153113",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1155/crcc/3478800": {
+      "title": "Two Doses to ICU or When Lactate Equals Glucose: Life-Threatening Lactic Acidosis due to Metformin After Initiation of Semaglutide.",
+      "journal": "Case reports in critical care",
+      "year": 2026,
+      "doi": "10.1155/crcc/3478800",
+      "pmid": "42147805",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.106919": {
+      "title": "Concurrent Metformin-Associated Lactic Acidosis and Euglycemic Diabetic Ketoacidosis Without Sodium-Glucose Cotransporter 2 Inhibitor Exposure: A Case Report and Literature Review.",
+      "journal": "Cureus",
+      "year": 2026,
+      "doi": "10.7759/cureus.106919",
+      "pmid": "42137698",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1186/s41182-026-00973-z": {
+      "title": "Metformin-associated lactic acidosis during flood-related healthcare disruption in southern Thailand, 2025: a case series.",
+      "journal": "Tropical medicine and health",
+      "year": 2026,
+      "doi": "10.1186/s41182-026-00973-z",
+      "pmid": "42129892",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3390/medicina62040776": {
+      "title": "Metformin Use and Clinical Outcomes in Very Elderly Patients with Type 2 Diabetes and Chronic Kidney Disease.",
+      "journal": "Medicina (Kaunas, Lithuania)",
+      "year": 2026,
+      "doi": "10.3390/medicina62040776",
+      "pmid": "42075647",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1210/jcemcr/luag109": {
+      "title": "Fatal metformin-associated lactic acidosis in a healthy woman after massive overdose.",
+      "journal": "JCEM case reports",
+      "year": 2026,
+      "doi": "10.1210/jcemcr/luag109",
+      "pmid": "42058699",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1002/prp2.70257": {
+      "title": "Metformin as a Multifaceted Therapeutic Agent for Gastrointestinal Diseases: Mechanisms, Clinical Efficacy, and Future Directions.",
+      "journal": "Pharmacology research & perspectives",
+      "year": 2026,
+      "doi": "10.1002/prp2.70257",
+      "pmid": "42010803",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1007/s11596-026-00198-5": {
+      "title": "Metformin in Diabetes and Beyond: Therapeutic Mechanisms, Lactic Acidosis, Organ-Specific Effects, and Nanotechnology-Based Delivery Strategies.",
+      "journal": "Current medical science",
+      "year": 2026,
+      "doi": "10.1007/s11596-026-00198-5",
+      "pmid": "41995776",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.7759/cureus.105129": {
+      "title": "When Metabolism Recovers but the Brain Does Not: A Case Report of Posterior Reversible Encephalopathy Syndrome (PRES)-Like Encephalopathy After Extreme Metformin-Associated Lactic Acidosis.",
+      "journal": "Cureus",
+      "year": 2026,
+      "doi": "10.7759/cureus.105129",
+      "pmid": "41994667",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1177/20420188261434647": {
+      "title": "Factors potentiating risk of higher lactate level associated with metformin therapy: a cross-sectional study in an ambulatory care setting.",
+      "journal": "Therapeutic advances in endocrinology and metabolism",
+      "year": 2026,
+      "doi": "10.1177/20420188261434647",
+      "pmid": "41948560",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.15190/d.2026.6": {
+      "title": "Metformin Toxicity Unmasked by Obstructive Uropathy: A Case of Metformin Associated Lactic Acidosis and Euglycemic Diabetic Ketoacidosis.",
+      "journal": "Discoveries (Craiova, Romania)",
+      "year": 2026,
+      "doi": "10.15190/d.2026.6",
+      "pmid": "41948515",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.aed.2025.11.014": {
+      "title": "Whether Metformin Causes Lactic Acidosis in m.3243A>G Carriers Depends on Several Factors.",
+      "journal": "AACE endocrinology and diabetes",
+      "year": 2026,
+      "doi": "10.1016/j.aed.2025.11.014",
+      "pmid": "41938317",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1016/j.jaccas.2026.107733": {
+      "title": "Pseudo-Ischemic ECG Changes in a Patient With Profound Mixed Metabolic Acidosis Due to Metformin Use.",
+      "journal": "JACC. Case reports",
+      "year": 2026,
+      "doi": "10.1016/j.jaccas.2026.107733",
+      "pmid": "41914935",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1016/j.ejmech.2026.118792": {
+      "title": "Synthesis, and pharmacological evaluation of iminoguanidine derivatives: Identification of FuBIG showing protective effects against diabetic neuroinflammation with a favorable lactate metabolism profile.",
+      "journal": "European journal of medicinal chemistry",
+      "year": 2026,
+      "doi": "10.1016/j.ejmech.2026.118792",
+      "pmid": "41911662",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.7759/cureus.104328": {
+      "title": "Where Is the Lactate Coming From? An Unusual Presentation of Persistent Lactic Acidosis.",
+      "journal": "Cureus",
+      "year": 2026,
+      "doi": "10.7759/cureus.104328",
+      "pmid": "41909343",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.3390/ijms27062757": {
+      "title": "Molecular Mechanisms and Clinical Evidence Supporting the Four Pillars of Therapy in Diabetic Kidney Disease: Emerging Therapeutic Perspectives.",
+      "journal": "International journal of molecular sciences",
+      "year": 2026,
+      "doi": "10.3390/ijms27062757",
+      "pmid": "41898617",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1186/s12883-026-04824-6": {
+      "title": "Metformin-induced encephalopathy in a peritoneal dialysis patient: the critical role of hemodialysis in reversing lentiform fork sign: a case report.",
+      "journal": "BMC neurology",
+      "year": 2026,
+      "doi": "10.1186/s12883-026-04824-6",
+      "pmid": "41877042",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.103719": {
+      "title": "Fatal Pediatric Metformin-Associated Lactic Acidosis: When Severity Goes Unnoticed.",
+      "journal": "Cureus",
+      "year": 2026,
+      "doi": "10.7759/cureus.103719",
+      "pmid": "41859615",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1177/20420986261428996": {
+      "title": "Metformin-associated lactic acidosis in an elderly diabetic patient without classical risk factors: a case report.",
+      "journal": "Therapeutic advances in drug safety",
+      "year": 2026,
+      "doi": "10.1177/20420986261428996",
+      "pmid": "41804347",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.102890": {
+      "title": "Severe Multifactorial Lactic Acidosis With Pulmonary Edema and Myocardial Injury in an Elderly Patient on Metformin Managed Conservatively: A Case Report.",
+      "journal": "Cureus",
+      "year": 2026,
+      "doi": "10.7759/cureus.102890",
+      "pmid": "41798450",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1002/ccr3.72197": {
+      "title": "Severe Metformin-Associated Lactic Acidosis-A Case Report.",
+      "journal": "Clinical case reports",
+      "year": 2026,
+      "doi": "10.1002/ccr3.72197",
+      "pmid": "41797748",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3390/ijms27041825": {
+      "title": "A Novel Protective Strategy Against Metformin-Induced Renal Injury Involving Adenosine Triphosphate and Thiamine Pyrophosphate.",
+      "journal": "International journal of molecular sciences",
+      "year": 2026,
+      "doi": "10.3390/ijms27041825",
+      "pmid": "41751960",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.therap.2026.01.006": {
+      "title": "Metformin prescription in hospitalized patients with renal impairment: What about in real life? A cross-sectional study.",
+      "journal": "Therapie",
+      "year": 2026,
+      "doi": "10.1016/j.therap.2026.01.006",
+      "pmid": "41714245",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.ajem.2026.01.027": {
+      "title": "Clinical differences between metformin-associated lactic acidosis and metformin-unrelated lactic acidosis: A descriptive study.",
+      "journal": "The American journal of emergency medicine",
+      "year": 2026,
+      "doi": "10.1016/j.ajem.2026.01.027",
+      "pmid": "41619701",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.ejphar.2026.178560": {
+      "title": "Safety of metformin in chronic kidney disease and type 2 diabetes mellitus: a systematic review and meta-analysis.",
+      "journal": "European journal of pharmacology",
+      "year": 2026,
+      "doi": "10.1016/j.ejphar.2026.178560",
+      "pmid": "41548682",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.tjnut.2026.101362": {
+      "title": "Synergistic Therapeutic Potential of Curcumin and Metformin: a Multipathway Approach to Disease Management.",
+      "journal": "The Journal of nutrition",
+      "year": 2026,
+      "doi": "10.1016/j.tjnut.2026.101362",
+      "pmid": "41539435",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1080/15563650.2025.2607437": {
+      "title": "Hemodynamic instability in severe metformin-associated lactic acidosis: is continuous kidney replacement therapy a viable alternative to intermittent hemodialysis?",
+      "journal": "Clinical toxicology (Philadelphia, Pa.)",
+      "year": 2026,
+      "doi": "10.1080/15563650.2025.2607437",
+      "pmid": "41505222",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.jneuroim.2025.578852": {
+      "title": "Efficacy and tolerability of metformin as an adjuvant therapy in patients with relapse-remitting multiple sclerosis receiving interferon Beta 1a: A randomized pilot trial.",
+      "journal": "Journal of neuroimmunology",
+      "year": 2026,
+      "doi": "10.1016/j.jneuroim.2025.578852",
+      "pmid": "41483718",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.18773/austprescr.2025.053": {
+      "title": "Near-fatal reaction associated with cotrimoxazole, metformin and kidney impairment.",
+      "journal": "Australian prescriber",
+      "year": 2025,
+      "doi": "10.18773/austprescr.2025.053",
+      "pmid": "41416058",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1177/10962964251401522": {
+      "title": "Multi-factorial Hyperlactatemia Due to Linezolid and Metformin Treatment in the Setting of Vitamin C and B1 Deficiency.",
+      "journal": "Surgical infections",
+      "year": 2026,
+      "doi": "10.1177/10962964251401522",
+      "pmid": "41386809",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1111/papr.70113": {
+      "title": "A Dangerous Duo: Non-Steroidal Anti-Inflammatory Drug and Metformin.",
+      "journal": "Pain practice : the official journal of World Institute of Pain",
+      "year": 2026,
+      "doi": "10.1111/papr.70113",
+      "pmid": "41376140",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1002/ccr3.71607": {
+      "title": "Metformin-Associated Lactic Acidosis Following Acute Overdose: Clinical Course and Conservative Management.",
+      "journal": "Clinical case reports",
+      "year": 2025,
+      "doi": "10.1002/ccr3.71607",
+      "pmid": "41356654",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1186/s13229-025-00691-z": {
+      "title": "Effects of Metformin on children with Fragile X Syndrome: a randomized, double-blind, placebo-controlled trial.",
+      "journal": "Molecular autism",
+      "year": 2025,
+      "doi": "10.1186/s13229-025-00691-z",
+      "pmid": "41291951",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1080/0886022X.2025.2586333": {
+      "title": "Kidney replacement therapy and mortality in metformin-associated lactic acidosis with acute kidney injury (2015-2021): a multi-year cohort study.",
+      "journal": "Renal failure",
+      "year": 2025,
+      "doi": "10.1080/0886022X.2025.2586333",
+      "pmid": "41287211",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.95194": {
+      "title": "Metformin-Associated Lactic Acidosis Induced by Even Modest Amounts of Alcohol: A Case Report.",
+      "journal": "Cureus",
+      "year": 2025,
+      "doi": "10.7759/cureus.95194",
+      "pmid": "41281028",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.97415": {
+      "title": "Metformin-Induced Lactic Acidosis Following Intentional Overdose: A Case Report and Mini Review.",
+      "journal": "Cureus",
+      "year": 2025,
+      "doi": "10.7759/cureus.97415",
+      "pmid": "41278064",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1371/journal.pone.0337204": {
+      "title": "Safety profile of metformin in adolescents with type 2 diabetes: A pharmacovigilance analysis of the FDA Adverse Event Reporting System.",
+      "journal": "PloS one",
+      "year": 2025,
+      "doi": "10.1371/journal.pone.0337204",
+      "pmid": "41269930",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1159/000549646": {
+      "title": "Metformin and Myo-Inositol: A Comparative Analysis.",
+      "journal": "Gynecologic and obstetric investigation",
+      "year": 2026,
+      "doi": "10.1159/000549646",
+      "pmid": "41269915",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1016/j.eprac.2025.11.006": {
+      "title": "Real-World Evidence for Metformin Use in Solid Organ Transplant Recipients Living With Diabetes.",
+      "journal": "Endocrine practice : official journal of the American College of Endocrinology and the American Association of Clinical Endocrinologists",
+      "year": 2026,
+      "doi": "10.1016/j.eprac.2025.11.006",
+      "pmid": "41241275",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1097/MD.0000000000045197": {
+      "title": "Metformin use despite contraindications in metformin-associated lactic acidosis.",
+      "journal": "Medicine",
+      "year": 2025,
+      "doi": "10.1097/MD.0000000000045197",
+      "pmid": "41189139",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3389/fmed.2025.1604360": {
+      "title": "Dancing with death at pH 6.8 and lactate of 29 mmol/L: extreme survival in severe metformin-associated lactic acidosis - a case report.",
+      "journal": "Frontiers in medicine",
+      "year": 2025,
+      "doi": "10.3389/fmed.2025.1604360",
+      "pmid": "41179896",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.12998/wjcc.v13.i30.110820": {
+      "title": "Metformin abuse and weight loss: A case report.",
+      "journal": "World journal of clinical cases",
+      "year": 2025,
+      "doi": "10.12998/wjcc.v13.i30.110820",
+      "pmid": "41113081",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1093/ckj/sfaf286": {
+      "title": "Regional citrate anticoagulation ensures safe and effective kidney replacement therapy in metformin-associated lactic acidosis.",
+      "journal": "Clinical kidney journal",
+      "year": 2025,
+      "doi": "10.1093/ckj/sfaf286",
+      "pmid": "41079154",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1097/MD.0000000000045007": {
+      "title": "Comprehensive analysis of metformin-associated lactic acidosis: Insights from the FDA Adverse Event Reporting System (FAERS).",
+      "journal": "Medicine",
+      "year": 2025,
+      "doi": "10.1097/MD.0000000000045007",
+      "pmid": "41054114",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.aed.2025.07.001": {
+      "title": "Safe Use of Metformin in Mitochondrial Diabetes in Mitochondrial Encephalomyopathy, Lactic Acidosis, and Stroke-Like Episodes: Insights From a Patient With m.3243A>G Mutation.",
+      "journal": "AACE endocrinology and diabetes",
+      "year": 2025,
+      "doi": "10.1016/j.aed.2025.07.001",
+      "pmid": "41048693",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1101/2025.01.13.25320485": {
+      "title": "Metformin on Time to Sustained Recovery in Adults with COVID-19: The ACTIV-6 Randomized Clinical Trial.",
+      "journal": "medRxiv : the preprint server for health sciences",
+      "year": 2025,
+      "doi": "10.1101/2025.01.13.25320485",
+      "pmid": "41030935",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3389/fphar.2025.1669831": {
+      "title": "Successful rescue of a rare case of refractory shock due to multidrug toxicity: a case report.",
+      "journal": "Frontiers in pharmacology",
+      "year": 2025,
+      "doi": "10.3389/fphar.2025.1669831",
+      "pmid": "40963686",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.89292": {
+      "title": "Metformin-Associated Lactic Acidosis (MALA): When a Common Drug Turns Catastrophic.",
+      "journal": "Cureus",
+      "year": 2025,
+      "doi": "10.7759/cureus.89292",
+      "pmid": "40904982",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.7759/cureus.89686": {
+      "title": "Severe Metformin-Associated Lactic Acidosis Managed Without Dialysis in an Elderly Patient With Multiple Comorbidities: A Case Report.",
+      "journal": "Cureus",
+      "year": 2025,
+      "doi": "10.7759/cureus.89686",
+      "pmid": "40787182",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1007/s12020-025-04377-7": {
+      "title": "Factors related to lactic acidosis observed in diabetic ketoacidosis and its effect on the treatment process.",
+      "journal": "Endocrine",
+      "year": 2025,
+      "doi": "10.1007/s12020-025-04377-7",
+      "pmid": "40773090",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.7759/cureus.87316": {
+      "title": "Severe Metabolic Acidosis Related to Simultaneous Use of Metformin and Dapagliflozin: A Case Report.",
+      "journal": "Cureus",
+      "year": 2025,
+      "doi": "10.7759/cureus.87316",
+      "pmid": "40761987",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    }
+  },
+  "findings": []
+}

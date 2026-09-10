@@ -1,0 +1,741 @@
+{
+  "schema_version": 1,
+  "slug": "cisplatin-nephrotoxicity",
+  "query": "cisplatin nephrotoxicity",
+  "generated_at": "2026-09-10T23:08:53.455414+00:00",
+  "source_pin": "dca53c889d9d4951e520a22822f45e3d1eaf51d2fc7fa535cdf097b6305229ef",
+  "stages": [
+    {
+      "name": "retrieve",
+      "status": "completed",
+      "n_in": 60,
+      "n_out": 59,
+      "unit_in": "pmids",
+      "unit_out": "papers",
+      "dropped": {
+        "no_article_returned": 1
+      },
+      "noted": {
+        "no_abstract": 1
+      },
+      "note": null
+    },
+    {
+      "name": "ner_linking",
+      "status": "completed",
+      "n_in": 59,
+      "n_out": 1305,
+      "unit_in": "papers",
+      "unit_out": "entities",
+      "dropped": {},
+      "noted": {
+        "entity_unlinked": 596
+      },
+      "note": null
+    },
+    {
+      "name": "licence_gate",
+      "status": "completed",
+      "n_in": 59,
+      "n_out": 25,
+      "unit_in": "papers",
+      "unit_out": "papers",
+      "dropped": {
+        "licence_refused:none": 34
+      },
+      "noted": {},
+      "note": "Refused papers carry no Creative Commons licence in the publisher's permissions block (LicenseTier.unknown). This is the Phase 1 compliance rule working as designed, not a failure."
+    },
+    {
+      "name": "extract",
+      "status": "completed",
+      "n_in": 25,
+      "n_out": 25,
+      "unit_in": "records",
+      "unit_out": "records",
+      "dropped": {},
+      "noted": {
+        "zero_findings": 10
+      },
+      "note": null
+    },
+    {
+      "name": "cluster",
+      "status": "completed",
+      "n_in": 25,
+      "n_out": 2,
+      "unit_in": "records",
+      "unit_out": "clusters",
+      "dropped": {
+        "no_cluster": 18
+      },
+      "noted": {
+        "singleton_key": 36,
+        "no_pairs": 10
+      },
+      "note": null
+    },
+    {
+      "name": "select",
+      "status": "completed",
+      "n_in": 2,
+      "n_out": 2,
+      "unit_in": "clusters",
+      "unit_out": "clusters",
+      "dropped": {},
+      "noted": {},
+      "note": "kept 2 of 2 by concept overlap with the question (cisplatin), where a cluster side counts as overlapping if it IS a query concept or belongs to a pharmacological class the query named (ADR-0022, member->class only); ordered by relevance to the query (ADR-0020: matched sides, then MeSH hierarchy proximity, then key order; size is deliberately not a signal)."
+    },
+    {
+      "name": "critic",
+      "status": "not_implemented",
+      "n_in": 2,
+      "n_out": 0,
+      "unit_in": "clusters",
+      "unit_out": "findings",
+      "dropped": {},
+      "noted": {},
+      "note": "Contradiction detection is not implemented. The CTD-derived gold standard was retired by Gate 2 (pi-hat = 0.067) and the re-scoped alternative was declined; see ADR-0017."
+    },
+    {
+      "name": "synthesis",
+      "status": "completed",
+      "n_in": 2,
+      "n_out": 2,
+      "unit_in": "clusters",
+      "unit_out": "answers",
+      "dropped": {},
+      "noted": {},
+      "note": "Deterministic template (ADR-0019). Citation assembly is not yet built."
+    }
+  ],
+  "clusters": [
+    {
+      "key": "MESH:D002945|MESH:D009369",
+      "concept_names": [
+        "Cisplatin",
+        "Neoplasms"
+      ],
+      "paper_ids": [
+        "10.1002/jbt.71100",
+        "10.1038/s41598-026-55689-1"
+      ],
+      "rank": 1,
+      "matched": 1,
+      "proximity": null,
+      "label": "background"
+    },
+    {
+      "key": "MESH:D002945|MESH:D058186",
+      "concept_names": [
+        "Cisplatin",
+        "Acute Kidney Injury"
+      ],
+      "paper_ids": [
+        "10.1002/fsn3.72281",
+        "10.3389/fmicb.2026.1854645",
+        "10.3389/fphar.2026.1777367",
+        "10.3389/ftox.2026.1862941",
+        "10.3390/ijms27125302"
+      ],
+      "rank": 2,
+      "matched": 1,
+      "proximity": null,
+      "label": "answers"
+    }
+  ],
+  "answer": "## MESH:D002945 — MESH:D009369\n2 papers, 2026.\n\n- 2026 · Journal of biochemical and molecular toxicology · PMID 42671218\n  \"Co-treatment with Luteolin significantly enhanced Cisplatin-induced growth inhibition in cancer cells while exerting limited cytotoxicity in normal cells.\"\n- 2026 · Scientific reports · PMID 42243346\n  \"Cisplatin (Cis) is a widely utilized chemotherapy drug for managing various cancers, but its efficacy is limited by nephrotoxicity, which frequently results in kidney fibrosis.\"\n  \"Fluvoxamine (FLV), a selective serotonin reuptake inhibitor and sigma‑1 receptor agonist, lycopene (LYC), a carotenoid antioxidant, and their combination showed a novel protective influence on kidney fibrosis in male albino rats induced by administering Cis (7 mg/kg) by intraperitoneal (IP) injection once weekly for 4 weeks.\"\n\n## MESH:D002945 — MESH:D058186\n5 papers, 2026.\n\n- 2026 · Food science & nutrition · PMID 42662804\n  \"Cisplatin (CDDP) is a widely used chemotherapeutic agent, but its nephrotoxic side effects limit its clinical application, which can lead to severe acute kidney injury (AKI).\"\n- 2026 · Frontiers in microbiology · PMID 42293527\n  \"Cisplatin is a widely used chemotherapeutic drug for solid tumors, including colorectal cancer, but its clinical application is limited by dose-dependent nephrotoxicity, often resulting in acute kidney injury (AKI).\"\n  \"The gut-kidney axis has emerged as a key factor in cisplatin-induced AKI, with gut microbial imbalance contributing to inflammation and metabolic dysregulation.\"\n- 2026 · Frontiers in pharmacology · PMID 42232189\n  \"BACKGROUND: Cisplatin chemotherapy is limited by its nephrotoxicity, which leads to acute kidney injury (AKI).\"\n- 2026 · Frontiers in toxicology · PMID 42459863\n  \"Cisplatin-induced acute kidney injury remains a major dose-limiting complication in oncology.\"\n  \"This PRISMA-guided systematic review aimed to characterize the frequency, biological categorization, and co-reporting patterns of biomarkers used in human proximal tubule in vitro models of cisplatin-induced injury.\"\n- 2026 · International journal of molecular sciences · PMID 42353025\n  \"Associated with high morbidity and mortality, cisplatin-induced acute kidney injury (AKI) is a common clinical complication characterized by oxidative stress, inflammation, and mitochondria-associated signaling.\"",
+  "papers": {
+    "10.1007/s00210-026-05889-3": {
+      "title": "Aloesin mitigates cisplatin-induced nephrotoxicity by suppressing NF-κB-mediated oxidative stress and modulating Bax/Bcl-2/caspase pathways.",
+      "journal": "Naunyn-Schmiedeberg's archives of pharmacology",
+      "year": 2026,
+      "doi": "10.1007/s00210-026-05889-3",
+      "pmid": "42698028",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.17116/otorino20269104112": {
+      "title": "[On a model of cisplatin-induced ototoxicity in Wistar rats].",
+      "journal": "Vestnik otorinolaringologii",
+      "year": 2026,
+      "doi": "10.17116/otorino20269104112",
+      "pmid": "42693981",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1096/fj.202602118R": {
+      "title": "ASIV Attenuates Cisplatin-Induced Proximal Tubular Injury by Enhancing Mitochondrial Biogenesis and Mitophagy Through the ADRA1A/AMPK/FOXO3A Pathway.",
+      "journal": "FASEB journal : official publication of the Federation of American Societies for Experimental Biology",
+      "year": 2026,
+      "doi": "10.1096/fj.202602118R",
+      "pmid": "42687819",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1002/jbt.71100": {
+      "title": "Protective Effects of Luteolin Against Cisplatin-Induced Hepatic and Renal Toxicity: Biochemical and Cellular Evidence.",
+      "journal": "Journal of biochemical and molecular toxicology",
+      "year": 2026,
+      "doi": "10.1002/jbt.71100",
+      "pmid": "42671218",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1177/1096620X261481636": {
+      "title": "",
+      "journal": "Journal of medicinal food",
+      "year": 2026,
+      "doi": "10.1177/1096620X261481636",
+      "pmid": "42663507",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1002/fsn3.72281": {
+      "title": "Rosmarinic Acid Alleviates Cisplatin-Induced Acute Kidney Injury by Targeting FYN to Regulate Ferroptosis.",
+      "journal": "Food science & nutrition",
+      "year": 2026,
+      "doi": "10.1002/fsn3.72281",
+      "pmid": "42662804",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.3390/jcm15166278": {
+      "title": "Efficacy of Prophylactic Magnesium Therapy for the Prevention of Cisplatin-Induced Renal Injury: A Meta-Analysis.",
+      "journal": "Journal of clinical medicine",
+      "year": 2026,
+      "doi": "10.3390/jcm15166278",
+      "pmid": "42652681",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.3390/antiox15080915": {
+      "title": "Alpha-Mangostin in Acute Kidney Injury: Molecular Mechanisms, Regulated Cell Death, and Translational Opportunities.",
+      "journal": "Antioxidants (Basel, Switzerland)",
+      "year": 2026,
+      "doi": "10.3390/antiox15080915",
+      "pmid": "42650179",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.bioorg.2026.110403": {
+      "title": "A near-infrared fluorescent probe for imaging sulfite-associated changes in experimental renal injury.",
+      "journal": "Bioorganic chemistry",
+      "year": 2026,
+      "doi": "10.1016/j.bioorg.2026.110403",
+      "pmid": "42617418",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1093/toxsci/kfag098": {
+      "title": "Detecting drug-induced nephrotoxicity using simultaneous label-free autofluorescence multiharmonic microscopy.",
+      "journal": "Toxicological sciences : an official journal of the Society of Toxicology",
+      "year": 2026,
+      "doi": "10.1093/toxsci/kfag098",
+      "pmid": "42610710",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1016/j.colsurfb.2026.116069": {
+      "title": "Kidney-targeted delivery of rapamycin via folic acid-Mn",
+      "journal": "Colloids and surfaces. B, Biointerfaces",
+      "year": 2026,
+      "doi": "10.1016/j.colsurfb.2026.116069",
+      "pmid": "42600256",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.4162/nrp.2026.20.4.709": {
+      "title": "Isothiocyanates inhibit the cisplatin-induced apoptosis and inflammation in human kidney HEK-293 cells.",
+      "journal": "Nutrition research and practice",
+      "year": 2026,
+      "doi": "10.4162/nrp.2026.20.4.709",
+      "pmid": "42582541",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1002/adhm.71575": {
+      "title": "Amelioration of Cisplatin Nephrotoxicity by Fe-Pt Coordination Exchange-Triggered Ferroptosis Suppression.",
+      "journal": "Advanced healthcare materials",
+      "year": 2026,
+      "doi": "10.1002/adhm.71575",
+      "pmid": "42581566",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1152/ajprenal.00144.2026": {
+      "title": "Perilipin 2 drives cisplatin-induced acute kidney injury in young but not aged kidneys.",
+      "journal": "American journal of physiology. Renal physiology",
+      "year": 2026,
+      "doi": "10.1152/ajprenal.00144.2026",
+      "pmid": "42581421",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.saa.2026.128589": {
+      "title": "Super-resolution imaging with a mitochondria-targeted fluorescent probe: Evaluation of chemotherapy-induced hepatorenal injury.",
+      "journal": "Spectrochimica acta. Part A, Molecular and biomolecular spectroscopy",
+      "year": 2027,
+      "doi": "10.1016/j.saa.2026.128589",
+      "pmid": "42574880",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.bioorg.2026.110344": {
+      "title": "Prenylated 4-Hydroxycoumarin derivatives as inducers of CDK4/6-mediated cell cycle arrest: From design and synthesis to in vitro and in vivo evaluation of their anti-breast Cancer activity.",
+      "journal": "Bioorganic chemistry",
+      "year": 2026,
+      "doi": "10.1016/j.bioorg.2026.110344",
+      "pmid": "42571741",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3389/jpps.2026.16787": {
+      "title": "Innovative hyaluronic acid-decorated quatsomes for enhanced renal targeting: design, optimization and ",
+      "journal": "Journal of pharmacy & pharmaceutical sciences : a publication of the Canadian Society for Pharmaceutical Sciences, Societe canadienne des sciences pharmaceutiques",
+      "year": 2026,
+      "doi": "10.3389/jpps.2026.16787",
+      "pmid": "42568566",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1152/ajprenal.00394.2025": {
+      "title": "The protective role of TRPV4-mediated HSP27 preemptive induction by thermal preconditioning against cisplatin-induced renal tubular injury.",
+      "journal": "American journal of physiology. Renal physiology",
+      "year": 2026,
+      "doi": "10.1152/ajprenal.00394.2025",
+      "pmid": "42563228",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1007/s10735-026-10910-3": {
+      "title": "Prophylactic administration of silica nanoparticles loaded with amifostine prevents cisplatin-induced nephrotoxicity in rats.",
+      "journal": "Journal of molecular histology",
+      "year": 2026,
+      "doi": "10.1007/s10735-026-10910-3",
+      "pmid": "42530708",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3390/cimb48070667": {
+      "title": "αB-Crystallin Protects Against Cisplatin-Induced Nephrotoxicity by Modulating Apoptosis In Vivo and In Vitro.",
+      "journal": "Current issues in molecular biology",
+      "year": 2026,
+      "doi": "10.3390/cimb48070667",
+      "pmid": "42510908",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1007/s11626-026-01207-6": {
+      "title": "Daphnetin alleviates cisplatin-induced acute kidney injury by inhibiting the HIF-1α signaling pathway.",
+      "journal": "In vitro cellular & developmental biology. Animal",
+      "year": 2026,
+      "doi": "10.1007/s11626-026-01207-6",
+      "pmid": "42498919",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1080/08923973.2026.2705914": {
+      "title": "Quinic acid attenuates cisplatin-induced acute kidney injury by modulating inflammatory cytokines, oxidative stress, apoptosis, and the Nrf2/HO-1/NQO1 pathway in rats.",
+      "journal": "Immunopharmacology and immunotoxicology",
+      "year": 2026,
+      "doi": "10.1080/08923973.2026.2705914",
+      "pmid": "42495849",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1007/s12032-026-03348-w": {
+      "title": "A kinetically inert platinum antitumor agent overcomes mutant p53-driven chemoresistance via oxidative stress-mediated DNA damage.",
+      "journal": "Medical oncology (Northwood, London, England)",
+      "year": 2026,
+      "doi": "10.1007/s12032-026-03348-w",
+      "pmid": "42484733",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.5090/jcs.25.160": {
+      "title": "Aseptic Thermochemical Shock after Hyperthermic Intrathoracic Chemotherapy: Pathophysiological Mechanisms and a Translational Framework for Perioperative Management.",
+      "journal": "Journal of chest surgery",
+      "year": 2026,
+      "doi": "10.5090/jcs.25.160",
+      "pmid": "42482334",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1007/s11033-026-12383-9": {
+      "title": "Exploring the therapeutic potential of momordica balsamina: A focus on anticancer and nephroprotective effects.",
+      "journal": "Molecular biology reports",
+      "year": 2026,
+      "doi": "10.1007/s11033-026-12383-9",
+      "pmid": "42474532",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.namjnl.2026.100110": {
+      "title": "An AOP-guided ",
+      "journal": "NAM journal",
+      "year": 2026,
+      "doi": "10.1016/j.namjnl.2026.100110",
+      "pmid": "42471829",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1038/s41598-026-62168-0": {
+      "title": "Docosahexaenoic acid attenuates cisplatin nephrotoxicity by restoring mitophagy.",
+      "journal": "Scientific reports",
+      "year": 2026,
+      "doi": "10.1038/s41598-026-62168-0",
+      "pmid": "42469375",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3389/ftox.2026.1862941": {
+      "title": "Biomarker selection and reporting architecture in human proximal tubular ",
+      "journal": "Frontiers in toxicology",
+      "year": 2026,
+      "doi": "10.3389/ftox.2026.1862941",
+      "pmid": "42459863",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.tice.2026.103784": {
+      "title": "Fenofibrate attenuates cisplatin-induced nephrotoxicity in rats by restoring mitochondrial dynamics and improving fatty acid oxidation.",
+      "journal": "Tissue & cell",
+      "year": 2026,
+      "doi": "10.1016/j.tice.2026.103784",
+      "pmid": "42456377",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1021/acs.jmedchem.6c00253": {
+      "title": "Cisproplatin: A Redox-Activatable Cisplatin-Probenecid Pt(IV) Conjugate with Broad NCI-60 Potency that Decouples Antitumor Efficacy from Dose-Limiting Toxicity and Suppresses CIPN.",
+      "journal": "Journal of medicinal chemistry",
+      "year": 2026,
+      "doi": "10.1021/acs.jmedchem.6c00253",
+      "pmid": "42446174",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.21037/tlcr-2026-1-0097": {
+      "title": "Cisplatin re-challenge following recovery from carboplatin-induced, biopsy-proven acute tubular necrosis in a 57-year-old patient with squamous-transformed non-small cell lung cancer: a case report.",
+      "journal": "Translational lung cancer research",
+      "year": 2026,
+      "doi": "10.21037/tlcr-2026-1-0097",
+      "pmid": "42433252",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3389/ftox.2026.1838970": {
+      "title": "Shaking culture improves physiological maintenance of primary rat kidney tissue slices.",
+      "journal": "Frontiers in toxicology",
+      "year": 2026,
+      "doi": "10.3389/ftox.2026.1838970",
+      "pmid": "42428979",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1186/s12866-026-05374-0": {
+      "title": "Weissella cibaria-derived dextran alleviates cisplatin-induced kidney injury by remodeling the gut microbiota.",
+      "journal": "BMC microbiology",
+      "year": 2026,
+      "doi": "10.1186/s12866-026-05374-0",
+      "pmid": "42426594",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1111/1750-3841.71262": {
+      "title": "Protective Effects of Tuber sinoaestivum-Derived Exosome-Like Nanovesicles Against Cisplatin-Induced Acute Liver Injury and Acute Kidney Injury.",
+      "journal": "Journal of food science",
+      "year": 2026,
+      "doi": "10.1111/1750-3841.71262",
+      "pmid": "42423006",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1021/acs.chemrestox.6c00148": {
+      "title": "ACSS2 Inhibition Alleviates Cisplatin-Induced Acute Kidney Injury: Insights from Targeted Metabolomics.",
+      "journal": "Chemical research in toxicology",
+      "year": 2026,
+      "doi": "10.1021/acs.chemrestox.6c00148",
+      "pmid": "42400592",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.2131/jts.51.379": {
+      "title": "Protein homeostasis disruption in cisplatin-induced skeletal muscle atrophy: toxicological insights from experimental studies.",
+      "journal": "The Journal of toxicological sciences",
+      "year": 2026,
+      "doi": "10.2131/jts.51.379",
+      "pmid": "42386543",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.jpet.2026.104957": {
+      "title": "Improving drug delivery to mitigate cisplatin nephrotoxicity.",
+      "journal": "The Journal of pharmacology and experimental therapeutics",
+      "year": 2026,
+      "doi": "10.1016/j.jpet.2026.104957",
+      "pmid": "42385420",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1007/s00018-026-06310-1": {
+      "title": "Ablation of the renal tubular gluconeogenic enzyme PCK1 drives AKI-to-CKD transition by negatively regulating the TGF-β/Smad3 signaling pathway.",
+      "journal": "Cellular and molecular life sciences : CMLS",
+      "year": 2026,
+      "doi": "10.1007/s00018-026-06310-1",
+      "pmid": "42380498",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.5455/OVJ.2026.v16.i2.29": {
+      "title": "Determination of the optimal cisplatin dose to induce anemia in streptozotocin-nicotinamide-induced type 2 diabetic rats: A preliminary study.",
+      "journal": "Open veterinary journal",
+      "year": 2026,
+      "doi": "10.5455/OVJ.2026.v16.i2.29",
+      "pmid": "42376386",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3389/fphar.2026.1876105": {
+      "title": "Correction: Licochalcone A mitigates cisplatin-induced nephrotoxicity by inhibiting ferroptosis and mitochondrial dysfunction via the Nrf2/GPX4 axis.",
+      "journal": "Frontiers in pharmacology",
+      "year": 2026,
+      "doi": "10.3389/fphar.2026.1876105",
+      "pmid": "42367292",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1021/cbmi.5c00174": {
+      "title": "Concurrent Evaluation of Liver and Kidney Function by NIR-II ",
+      "journal": "Chemical & biomedical imaging",
+      "year": 2026,
+      "doi": "10.1021/cbmi.5c00174",
+      "pmid": "42358784",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3390/ijms27125302": {
+      "title": "Cisplatin-Induced Nephrotoxicity Attenuation by ",
+      "journal": "International journal of molecular sciences",
+      "year": 2026,
+      "doi": "10.3390/ijms27125302",
+      "pmid": "42353025",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1002/cmdc.70351": {
+      "title": "Bacterial Ghosts as Innovative Transport Vehicles for Platinum-Based Anticancer Drugs.",
+      "journal": "ChemMedChem",
+      "year": 2026,
+      "doi": "10.1002/cmdc.70351",
+      "pmid": "42350154",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1016/j.ejps.2026.107592": {
+      "title": "Mirtazapine identified as a preventive agent against cisplatin-induced nephrotoxicity: Integrating in silico, in vitro, and in vivo analyses.",
+      "journal": "European journal of pharmaceutical sciences : official journal of the European Federation for Pharmaceutical Sciences",
+      "year": 2026,
+      "doi": "10.1016/j.ejps.2026.107592",
+      "pmid": "42342050",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1186/s40643-026-01029-0": {
+      "title": "Carob pod aqueous extract potentiates cisplatin efficacy and reduces toxicity in experimental hepatocellular carcinoma via mitochondrial and inflammatory pathway modulation.",
+      "journal": "Bioresources and bioprocessing",
+      "year": 2026,
+      "doi": "10.1186/s40643-026-01029-0",
+      "pmid": "42329491",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1093/jpp/rgag066": {
+      "title": "Mechanistic evidence for PI3K/Akt-driven reactivation of Nrf2/HO-1 by dapagliflozin in acute cisplatin hepatotoxicity.",
+      "journal": "The Journal of pharmacy and pharmacology",
+      "year": 2026,
+      "doi": "10.1093/jpp/rgag066",
+      "pmid": "42323899",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3892/etm.2026.13199": {
+      "title": "Integrated network pharmacology and serum metabolomics to reveal the protective mechanism of methanolic extract of BaiYangJie on cisplatin-induced acute kidney injury in mice.",
+      "journal": "Experimental and therapeutic medicine",
+      "year": 2026,
+      "doi": "10.3892/etm.2026.13199",
+      "pmid": "42305710",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1007/s13205-026-04881-1": {
+      "title": "Exploring the protective potential of berberine against cardiotoxicity and hepatorenal toxicity in rats.",
+      "journal": "3 Biotech",
+      "year": 2026,
+      "doi": "10.1007/s13205-026-04881-1",
+      "pmid": "42299336",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.3389/fmicb.2026.1854645": {
+      "title": "Function of molecular-weight-optimized Astragalus polysaccharides in cisplatin-caused acute kidney injury: mechanisms centered on gut microbiota regulation and precise treatment approaches.",
+      "journal": "Frontiers in microbiology",
+      "year": 2026,
+      "doi": "10.3389/fmicb.2026.1854645",
+      "pmid": "42293527",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1111/cas.70446": {
+      "title": "Prospective Trial on Tolerability and Efficacy of Adjuvant Nedaplatin Plus Docetaxel for Non-Small Cell Lung Cancer.",
+      "journal": "Cancer science",
+      "year": 2026,
+      "doi": "10.1111/cas.70446",
+      "pmid": "42285905",
+      "license": "cc_by_nc",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.1080/14786419.2026.2682375": {
+      "title": "",
+      "journal": "Natural product research",
+      "year": 2026,
+      "doi": "10.1080/14786419.2026.2682375",
+      "pmid": "42281409",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.cbi.2026.112202": {
+      "title": "Cisplatin-induced renal injury: ROS-mediated oxidative stress - mechanism and antioxidant intervention strategies.",
+      "journal": "Chemico-biological interactions",
+      "year": 2026,
+      "doi": "10.1016/j.cbi.2026.112202",
+      "pmid": "42276319",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1007/s10388-026-01227-x": {
+      "title": "FOLFOX plus nivolumab combination therapy for cisplatin-unfit patients with untreated advanced esophageal squamous cell carcinoma.",
+      "journal": "Esophagus : official journal of the Japan Esophageal Society",
+      "year": 2026,
+      "doi": "10.1007/s10388-026-01227-x",
+      "pmid": "42265434",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1016/j.jpet.2026.104933": {
+      "title": "Linagliptin and/or α-pinene attenuate cisplatin nephrotoxicity in rats via modulating phosphatase and tensin homolog-induced kinase 1/Parkin/microtubule-associated proteins 1A/1B light chain 3II/SQSTM1/sequestosome-1-assisted mitophagy.",
+      "journal": "The Journal of pharmacology and experimental therapeutics",
+      "year": 2026,
+      "doi": "10.1016/j.jpet.2026.104933",
+      "pmid": "42258992",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1038/s41598-026-55689-1": {
+      "title": "Fluvoxamine and lycopene alleviate cisplatin-induced kidney fibrosis by modulating miR-21 and fibrotic signaling pathways.",
+      "journal": "Scientific reports",
+      "year": 2026,
+      "doi": "10.1038/s41598-026-55689-1",
+      "pmid": "42243346",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.1016/j.crtox.2026.100300": {
+      "title": "Loss of KLF15 expression characterizes proximal tubule injury in cisplatin-induced acute kidney injury: A multi-omics study.",
+      "journal": "Current research in toxicology",
+      "year": 2026,
+      "doi": "10.1016/j.crtox.2026.100300",
+      "pmid": "42238184",
+      "license": "cc_by_nc_nd",
+      "license_tier": "non_commercial",
+      "extraction_allowed": true
+    },
+    "10.3389/fphar.2026.1777367": {
+      "title": "Formononetin alleviated cisplatin-induced acute kidney injury by orchestrating renal tubular cell ferroptosis via PI3K/AKT/NRF2 pathway.",
+      "journal": "Frontiers in pharmacology",
+      "year": 2026,
+      "doi": "10.3389/fphar.2026.1777367",
+      "pmid": "42232189",
+      "license": "cc_by",
+      "license_tier": "open",
+      "extraction_allowed": true
+    },
+    "10.2174/0115665240425625251221125404": {
+      "title": "Sappanone A Ameliorates Cisplatin-induced Cytotoxicity Via Nrf2/HO-1 Signaling in HK-2 Cells.",
+      "journal": "Current molecular medicine",
+      "year": 2026,
+      "doi": "10.2174/0115665240425625251221125404",
+      "pmid": "42227549",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    },
+    "10.1152/ajprenal.00304.2025": {
+      "title": "Urine-derived stem cell extracellular vesicles promote recovery from acute kidney injury in mice and human kidney organoids.",
+      "journal": "American journal of physiology. Renal physiology",
+      "year": 2026,
+      "doi": "10.1152/ajprenal.00304.2025",
+      "pmid": "42222936",
+      "license": null,
+      "license_tier": "unknown",
+      "extraction_allowed": false
+    }
+  },
+  "findings": []
+}

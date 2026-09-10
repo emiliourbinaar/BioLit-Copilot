@@ -1,6 +1,11 @@
 import pytest
 
-from biolit_evals.fixture_pin import _normalise, source_pin
+from biolit_evals.fixture_pin import (
+    PINNED_SUBTREES,
+    _normalise,
+    _normalise_subtrees,
+    source_pin,
+)
 
 
 def test_the_pin_ignores_comments_and_docstrings_but_not_statements():
@@ -68,3 +73,54 @@ def test_docstrings_are_stripped_inside_classes_and_functions_too_not_only_at_mo
 
     assert _normalise(source) == _normalise(reworded)
     assert _normalise(source) != _normalise(behavioural)
+
+
+def test_a_pinned_subtree_fires_on_its_own_behaviour_and_nowhere_else():
+    """DEF-0008's lesson, applied to the pin. `clients/pubmed.py` was left unpinned because
+    most of it is transport that changes for reasons unrelated to what a fixture shows -- and
+    the parser inside it then silently read a cited paper's identifiers as each paper's own.
+    The written upgrade path was to hash the parsing functions' AST subtrees alone.
+
+    So: a behaviour change inside a named function or constant must change the digest; the
+    same change in an UNNAMED sibling must not; prose must not; and a name that no longer
+    exists must raise rather than quietly pin less than it claims to.
+    """
+    source = (
+        'IDS = "PubmedData/ArticleIdList/ArticleId"\n'
+        "def transport():\n    return 'retry'\n"
+        "class Client:\n"
+        '    def _parse(self, x):\n        """Doc."""\n        return x.find(IDS)\n'
+    )
+    names = ("IDS", "Client._parse")
+
+    base = _normalise_subtrees(source, names)
+    assert base == _normalise_subtrees(source.replace('"""Doc."""', '"""Other."""'), names)
+    assert base == _normalise_subtrees(source.replace("'retry'", "'backoff'"), names)
+    assert base != _normalise_subtrees(source.replace("x.find", "x.findall"), names)
+    assert base != _normalise_subtrees(source.replace("PubmedData/", ".//"), names)
+    with pytest.raises(RuntimeError, match="Client._gone"):
+        _normalise_subtrees(source, ("Client._gone",))
+
+
+def test_source_pin_covers_the_pubmed_parsing_subtrees_and_refuses_one_that_vanished(monkeypatch):
+    """The subtrees must be IN the pin, not merely hashable. Pointing `PINNED_SUBTREES` at a
+    name that does not exist must make `source_pin` refuse, which it can only do if it reads
+    the list; and the real list must name the functions that decide a paper's DOI, licence
+    lookup id and quoted abstract text.
+    """
+    pinned = dict(PINNED_SUBTREES)["biolit.clients.pubmed"]
+    for name in (
+        "_own_id",
+        "_pmc_id_of",
+        "PubMedClient._parse_article",
+        "PubMedClient._parse_abstract",
+    ):
+        assert name in pinned
+    assert source_pin() == source_pin()
+
+    monkeypatch.setattr(
+        "biolit_evals.fixture_pin.PINNED_SUBTREES",
+        (("biolit.clients.pubmed", ("PubMedClient._renamed_away",)),),
+    )
+    with pytest.raises(RuntimeError, match="_renamed_away"):
+        source_pin()

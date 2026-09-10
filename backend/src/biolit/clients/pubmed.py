@@ -46,11 +46,25 @@ class SearchResult:
     concept_terms: tuple[str, ...]
 
 
-def _pmc_id_of(article: ET.Element) -> str | None:
-    for article_id in article.findall(".//ArticleIdList/ArticleId"):
-        if article_id.get("IdType") == "pmc":
-            return normalize_pmcid(article_id.text)
+#: ⛔ DEF-0008. The article's OWN id list, as a direct path -- never `.//ArticleIdList`. PubMed
+#: carries one ArticleIdList per CITED REFERENCE under `PubmedData/ReferenceList`, and a
+#: descendant search read those as the paper's own: a cited paper's DOI became this paper's
+#: (41.5% of 236 fixture papers), and a cited article's PMC id became the one this paper was
+#: LICENSED under whenever it had none of its own. A rights defect, not an identity quirk.
+_OWN_ARTICLE_IDS = "PubmedData/ArticleIdList/ArticleId"
+
+
+def _own_id(article: ET.Element, id_type: str) -> str | None:
+    """This paper's own identifier of `id_type`, or None. References are never consulted."""
+    for article_id in article.findall(_OWN_ARTICLE_IDS):
+        if article_id.get("IdType") == id_type and article_id.text:
+            return article_id.text
     return None
+
+
+def _pmc_id_of(article: ET.Element) -> str | None:
+    pmc = _own_id(article, "pmc")
+    return normalize_pmcid(pmc) if pmc else None
 
 
 class PubMedClient:
@@ -206,13 +220,8 @@ class PubMedClient:
             if el.text
         ]
 
-        doi = None
+        doi = _own_id(article, "doi")
         pmc_id = _pmc_id_of(article)
-
-        for aid in article.findall(".//ArticleIdList/ArticleId"):
-            id_type = aid.get("IdType")
-            if id_type == "doi":
-                doi = aid.text
 
         raw_licence = licences.get(pmc_id) if pmc_id else None
         token, tier = normalize_license(license_token_from_url(raw_licence))
