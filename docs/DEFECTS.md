@@ -29,7 +29,9 @@ generated data.
 - **Status:** Recorded, **not fixed**.
 - **Severity:** Silent data loss, plus a self-contradicting ledger. Unlike DEF-0001 through
   DEF-0005 this is not a wrong answer — it is a **missing** one that the accounting was supposed
-  to make impossible to miss.
+  to make impossible to miss. ⛔ **And see the addendum: the same collision has a second site
+  that is a LIVE RIGHTS RISK, not an accounting one** — refused text reaching an allowed paper's
+  record. The accounting half is fixed; that half is not.
 
 ### What was observed
 
@@ -83,7 +85,15 @@ PubMed are not rare, but no survey was run. **The last write wins**, so which pa
 determined by retrieval order rather than by any rule — that is also unexamined, and no claim is
 made that keeping the last is better or worse than keeping the first.
 
-### ⭐ ADDENDUM 2026-09-09 — a SECOND collision site, and it is a rights issue, not an accounting one
+### ⛔ ADDENDUM 2026-09-09 — a SECOND collision site: a LIVE RIGHTS RISK IN PRODUCTION, not an accounting bug
+
+⚠️ **Severity, stated plainly because the rest of this entry is about arithmetic and this is
+not.** The defect above miscounts. **This one can put a licence-refused paper's verbatim text
+inside an allowed paper's record**, which is a rights and attribution failure of the same class
+as DEF-0006 — the thing the licence gate exists to make impossible. It is unreachable in the
+evidence-viewer fixtures specifically, and that narrowness must not be read as low severity:
+`--json-out` is a shipped code path, and the gate's whole design premise is that no refused
+paper's text survives `build_record`. Here it does.
 
 Found by a fresh-context review of the accounting fix above. **`records_stage` is not the only
 place keyed on `Paper.id`.** One stage earlier, `entities_stage` does the same thing:
@@ -108,9 +118,16 @@ allowed paper's own abstract. It **is** live in `--json-out`, which serialises
 `ExtractedRecord.entities` — the same surface as **DEF-0006**, reached through this defect's
 mechanism rather than that one's.
 
-**Not fixed.** The accounting fix deliberately did not touch `entities_stage`, and fixing this
-properly means deciding what `Paper.id` should be — which is the same open question the
-last-write-wins note above declines to answer.
+**Not fixed, and deliberately not patched in passing.** The accounting fix did not touch
+`entities_stage`. Fixing this properly means deciding what `Paper.id` should be — whether a DOI
+may serve as a primary key at all when the source can emit it twice — and that is an
+architectural question deserving its own design pass, not a rushed edit inside a frontend
+branch. **The risk is recorded here at its real severity so that decision is made deliberately
+rather than by default.**
+
+**What would close it, for whoever picks it up:** either a key that cannot collide (PMID-first,
+or a composite), or entity storage that is not keyed on `Paper.id` at all. Both are behaviour
+changes to the pipeline's identity model and both need their own measurement of what breaks.
 
 ### A downstream mislabel, recorded while it is nameable
 

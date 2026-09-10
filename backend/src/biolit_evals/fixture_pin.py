@@ -11,13 +11,22 @@ fire on every prose edit, and a check that cries wolf gets suppressed. Normalisi
 pin fire on behaviour and stay quiet on prose -- which is the correct trade, because a
 comment-only edit genuinely does not invalidate a fixture.
 
-⚠️ WHAT THIS DOES NOT COVER, listed rather than left unstated. `clients/pubmed.py::_parse_article`
-assigns license, license_tier, doi and title, and is deliberately absent: that module is
-dominated by transport that changes for reasons unrelated to what a fixture claims. Also
-uncovered: the MeSH artifacts, the NER checkpoint, and NCBI's query translation. All four are
-recorded only by `generated_at`, and what catches them is regeneration. If the first ever
-bites, the upgrade is to hash that function's AST subtree alone -- a small extension here, not
-a redesign.
+⚠️ WHAT THIS DOES NOT COVER, listed rather than left unstated.
+
+1. `clients/pubmed.py::_parse_article` assigns license, license_tier, doi and title, and is
+   deliberately absent: that module is 263 lines dominated by transport that changes for
+   reasons unrelated to what a fixture claims, so pinning it would fire constantly and a check
+   that cries wolf gets suppressed. If it ever bites, hash that function's AST subtree alone.
+2. `biolit_evals/fixture_export.py` itself. `project_run` determines displayed values -- the
+   inf->None mapping, the concept-name lookup, rank numbering -- so by the rule above it
+   qualifies. It is unpinned because pinning the module wholesale would also pin `main()`'s
+   network plumbing; the recommended upgrade is to hash the `project_run` subtree alone, the
+   same technique as (1). ⚠️ RECORDED AS AN OPEN GAP, not as a decision that it does not apply.
+3. The MeSH ARTIFACTS (`mesh_tree.json.gz`, `mesh_actions.json.gz`, the alias dictionary) --
+   data, not code. The traversal code is now pinned; the data it reads is not.
+4. The NER checkpoint, and NCBI's query translation.
+
+All of these are recorded only by `generated_at`; what catches them is regeneration.
 """
 
 import ast
@@ -33,6 +42,16 @@ PINNED_MODULES: tuple[str, ...] = (
     "biolit.synth.template",  # renders the answer string, verbatim
     "biolit.domain.licensing",  # the tier table -> gate counts AND the tier shown
     "biolit.clients.pmc",  # parses the permissions block into the licence token
+    # ⭐ ADDED 2026-09-09 — the pin catching up to its own rule, not new scope. The rule above
+    # is self-verifying: "every module whose behaviour determines a value the fixture displays".
+    # These five satisfy it and were simply missed when the list was first written. Treating the
+    # list as fixed, rather than re-deriving it from the rule, is the exact failure the rule
+    # exists to prevent.
+    "biolit.extract.deterministic",  # chooses the sentences quoted verbatim in `answer`
+    "biolit.extract.base",  # IS the licence gate: sets licence_gate's n_out, cuts the quotes
+    "biolit.cluster.group",  # decides which clusters exist and their keys
+    "biolit.canon.mesh_tree",  # `distance` produces the displayed `proximity`
+    "biolit.canon.mesh_actions",  # `classes_of` produces the displayed `matched`
 )
 
 
