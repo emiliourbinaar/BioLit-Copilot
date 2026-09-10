@@ -10,7 +10,7 @@ from biolit.domain.records import Cluster
 from biolit.query.concepts import QueryConcepts
 from biolit.state.pipeline import PipelineState, StageReport, StageStatus
 from biolit_evals.fixture_export import project_run
-from biolit_evals.fixture_models import FixtureRun
+from biolit_evals.fixture_models import FixtureFinding, FixtureRun
 
 SENTINEL = "ZZQX-refused-abstract-sentinel-ZZQX"
 
@@ -200,6 +200,34 @@ def test_project_run_refuses_a_stage_whose_ledger_does_not_balance():
             labels={},
             findings=[],
             generated_at="2026-09-08T00:00:00+00:00",
+        )
+
+
+def test_project_run_refuses_a_finding_whose_anchor_this_run_does_not_contain():
+    """A defect pinned to a run is a claim about that run. The first proposal for these
+    callouts anchored an acronym defect on `Cleft Palate` clusters taken from a census of a
+    different, older corpus -- a fixture that contains no such cluster would have published it
+    anyway. Refused at generation, like a ledger that does not balance, rather than left for a
+    reader to notice.
+    """
+    finding = FixtureFinding(
+        defect_id="DEF-0001",
+        anchor="cluster:MESH:D002945|MESH:D002971",
+        headline="h",
+        reason="r",
+    )
+
+    with pytest.raises(RuntimeError, match="DEF-0001"):
+        project_run(
+            PipelineState(question="q"),
+            slug="s",
+            concepts=_no_concepts(),
+            tree=MeshTree({}),
+            actions=PharmacologicalActions({}),
+            names={},
+            labels={},
+            findings=[finding],
+            generated_at="2026-09-10T00:00:00+00:00",
         )
 
 

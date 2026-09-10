@@ -3,6 +3,7 @@ import pathlib
 import pytest
 
 from biolit_evals.fixture_export import FEATURED
+from biolit_evals.fixture_findings import FINDINGS, anchor_resolves
 from biolit_evals.fixture_models import SCHEMA_VERSION, FixtureRun
 from biolit_evals.fixture_pin import source_pin
 
@@ -14,8 +15,8 @@ def test_every_committed_fixture_matches_the_current_pin(slug: str):
     """⭐ THIS IS THE CHECK THAT MAKES A STALE CLAIM HARD TO SHIP.
 
     A fixture saying "17 kept" after the ranker changed is a false claim on a public page. The
-    pin covers the seven modules whose behaviour determines a displayed value, so a change to
-    any of them turns this red until the fixtures are regenerated.
+    pin covers every module whose behaviour determines a displayed value, so a change to any
+    of them turns this red until the fixtures are regenerated.
 
     ⚠️ That is the intended cost, stated so nobody is surprised by it: a behaviour change and a
     fixture refresh are one unit of work, and the refresh needs live NCBI. The TEST stays
@@ -71,4 +72,23 @@ def test_every_committed_fixture_balances_and_can_attribute_everything_it_cites(
         assert stage.n_in - dropped == stage.n_out, (
             f"{slug}: stage {stage.name!r} ledger does not balance: "
             f"{stage.n_in} - {dropped} = {stage.n_in - dropped}, but n_out={stage.n_out}"
+        )
+
+
+@pytest.mark.parametrize("slug", sorted(FEATURED))
+def test_every_committed_fixture_publishes_exactly_its_mapped_findings_and_each_resolves(
+    slug: str,
+):
+    """The callouts a run page shows come from `FINDINGS`, and only from there.
+
+    Equality catches a hand-edited `findings` array, which the pin cannot: a hand edit changes
+    the file, not a pinned module. Resolution re-checks against the ARTIFACT what `project_run`
+    checked in memory -- the same reason the ledger is re-checked above.
+    """
+    run = FixtureRun.model_validate_json((FIXTURES / f"{slug}.json").read_text(encoding="utf-8"))
+
+    assert tuple(run.findings) == FINDINGS.get(slug, ()), f"{slug}: findings differ from FINDINGS"
+    for finding in run.findings:
+        assert anchor_resolves(run, finding.anchor), (
+            f"{slug}: {finding.defect_id} anchored on {finding.anchor!r}, absent from the fixture"
         )

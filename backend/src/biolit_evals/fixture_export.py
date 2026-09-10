@@ -21,6 +21,7 @@ from biolit.domain.paper import Paper
 from biolit.query.concepts import QueryConcepts
 from biolit.query.ranking import relevance_score
 from biolit.state.pipeline import PipelineState
+from biolit_evals.fixture_findings import FINDINGS, anchor_resolves
 from biolit_evals.fixture_models import (
     SCHEMA_VERSION,
     FixtureCluster,
@@ -114,7 +115,24 @@ def project_run(
     _assert_ledger_balances(run, slug=slug)
     _assert_no_papers_collapsed(run, state, slug=slug)
     _assert_no_leaked_text(run, state.candidate_papers, slug=slug)
+    _assert_findings_resolve(run, slug=slug)
     return run
+
+
+def _assert_findings_resolve(run: FixtureRun, *, slug: str) -> None:
+    """A finding pinned to a run must point at something the run actually contains.
+
+    Live NCBI returns a different paper set on a different day, so a finding that resolved on
+    one retrieval can stop resolving on the next. That is the correct moment to fail: the claim
+    has become false for this run, and a human decides whether to drop it from `FINDINGS`.
+    """
+    for finding in run.findings:
+        if not anchor_resolves(run, finding.anchor):
+            raise RuntimeError(
+                f"{slug}: {finding.defect_id} is anchored on {finding.anchor!r}, which this "
+                "run does not contain. Refusing to publish a defect the run does not exhibit; "
+                "if this retrieval no longer shows it, remove it from FINDINGS."
+            )
 
 
 def _assert_no_leaked_text(run: FixtureRun, papers: Sequence[Paper], *, slug: str) -> None:
@@ -355,7 +373,7 @@ def main(argv: list[str] | None = None) -> None:
             actions=actions,
             names=names,
             labels=labels.get(query, {}),
-            findings=[],
+            findings=FINDINGS.get(slug, ()),
             generated_at=datetime.now(UTC).isoformat(),
         )
         blob = run.model_dump_json(indent=2)

@@ -52,6 +52,9 @@ PINNED_MODULES: tuple[str, ...] = (
     "biolit.cluster.group",  # decides which clusters exist and their keys
     "biolit.canon.mesh_tree",  # `distance` produces the displayed `proximity`
     "biolit.canon.mesh_actions",  # `classes_of` produces the displayed `matched`
+    # ADDED 2026-09-10 with the module itself: `FINDINGS` IS the callout copy a run page shows,
+    # and `anchor_resolves` decides which callouts are allowed to ship.
+    "biolit_evals.fixture_findings",
 )
 
 

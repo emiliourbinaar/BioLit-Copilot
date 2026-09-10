@@ -26,7 +26,11 @@ generated data.
 - **Date:** 2026-09-09
 - **Component:** `biolit.pipeline.stages.records_stage` — the collapse; `biolit.clients.pubmed`
   supplies the colliding id
-- **Status:** Recorded, **not fixed**.
+- **Status:** **Accounting half FIXED 2026-09-09; rights half (the addendum below) NOT fixed.**
+  When two retrieved papers share a DOI the second still overwrites the first, but
+  `records_stage` now counts the collapse in `dropped` as `duplicate_paper_id`, so the ledger
+  balances and the lost paper is visible rather than silent. ⚠️ Corrected 2026-09-10: this line read "Recorded, **not fixed**" after the accounting fix
+  had landed, contradicting the severity line below it.
 - **Severity:** Silent data loss, plus a self-contradicting ledger. Unlike DEF-0001 through
   DEF-0005 this is not a wrong answer — it is a **missing** one that the accounting was supposed
   to make impossible to miss. ⛔ **And see the addendum: the same collision has a second site

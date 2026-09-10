@@ -33,7 +33,7 @@ stages   : [{ name, status, n_in, n_out, unit_in, unit_out, dropped{}, noted{}, 
 clusters : [{ key, concept_names[], paper_ids[], rank, matched, proximity, label }]
 answer   : str   (~23 KB on the largest run)
 papers   : { paper_id: { title, journal, year, doi, pmid, license, license_tier, extraction_allowed } }
-findings : []    ← EMPTY in all four fixtures; see §6
+findings : [{ defect_id, anchor, headline, reason }]   ← ONE entry, on statins; see §6
 ```
 
 **Real values that shape the UI:**
@@ -124,16 +124,28 @@ These exist because the site publishes claims about a project whose entire chara
 4. **Attribution wherever answer text appears.** Every licence tier the gate allows is Creative Commons and every one requires it, while synthesis's own note says citation assembly is not built.
 5. **`generated_at` is shown on every run page**, with a note that counts drift between retrievals (ADR-0023).
 
-## §6 — `findings` is empty, and that is a decision to make
+## §6 — `findings`: SETTLED 2026-09-10 as (a), wired in the generator
 
-All four fixtures carry `findings: []`. The Python generator passes it unconditionally; the spec mandates the field and forbids hand-editing fixtures, so **there is currently no data source for `FindingCallout`.**
+**Decision:** callouts come from `biolit_evals/fixture_findings.py::FINDINGS`, projected into the fixture, never from TypeScript. Every other field is held to a provenance standard; which defect applies to which run is that kind of judgment, and it belongs where it can be tested and pinned.
 
-Two options, to settle before building that component:
+**The guards, all Python-side:**
+- `headline` must equal the DEFECTS.md heading title; `reason` must appear verbatim in that entry (copy, never paraphrase).
+- `anchor` must **resolve against the run it is pinned to** — `project_run` refuses to write the fixture otherwise, and a committed-fixture test re-checks the artifact. `fixture_findings` is in `PINNED_MODULES`.
 
-- **(a) Wire it in the generator** — a committed map of slug → defect anchors, projected into the fixture. Keeps fixtures self-contained; requires a Python change and regeneration.
-- **(b) Source callouts in the frontend** — a TS module mapping slug → defect id/headline, rendered beside the run. No Python change, but the fixture's `findings` field stays dead and should then be removed from the schema rather than left as a permanent empty.
+**Anchor grammar** — the frontend parses this, nothing else:
 
-⚠️ Do not build `FindingCallout` against `fixture.findings` until this is decided; it would render nothing on every page.
+```
+stage:<stage name>/dropped/<drop reason>    →  highlight that drop in StageLedger
+cluster:<cluster key>                       →  highlight that cluster in ClusterList
+```
+
+**⚠️ Only ONE finding exists, and that is the measured result, not an omission.** The first proposal pinned acronym defects (DEF-0001/DEF-0004) to cisplatin and statins; the census behind them was measured on the 2026-09-06 frozen corpus, and none of its mis-linked concepts appears in any of these fixtures. DEF-0002 was then considered for the `Atorvastatin | …` and `Isotretinoin | Mental Disorders` clusters and also rejected: its headline is a *linker* defect those clusters do not show. What survives is `statins → DEF-0007`, anchored on `licence_gate`'s `duplicate_paper_id: 1`.
+
+**Consequences for the site:**
+- `FindingCallout` renders `fixture.findings` and highlights its anchor. Three run pages have none, and the page should say so plainly ("no measured defect is visible in this run's data") rather than render an empty box.
+- **The acronym census is a PROJECT-level finding** and lives on `/findings`, citing DEF-0001/DEF-0004 and the frozen corpus it was measured on — never pinned to a run.
+- Design decisions that ARE visible in runs (ADR-0022's recovered `Atorvastatin | …` clusters, ADR-0020's demotion of `Isotretinoin | Acne Vulgaris`) are not defects and do not go in `findings`. If the site shows them, it does so as ADR links on `/findings`, not as run callouts.
+- ⚠️ **`cisplatin-nephrotoxicity` has no callout.** Its case in the spec was the acronym story, which cannot be anchored here. It stays featured as the plain, uneventful run — three clusters, a large licence refusal — and whether that earns its place is an open question for the owner, not a build blocker.
 
 ## §7 — Build and verification
 
@@ -153,5 +165,5 @@ npm run preview    # local check
 - Any live pipeline execution, query box, or server.
 - Changing `synth/template.py` to make the answer prettier (§2) — a separate, pinned decision.
 - Fixing DEF-0007's addendum (the `entities_stage` collision). Architectural, needs its own pass.
-- Adding modules to `PINNED_MODULES`, or wiring `findings` before §6 is settled.
+- Adding modules to `PINNED_MODULES`, or adding entries to `FINDINGS` from the frontend side. A new callout is a Python change with an anchor that resolves, followed by regeneration.
 - Deployment/hosting. The output is a static `dist/`; where it goes is a later call.
