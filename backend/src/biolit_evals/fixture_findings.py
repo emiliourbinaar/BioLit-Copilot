@@ -16,7 +16,7 @@ of anything:
 
 from biolit_evals.fixture_models import FixtureFinding, FixtureRun
 
-#: ⭐ ONE ENTRY, ON PURPOSE. Measured 2026-09-10 against the four committed fixtures:
+#: ⭐ NO ENTRIES, ON PURPOSE. Measured 2026-09-10 against the four fixtures:
 #:
 #: - DEF-0001 / DEF-0004 (acronyms): the census behind them was measured on the 2026-09-06
 #:   frozen corpus. None of its mis-linked concepts (`Cleft Palate`, `Rheumatoid Arthritis`)
@@ -28,26 +28,17 @@ from biolit_evals.fixture_models import FixtureFinding, FixtureRun
 #:   "mental disorders" without the text this schema refuses to carry.
 #: - DEF-0003, DEF-0005, DEF-0006: fixed, invisible without text, or about a different path.
 #:
-#: What remains is the one defect the data itself shows. Add an entry only with an anchor this
+#: - DEF-0007: ⛔ REMOVED 2026-09-10. This map briefly held one entry -- statins -> DEF-0007,
+#:   anchored on `licence_gate`'s `duplicate_paper_id: 1`, quoting "When two retrieved papers
+#:   share a DOI...". They did not share one: the client had read both papers' DOI from their
+#:   reference lists (DEF-0008), so the collapse the anchor pointed at was an artifact of a
+#:   second defect, and the quoted sentence was false. The provenance test caught the drift the
+#:   moment DEF-0007 was corrected. With DEF-0008 fixed the collapse is not expected to recur on
+#:   that retrieval at all, and the anchor would no longer resolve.
+#:
+#: EMPTY is therefore the measured result, not an omission. Add an entry only with an anchor this
 #: data can resolve; `project_run` will refuse the fixture otherwise.
-FINDINGS: dict[str, tuple[FixtureFinding, ...]] = {
-    "statins-rhabdomyolysis": (
-        FixtureFinding(
-            defect_id="DEF-0007",
-            anchor="stage:licence_gate/dropped/duplicate_paper_id",
-            headline=(
-                "Two papers sharing a DOI silently become one record, and no stage says so: "
-                "the ledger stops balancing and a paper disappears"
-            ),
-            reason=(
-                "When two retrieved papers share a DOI the second still overwrites the first, "
-                "but `records_stage` now counts the collapse in `dropped` as "
-                "`duplicate_paper_id`, so the ledger balances and the lost paper is visible "
-                "rather than silent."
-            ),
-        ),
-    ),
-}
+FINDINGS: dict[str, tuple[FixtureFinding, ...]] = {}
 
 
 def anchor_resolves(run: FixtureRun, anchor: str) -> bool:

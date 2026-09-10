@@ -17,20 +17,103 @@ linking succeeds. **DEF-0006 is the first that is not about the system being wro
 is about the system disclosing something it had correctly declined to use. **DEF-0007 is
 the first found by a GUARD rather than by reading** — six code reviews passed over the code
 without seeing it, because it is invisible in any single module and only shows up in
-generated data.
+generated data. **DEF-0008 is the first in the retrieval client, and the first found by
+rendering data for a human to read** — an attribution list printed DOIs from the wrong journals
+and the wrong decades. It is also DEF-0007's actual cause.
 
 ---
 
-## DEF-0007 — Two papers sharing a DOI silently become one record, and no stage says so: the ledger stops balancing and a paper disappears
+## DEF-0008 — The PubMed client reads a paper's DOI and PMC id from its reference list: a cited paper's identifiers become the citing paper's own, including the one that decides its licence
+
+- **Date:** 2026-09-10
+- **Component:** `biolit.clients.pubmed` — `_parse_article` (the DOI) and `_pmc_id_of` (the PMC
+  id, and through it the licence)
+- **Status:** Recorded, **not fixed**.
+- **Severity:** ⛔ **RIGHTS.** Papers were licensed on **another article's** Creative Commons
+  licence and their abstracts quoted verbatim. That is the exact failure the licence gate exists
+  to prevent, reached upstream of the gate, where no downstream check could see it. It also
+  corrupts attribution (the DOI a reader would cite) and paper identity (`Paper.id`).
+
+### What was observed
+
+Both lookups search the WHOLE `PubmedArticle` element:
+
+```python
+for aid in article.findall(".//ArticleIdList/ArticleId"):   # pubmed.py:212
+    if aid.get("IdType") == "doi":
+        doi = aid.text                                      # last match wins
+```
+
+`.//` descends into every `ArticleIdList` under the article, and PubMed's XML carries one per
+**cited reference** (`PubmedData/ReferenceList/Reference/ArticleIdList`) after the article's own
+(`PubmedData/ArticleIdList`). So:
+
+- **DOI — last match wins.** Any paper whose reference list contains a DOI gets the DOI of the
+  **last cited reference that has one**, not its own.
+- **PMC id — first match wins** (`_pmc_id_of`, `pubmed.py:50`). Correct when the paper has a PMC
+  record, because its own id list comes first. When it has **none**, the first cited reference
+  with a PMC id supplies one — and that id is what `_fetch_licences` looks up, so the paper is
+  licensed on the **cited article's** licence.
+
+**Measured 2026-09-10 on the 236 papers of the four evidence-viewer fixtures**, each compared
+with its own `PubmedData/ArticleIdList` fetched from PubMed:
+
+| | |
+|---|---|
+| DOI is a **cited paper's**, not the paper's own | **98 of 236 (41.5%)** — every one of the 98 had a DOI of its own |
+| no PMC record of its own, given a **cited article's** PMC id | **11** |
+| of those 11, **allowed** through the licence gate on the borrowed licence | **10** |
+| of those 10, **quoted verbatim** in a committed fixture's answer | **5** |
+
+### Why it matters
+
+- **Rights.** Five abstracts were quoted under a licence that belongs to a different article.
+  The fixtures carrying them had been pushed to the `feat/evidence-viewer-python` branch; that
+  branch's history was rewritten on 2026-09-10 to remove every fixture version, and `master`
+  never carried them. The orphaned commits stay reachable by direct SHA on GitHub until GitHub
+  garbage-collects them, which is outside this repository's control.
+- **Attribution.** Where a quote was legitimately licensed, the DOI shown for it was a cited
+  paper's 41.5% of the time — the attribution the licence requires pointed at the wrong work.
+- **Identity.** `Paper.id` is `doi or pmid`, so two papers whose reference lists end with the
+  same DOI get the same id and collapse into one. **That is DEF-0007's observed collision**:
+  PMIDs 42694066 and 42440952 (own DOIs `10.3389/fphar.2026.1895524` and
+  `10.3389/fphar.2026.1852621`) both end their reference lists with `10.3389/fphar.2024.1445324`.
+- `full_text_pointer` is built from the same PMC id, so it can point at the wrong article.
+
+### Why nothing caught it, which is the transferable part
+
+**Every test input was trimmed below the shape that triggers it.** None of the five PubMed
+cassettes under `tests/cassettes/` contains a `<ReferenceList>`, so `.//` and a direct child
+path return the same answer on all of them — the tests pass either way and pin nothing about
+which `ArticleIdList` is read. The fixture pin also excluded this module on purpose
+(`fixture_pin.py`, gap 1), with the upgrade path written down: *"If it ever bites, hash that
+function's AST subtree alone."* It has now bitten.
+
+### What is NOT claimed, yet
+
+The 236-paper figure is from the four fixtures only. **How many papers in every other corpus
+this client has touched carry a borrowed DOI or licence — and whether any published number
+rests on one — is unmeasured at the time of filing**, and is the next piece of work. No
+published number is changed by this entry.
+
+---
+
+## DEF-0007 — Two retrieved papers given the same `Paper.id` silently become one record, and no stage says so: the ledger stops balancing and a paper disappears
 
 - **Date:** 2026-09-09
 - **Component:** `biolit.pipeline.stages.records_stage` — the collapse; `biolit.clients.pubmed`
-  supplies the colliding id
+  supplies the colliding id, **by reading it from the papers' reference lists (DEF-0008)**
 - **Status:** **Accounting half FIXED 2026-09-09; rights half (the addendum below) NOT fixed.**
-  When two retrieved papers share a DOI the second still overwrites the first, but
+  When two retrieved papers are given the same id the second still overwrites the first, but
   `records_stage` now counts the collapse in `dropped` as `duplicate_paper_id`, so the ledger
-  balances and the lost paper is visible rather than silent. ⚠️ Corrected 2026-09-10: this line read "Recorded, **not fixed**" after the accounting fix
-  had landed, contradicting the severity line below it.
+  balances and the lost paper is visible rather than silent. ⚠️ Corrected 2026-09-10: this
+  line read "Recorded, **not fixed**" after the accounting fix had landed, contradicting the
+  severity line below it.
+- ⛔ **Cause CORRECTED 2026-09-10.** This entry originally said the two papers **shared a DOI**.
+  They did not. The collision was manufactured by **DEF-0008**: both papers' reference lists end
+  with the same DOI, and the client read that as each paper's own. The ledger arithmetic below
+  was real and the accounting fix stands; the explanation of where the shared id came from was
+  wrong, and is kept below, struck through by this note, rather than silently rewritten.
 - **Severity:** Silent data loss, plus a self-contradicting ledger. Unlike DEF-0001 through
   DEF-0005 this is not a wrong answer — it is a **missing** one that the accounting was supposed
   to make impossible to miss. ⛔ **And see the addendum: the same collision has a second site
@@ -45,7 +128,7 @@ generated data.
 records[paper.id] = record          # stages.py:119
 ```
 
-When two retrieved papers carry the same DOI, the second overwrites the first. The
+When two retrieved papers are given the same id, the second overwrites the first. The
 `licence_gate` report is then built from that collapsed dict:
 
 ```python
@@ -69,6 +152,14 @@ apart:**
 the ledger is checkable: `n_in - sum(dropped) == n_out`."* On this run it is 58 − 17 = 41 ≠ 40.
 The invariant the ledger advertises is false, and nothing in the pipeline noticed.
 
+⛔ **Where the shared id came from — CORRECTED 2026-09-10 (DEF-0008).** The two papers were
+PMIDs 42694066 and 42440952, both in *Frontiers in pharmacology*, with distinct DOIs of their
+own (`10.3389/fphar.2026.1895524`, `10.3389/fphar.2026.1852621`). Each ends its reference list
+with `10.3389/fphar.2024.1445324`, and the client read that cited DOI as each paper's own. Keyed
+on the papers' own DOIs, the same retrieval has **no** collision. "Reproduced on two independent
+retrievals a day apart" is still true, and is explained by the same two papers being retrieved
+both times.
+
 ### Why it matters beyond the arithmetic
 
 **A paper that passed the licence gate is dropped from the answer with no record of it.** Every
@@ -84,8 +175,12 @@ afterwards reproduced it on fresh data.
 
 ### What is NOT claimed
 
-The frequency is unmeasured. It was seen twice on one query out of four, and duplicate DOIs in
-PubMed are not rare, but no survey was run. **The last write wins**, so which paper survives is
+The frequency is unmeasured. It was seen twice on one query out of four. ⚠️ **An earlier
+version of this paragraph said "duplicate DOIs in PubMed are not rare". That was an assertion,
+not a measurement, and the one instance it was explaining turned out not to be a duplicate DOI
+at all (DEF-0008).** Whether PubMed ever returns two records carrying the same DOI of their own
+is unmeasured; in the 2026-09-10 audit of 236 fixture papers it happened zero times. **The last
+write wins**, so which paper survives is
 determined by retrieval order rather than by any rule — that is also unexamined, and no claim is
 made that keeping the last is better or worse than keeping the first.
 
@@ -116,6 +211,12 @@ the gate suppresses the whole record precisely because entity text leaks abstrac
 `collapsed` stays 0, the ledger balances, and nothing fires — the accounting fix above does not
 touch this path.
 
+⚠️ **Updated 2026-09-10 for DEF-0008.** While DEF-0008 stands, "sharing an id" requires only that
+two papers end their reference lists with the same DOI — far more common than a genuine
+duplicate. Once DEF-0008 is fixed, a collision needs two records carrying the same DOI of their
+own, whose frequency is unmeasured. That makes this path **latent, not closed**: the key is
+still collidable, and the fix for DEF-0008 does not change what happens when it collides.
+
 **Scope, stated precisely.** This is **not** reachable in the evidence-viewer fixtures:
 `PaperStub` and `FixtureCluster` carry no entity text, and `Finding.text` is sliced from the
 allowed paper's own abstract. It **is** live in `--json-out`, which serialises
@@ -124,7 +225,8 @@ mechanism rather than that one's.
 
 **Not fixed, and deliberately not patched in passing.** The accounting fix did not touch
 `entities_stage`. Fixing this properly means deciding what `Paper.id` should be — whether a DOI
-may serve as a primary key at all when the source can emit it twice — and that is an
+may serve as a primary key at all when the source might emit it twice, or, as DEF-0008 showed,
+when the client can misread it — and that is an
 architectural question deserving its own design pass, not a rushed edit inside a frontend
 branch. **The risk is recorded here at its real severity so that decision is made deliberately
 rather than by default.**

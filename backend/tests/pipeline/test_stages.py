@@ -478,7 +478,7 @@ def test_a_collision_alongside_a_refusal_counts_each_loss_once_and_only_once():
 
 def test_the_ledger_note_claims_a_collapse_only_when_one_happened():
     """A note is a claim about THIS run. An unconditional sentence about the DEF-0007 collapse
-    asserted on every run that two papers shared a DOI -- false on three of four generated
+    asserted on every run that two papers had collapsed -- false on three of four generated
     fixtures, and published on a public page before this was caught.
     """
     clean = Paper(
@@ -498,3 +498,27 @@ def test_the_ledger_note_claims_a_collapse_only_when_one_happened():
 
     assert "DEF-0007" not in (without.note or ""), "no collapse, no claim about one"
     assert "DEF-0007" in (with_dup.note or "")
+
+
+def test_the_collapse_note_states_what_the_stage_saw_not_a_cause_it_cannot_know():
+    """The note once said "two papers shared a DOI". The only observed case was two papers with
+    DIFFERENT DOIs that the client had read from their reference lists (DEF-0008). This stage
+    sees two papers under one `Paper.id`; why they share it is decided upstream and is not
+    something it can vouch for, so it must not narrate one.
+    """
+    paper = Paper(
+        id="10.1/a",
+        source=Source.pubmed,
+        title="One",
+        abstract="Metformin caused acidosis.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = paper.model_copy(update={"title": "Two"})
+
+    note = records_stage([paper, twin], {"10.1/a": []}).licence.note or ""
+
+    assert "Paper.id" in note
+    assert "DOI" not in note, "the stage cannot know the shared id was a genuine DOI"

@@ -33,7 +33,7 @@ stages   : [{ name, status, n_in, n_out, unit_in, unit_out, dropped{}, noted{}, 
 clusters : [{ key, concept_names[], paper_ids[], rank, matched, proximity, label }]
 answer   : str   (~23 KB on the largest run)
 papers   : { paper_id: { title, journal, year, doi, pmid, license, license_tier, extraction_allowed } }
-findings : [{ defect_id, anchor, headline, reason }]   ← ONE entry, on statins; see §6
+findings : [{ defect_id, anchor, headline, reason }]   ← EMPTY on all four since 2026-09-10; see §6
 ```
 
 **Real values that shape the UI:**
@@ -102,7 +102,7 @@ frontend/src/lib/fixture.ts           TypeScript types + typed loader
 - `n_in unit_in → n_out unit_out`, both units always printed
 - `dropped` and `noted` **visually distinct** — conflating them once made the first rendered ledger misreport three of seven stages
 - `status="not_implemented"` renders as **NOT IMPLEMENTED**
-- ⭐ show the arithmetic where units match: `58 − 17 − 1 = 40`. On statins that displays `duplicate_paper_id: 1`, which is DEF-0007 visible in the artifact rather than hidden
+- ⭐ show the arithmetic where units match, e.g. `58 − 17 − 1 = 40`. (That example came from a statins fixture whose `duplicate_paper_id: 1` was later traced to DEF-0008; the arithmetic display stands, the example's cause does not.)
 
 `DropPanel` — expandable per stage, listing each drop reason and count in the stage's own unit.
 
@@ -139,7 +139,7 @@ stage:<stage name>/dropped/<drop reason>    →  highlight that drop in StageLed
 cluster:<cluster key>                       →  highlight that cluster in ClusterList
 ```
 
-**⚠️ Only ONE finding exists, and that is the measured result, not an omission.** The first proposal pinned acronym defects (DEF-0001/DEF-0004) to cisplatin and statins; the census behind them was measured on the 2026-09-06 frozen corpus, and none of its mis-linked concepts appears in any of these fixtures. DEF-0002 was then considered for the `Atorvastatin | …` and `Isotretinoin | Mental Disorders` clusters and also rejected: its headline is a *linker* defect those clusters do not show. What survives is `statins → DEF-0007`, anchored on `licence_gate`'s `duplicate_paper_id: 1`.
+**⚠️ No finding exists, and that is the measured result, not an omission.** The first proposal pinned acronym defects (DEF-0001/DEF-0004) to cisplatin and statins; the census behind them was measured on the 2026-09-06 frozen corpus, and none of its mis-linked concepts appears in any of these fixtures. DEF-0002 was then considered for the `Atorvastatin | …` and `Isotretinoin | Mental Disorders` clusters and also rejected: its headline is a *linker* defect those clusters do not show. `statins → DEF-0007`, anchored on `licence_gate`'s `duplicate_paper_id: 1`, shipped briefly and was **withdrawn 2026-09-10**: the two collapsing papers did not share a DOI — the client had read both from their reference lists (DEF-0008), so the callout's quoted cause was false.
 
 **Consequences for the site:**
 - `FindingCallout` renders `fixture.findings` and highlights its anchor. Three run pages have none, and the page should say so plainly ("no measured defect is visible in this run's data") rather than render an empty box.

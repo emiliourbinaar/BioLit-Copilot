@@ -236,9 +236,9 @@ def test_a_duplicate_paper_id_is_tolerated_because_papers_is_a_lookup_not_a_coun
     the interesting part.
 
     It used to require `len(run.papers) == len(state.candidate_papers)` and REFUSE any run
-    containing two papers with the same DOI. That refusal was wrong: duplicate DOIs are a real
-    property of PubMed data, not a projection bug, and the check blocked generating a fixture
-    for a run that was otherwise entirely sound.
+    containing two papers under the same id. That refusal was wrong: the pipeline does produce
+    such runs, and they are not a projection bug. (This docstring once called them "a real
+    property of PubMed data"; the only observed case was a client defect, DEF-0008.)
 
     `papers` is a LOOKUP TABLE keyed by `Paper.id`. The count of record lives in the stage
     ledger, where `licence_gate` now subtracts the collapse explicitly as `duplicate_paper_id`

@@ -170,8 +170,9 @@ def _assert_no_papers_collapsed(run: FixtureRun, state: PipelineState, *, slug: 
 
     ⚠️ COMPARED AGAINST DISTINCT IDS, NOT THE RAW PAPER COUNT, and the difference matters. An
     earlier version of this check required `len(run.papers) == len(state.candidate_papers)` and
-    refused every run containing a duplicate DOI -- which is a real occurrence (DEF-0007), not
-    an error in the projection. That version was wrong about what `papers` IS.
+    refused every run containing two papers under one id -- which the pipeline does produce
+    (DEF-0007; the observed case came from DEF-0008), not an error in the projection. That
+    version was wrong about what `papers` IS.
 
     `papers` is a LOOKUP TABLE keyed by `Paper.id`, not a count. The count of record lives in
     the stage ledger, where `retrieve` reports 58 and `licence_gate` now subtracts the collapse
