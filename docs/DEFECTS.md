@@ -14,7 +14,74 @@ a defect does the most damage, because everything downstream — pairing, cluste
 synthesis — consumes `canonical_id` and has no way to second-guess it. **DEF-0005 is the first
 entry in the clustering layer**, and it is there because the loss it measures happens *after*
 linking succeeds. **DEF-0006 is the first that is not about the system being wrong at all** — it
-is about the system disclosing something it had correctly declined to use.
+is about the system disclosing something it had correctly declined to use. **DEF-0007 is
+the first found by a GUARD rather than by reading** — six code reviews passed over the code
+without seeing it, because it is invisible in any single module and only shows up in
+generated data.
+
+---
+
+## DEF-0007 — Two papers sharing a DOI silently become one record, and no stage says so: the ledger stops balancing and a paper disappears
+
+- **Date:** 2026-09-09
+- **Component:** `biolit.pipeline.stages.records_stage` — the collapse; `biolit.clients.pubmed`
+  supplies the colliding id
+- **Status:** Recorded, **not fixed**.
+- **Severity:** Silent data loss, plus a self-contradicting ledger. Unlike DEF-0001 through
+  DEF-0005 this is not a wrong answer — it is a **missing** one that the accounting was supposed
+  to make impossible to miss.
+
+### What was observed
+
+`Paper.id` is `doi or pmid`. `records_stage` accumulates into a dict keyed on it:
+
+```python
+records[paper.id] = record          # stages.py:119
+```
+
+When two retrieved papers carry the same DOI, the second overwrites the first. The
+`licence_gate` report is then built from that collapsed dict:
+
+```python
+n_in=len(papers), n_out=len(records), dropped=refused   # refusals only
+```
+
+so the paper vanishes from `n_out` without being counted anywhere in `dropped`.
+
+**Measured on `statins and rhabdomyolysis`, reproduced on two independent retrievals a day
+apart:**
+
+| | |
+|---|---|
+| retrieved | 58 |
+| licence-refused | 17 |
+| should survive | **41** |
+| records actually built | **40** |
+| stage stubs emitted | 57 for 58 retrieved |
+
+⚠️ **`StageReport`'s own docstring promises this cannot happen:** *"Where the two units match,
+the ledger is checkable: `n_in - sum(dropped) == n_out`."* On this run it is 58 − 17 = 41 ≠ 40.
+The invariant the ledger advertises is false, and nothing in the pipeline noticed.
+
+### Why it matters beyond the arithmetic
+
+**A paper that passed the licence gate is dropped from the answer with no record of it.** Every
+downstream count — clusters, cited papers, the rendered answer — is computed over 40 papers
+while the ledger claims 41 survived. The stage ledger exists precisely so that a reader can
+account for every paper; this is the one loss it cannot see.
+
+**It was found by a guard, not by review.** Six independent code reviews passed over the code
+without catching it, because it is invisible in any single module: the id policy is in
+`clients/`, the collapse is in `stages.py`, and the contradiction is only observable in
+generated data. A whole-branch reviewer found it in a committed artifact, and an assertion added
+afterwards reproduced it on fresh data.
+
+### What is NOT claimed
+
+The frequency is unmeasured. It was seen twice on one query out of four, and duplicate DOIs in
+PubMed are not rare, but no survey was run. **The last write wins**, so which paper survives is
+determined by retrieval order rather than by any rule — that is also unexamined, and no claim is
+made that keeping the last is better or worse than keeping the first.
 
 ---
 

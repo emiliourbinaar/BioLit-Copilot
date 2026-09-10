@@ -53,9 +53,13 @@ def _normalise(source: str) -> str:
 
 
 def source_pin() -> str:
-    """A hex digest over every pinned module's normalised source, in declaration order."""
+    """A hex digest over every pinned module's normalised source, in sorted order.
+
+    Sorted rather than declaration order: a cosmetic reorder of the `PINNED_MODULES` tuple
+    must not change the pin and force a needless fixture regeneration.
+    """
     digest = hashlib.sha256()
-    for name in PINNED_MODULES:
+    for name in sorted(PINNED_MODULES):
         # `find_spec` RAISES ModuleNotFoundError when the PARENT package is missing and
         # returns None when only the leaf is -- two shapes for the same mistake. Both mean the
         # same thing here, so both become the same refusal.

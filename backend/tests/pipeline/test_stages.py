@@ -406,3 +406,35 @@ def test_select_stage_keeps_a_cluster_that_matches_only_through_its_pharmacologi
     assert kept == [member]
     assert report.dropped == {"off_query": 1}
     assert "pharmacological" in (report.note or "").lower()
+
+
+def test_two_papers_sharing_an_id_are_counted_as_a_drop_so_the_ledger_still_balances():
+    """DEF-0007, the regression test. `Paper.id` is `doi or pmid` and PubMed returns duplicate
+    DOIs, so two DISTINCT papers can arrive under one key. The records dict kept the last and
+    the loss appeared NOWHERE: on the frozen statins query, 58 retrieved minus 17 refused should
+    have left 41, and 40 records existed.
+
+    ⚠️ It must be a DROP, not a NOTE. `noted` is pass-through by definition, so counting it
+    there would leave `n_in - sum(dropped) == n_out` still false -- the invariant `StageReport`'s
+    own docstring advertises as checkable. The paper really is gone from every later stage.
+
+    The assertion on the arithmetic is the point of the test; the count is how it gets there.
+    """
+    shared = Paper(
+        id="10.1/dup",
+        source=Source.pubmed,
+        title="First paper with this DOI",
+        abstract="Metformin caused acidosis in this cohort.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = shared.model_copy(update={"title": "Second, distinct paper, same DOI"})
+
+    outcome = records_stage([shared, twin], {"10.1/dup": []})
+
+    gate = outcome.licence
+    assert gate.dropped.get("duplicate_paper_id") == 1
+    assert gate.n_in - sum(gate.dropped.values()) == gate.n_out, "the ledger must balance"
+    assert len(outcome.records) == 1

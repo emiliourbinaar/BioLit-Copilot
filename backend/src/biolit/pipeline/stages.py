@@ -107,6 +107,7 @@ def records_stage(
     extractor = SameSentenceAsEntitiesExtractor(entities_by_paper)
     records: dict[str, ExtractedRecord] = {}
     refused: dict[str, int] = {}
+    collapsed = 0
     zero_findings = 0
     for paper in papers:
         record = build_record(
@@ -116,6 +117,20 @@ def records_stage(
             key = f"licence_refused:{paper.license or 'none'}"
             refused[key] = refused.get(key, 0) + 1
             continue
+        # ⚠️ DEF-0007. `Paper.id` is `doi or pmid` and PubMed does return duplicate DOIs, so
+        # two DISTINCT papers can arrive under one key. The dict silently kept the last, and
+        # `n_out` fell by one with nothing in `dropped` accounting for it -- on the frozen
+        # statins query, 58 retrieved minus 17 refused should leave 41, and 40 records existed.
+        #
+        # COUNTED AS A DROP, NOT A NOTE. `noted` is pass-through by definition and would leave
+        # the arithmetic still broken; this genuinely removes a paper from every downstream
+        # stage, so it belongs in the term the ledger subtracts.
+        #
+        # Last-write-wins is PRESERVED rather than corrected. Which of two same-DOI papers
+        # ought to survive is a real question and this does not answer it -- it only stops the
+        # loss being invisible. See DEFECTS.md DEF-0007.
+        if paper.id in records:
+            collapsed += 1
         records[paper.id] = record
         if not record.key_findings:
             zero_findings += 1
@@ -126,11 +141,17 @@ def records_stage(
             status=StageStatus.completed,
             n_in=len(papers),
             n_out=len(records),
-            dropped=refused,
+            # Everything lost between `len(papers)` and `len(records)` must appear here or the
+            # ledger's own checkable invariant fails. Two causes, not one: a licence refusal,
+            # and a duplicate-id collapse (DEF-0007).
+            dropped=refused | ({"duplicate_paper_id": collapsed} if collapsed else {}),
             note=(
                 "Refused papers carry no Creative Commons licence in the publisher's "
                 "permissions block (LicenseTier.unknown). This is the Phase 1 compliance "
-                "rule working as designed, not a failure."
+                "rule working as designed, not a failure. A `duplicate_paper_id` drop is NOT a "
+                "licence decision: two papers shared a DOI and collapsed to one record "
+                "(DEF-0007); it is counted here because this stage's n_out is where the loss "
+                "shows up."
             ),
         ),
         extract=StageReport(

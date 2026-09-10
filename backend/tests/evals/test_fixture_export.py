@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.domain.enums import LicenseTier, Source, TextType
@@ -166,3 +168,128 @@ def test_the_ledger_survives_projection_with_its_arithmetic_intact():
     stage = run.stages[0]
     assert stage.n_in - sum(stage.dropped.values()) == stage.n_out
     assert json.loads(run.model_dump_json())["stages"][0]["dropped"] == {"licence_refused:none": 8}
+
+
+def test_project_run_refuses_a_stage_whose_ledger_does_not_balance():
+    """FINDING 1: the committed `statins-rhabdomyolysis` fixture once shipped with
+    `licence_gate` `n_in=58, dropped=17, n_out=40` -- 58-17=41, not 40 -- because a duplicate
+    `Paper.id` collapsed two retrieved papers into one dict entry downstream. `project_run`
+    must refuse to produce a fixture whose own ledger fails the arithmetic its `StageReport`
+    docstring promises ("where the two units match, the ledger is checkable"), naming the
+    offending stage, rather than let it ship silently again.
+    """
+    state = PipelineState(question="q")
+    state.stages = [
+        StageReport(
+            name="licence_gate",
+            status=StageStatus.completed,
+            n_in=58,
+            n_out=40,
+            dropped={"licence_refused:none": 17},
+        )
+    ]
+
+    with pytest.raises(RuntimeError, match="licence_gate"):
+        project_run(
+            state,
+            slug="s",
+            concepts=_no_concepts(),
+            tree=MeshTree({}),
+            actions=PharmacologicalActions({}),
+            names={},
+            labels={},
+            findings=[],
+            generated_at="2026-09-08T00:00:00+00:00",
+        )
+
+
+def test_a_duplicate_paper_id_is_tolerated_because_papers_is_a_lookup_not_a_count():
+    """⚠️ THIS TEST ASSERTED THE OPPOSITE UNTIL DEF-0007 WAS UNDERSTOOD, and the correction is
+    the interesting part.
+
+    It used to require `len(run.papers) == len(state.candidate_papers)` and REFUSE any run
+    containing two papers with the same DOI. That refusal was wrong: duplicate DOIs are a real
+    property of PubMed data, not a projection bug, and the check blocked generating a fixture
+    for a run that was otherwise entirely sound.
+
+    `papers` is a LOOKUP TABLE keyed by `Paper.id`. The count of record lives in the stage
+    ledger, where `licence_gate` now subtracts the collapse explicitly as `duplicate_paper_id`
+    (DEF-0007). Two papers sharing an id therefore yield ONE stub and that is correct; a site
+    wanting "how many were retrieved" must read the ledger, not `len(papers)`.
+
+    What the assertion still catches is a stub going missing for any OTHER reason -- which is
+    why it compares against DISTINCT ids rather than being deleted outright.
+    """
+    dup_a = Paper(
+        id="10.1/dup",
+        source=Source.pubmed,
+        title="First copy",
+        abstract="Text A.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    dup_b = dup_a.model_copy(update={"title": "Second copy"})
+    state = PipelineState(question="q")
+    state.candidate_papers = [dup_a, dup_b]
+
+    run = project_run(
+        state,
+        slug="s",
+        concepts=_no_concepts(),
+        tree=MeshTree({}),
+        actions=PharmacologicalActions({}),
+        names={},
+        labels={},
+        findings=[],
+        generated_at="2026-09-09T00:00:00+00:00",
+    )
+
+    assert len(run.papers) == 1, "one distinct id yields one stub; the ledger reports the loss"
+    assert run.papers["10.1/dup"].title == "Second copy", "last write wins, unchanged by DEF-0007"
+
+
+def test_a_leaked_passage_with_a_quote_and_a_newline_is_still_caught():
+    """FINDING 3: the pre-write leak check used to compare plain-text shingles against
+    `model_dump_json()`'s JSON-*escaped* string. A leaked passage containing a `"` or a
+    newline is escaped there (`\\"`, `\\n`) and would never equal itself as plain text, so the
+    check would miss it. The check must compare against decoded, whitespace-normalised text,
+    and it must live in `project_run` itself so any caller gets the defence.
+    """
+    abstract = (
+        'BACKGROUND: results showed a "significant" reduction in symptoms across the full '
+        "cohort after treatment was administered consistently for several weeks total"
+    )
+    refused = Paper(
+        id="10.1/leaky",
+        source=Source.pubmed,
+        title="A refused paper",
+        abstract=abstract,
+        text_type=TextType.abstract_only,
+        license=None,
+        license_tier=LicenseTier.unknown,
+        extraction_allowed=False,
+    )
+    words = abstract.split()
+    shingle = " ".join(words[0:10])
+    # Re-wrap the shingle around a newline (as if reflowed somewhere upstream) while keeping
+    # its embedded quote -- both would defeat a check run against JSON-escaped serialisation.
+    leaked = shingle.replace(" reduction ", " reduction\n", 1)
+
+    state = PipelineState(question="q")
+    state.candidate_papers = [refused]
+    state.answer = f"Unrelated preamble. {leaked} Unrelated coda."
+
+    with pytest.raises(RuntimeError, match="leaked"):
+        project_run(
+            state,
+            slug="s",
+            concepts=_no_concepts(),
+            tree=MeshTree({}),
+            actions=PharmacologicalActions({}),
+            names={},
+            labels={},
+            findings=[],
+            generated_at="2026-09-08T00:00:00+00:00",
+        )

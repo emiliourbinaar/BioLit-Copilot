@@ -11,10 +11,13 @@ parameter, so the test can construct a state containing a sentinel string and as
 sentinel cannot reach the output by any route.
 """
 
+import re
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
+from biolit.domain.paper import Paper
 from biolit.query.concepts import QueryConcepts
 from biolit.query.ranking import relevance_score
 from biolit.state.pipeline import PipelineState
@@ -26,6 +29,30 @@ from biolit_evals.fixture_models import (
     PaperStub,
 )
 from biolit_evals.fixture_pin import source_pin
+
+_WHITESPACE = re.compile(r"\s+")
+
+
+def _normalise_whitespace(text: str) -> str:
+    return _WHITESPACE.sub(" ", text).strip()
+
+
+def _iter_strings(value: object):
+    """Walk a `model_dump()`-shaped structure, yielding every string leaf.
+
+    Deliberately over the DECODED structure, not `model_dump_json()`'s escaped text: a
+    leaked passage containing a `"`, a `\\`, or a newline round-trips through JSON escaping
+    and would no longer equal itself as plain text there, which is exactly the gap a leak
+    check must not have.
+    """
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _iter_strings(item)
+    elif isinstance(value, Sequence) and not isinstance(value, str | bytes):
+        for item in value:
+            yield from _iter_strings(item)
 
 
 def project_run(
@@ -72,7 +99,7 @@ def project_run(
                 label=labels.get(cluster.key),
             )
         )
-    return FixtureRun(
+    run = FixtureRun(
         schema_version=SCHEMA_VERSION,
         slug=slug,
         query=state.question,
@@ -84,6 +111,87 @@ def project_run(
         papers=papers,
         findings=list(findings),
     )
+    _assert_ledger_balances(run, slug=slug)
+    _assert_no_papers_collapsed(run, state, slug=slug)
+    _assert_no_leaked_text(run, state.candidate_papers, slug=slug)
+    return run
+
+
+def _assert_no_leaked_text(run: FixtureRun, papers: Sequence[Paper], *, slug: str) -> None:
+    """⛔ THE SPEC'S §5 REQUIREMENT, and it belongs HERE, inside the pure projection, rather
+    than only in `main()` -- a second caller of `project_run` must get the same defence. A
+    fixture must be impossible to PRODUCE unsanitised, not merely checkable afterwards --
+    "we'll check later" is the exact shape of DEF-0006. Content, not the literal word
+    "abstract": a leak copies TEXT, not a field name.
+
+    10-word windows at stride 5, which catches any leaked run of >= 14 consecutive words. Not
+    exhaustive, and deliberately not claimed to be: the primary guarantee is structural --
+    PaperStub has no abstract field at all -- and this is defence in depth behind it.
+
+    Matched against decoded string values with whitespace normalised on both sides, so a
+    leaked passage cannot dodge the check by way of JSON escaping (a `"` or `\\`) or by being
+    re-wrapped across a newline somewhere between the source and this fixture.
+    """
+    blob = _normalise_whitespace(" ".join(_iter_strings(run.model_dump())))
+    for paper in papers:
+        if paper.extraction_allowed or not paper.abstract:
+            continue
+        words = paper.abstract.split()
+        shingles = [" ".join(words[i : i + 10]) for i in range(0, max(len(words) - 10, 1), 5)]
+        leaked = [sh for sh in shingles if sh and sh in blob]
+        if leaked:
+            raise RuntimeError(
+                f"{slug}: REFUSED paper {paper.id} leaked text into the fixture: "
+                f"{leaked[0]!r}. Refusing to write. This is DEF-0006 reaching a public "
+                "page; fix the projection rather than this check."
+            )
+
+
+def _assert_no_papers_collapsed(run: FixtureRun, state: PipelineState, *, slug: str) -> None:
+    """Every DISTINCT retrieved paper must get a stub -- the projection may not lose one.
+
+    ⚠️ COMPARED AGAINST DISTINCT IDS, NOT THE RAW PAPER COUNT, and the difference matters. An
+    earlier version of this check required `len(run.papers) == len(state.candidate_papers)` and
+    refused every run containing a duplicate DOI -- which is a real occurrence (DEF-0007), not
+    an error in the projection. That version was wrong about what `papers` IS.
+
+    `papers` is a LOOKUP TABLE keyed by `Paper.id`, not a count. The count of record lives in
+    the stage ledger, where `retrieve` reports 58 and `licence_gate` now subtracts the collapse
+    explicitly as `duplicate_paper_id` (DEF-0007). A site that counts `len(papers)` to say "58
+    retrieved" is reading the wrong field; it should read the ledger, which is why the ledger
+    balances.
+
+    What this still catches: a stub silently missing for an id that some cluster cites, or a
+    projection bug that drops a paper for any reason other than sharing an id.
+    """
+    distinct = {paper.id for paper in state.candidate_papers}
+    if len(run.papers) != len(distinct):
+        raise RuntimeError(
+            f"{slug}: {len(distinct)} distinct paper ids produced only {len(run.papers)} "
+            "stubs -- the projection lost a paper for a reason other than a duplicate id. "
+            "Refusing to write a fixture that cannot attribute everything it may cite."
+        )
+
+
+def _assert_ledger_balances(run: FixtureRun, *, slug: str) -> None:
+    """`StageReport`'s docstring promises that where `unit_in == unit_out`, the ledger is
+    checkable: `n_in - sum(dropped) == n_out`. A fixture that fails this is a false claim on
+    a public page (measured: the committed `statins-rhabdomyolysis` fixture once said
+    `n_in=58, dropped=17, n_out=40` -- 58-17=41, not 40 -- because a duplicate `Paper.id`
+    collapsed two retrieved papers into one dict entry downstream). Raise loudly rather than
+    let that ship silently again.
+    """
+    for stage in run.stages:
+        if stage.unit_in != stage.unit_out:
+            continue
+        expected = stage.n_in - sum(stage.dropped.values())
+        if expected != stage.n_out:
+            raise RuntimeError(
+                f"{slug}: stage {stage.name!r} ledger does not balance: "
+                f"n_in={stage.n_in} - sum(dropped)={sum(stage.dropped.values())} "
+                f"= {expected}, but n_out={stage.n_out}. Refusing to write a fixture whose "
+                "own ledger fails the arithmetic its docstring promises."
+            )
 
 
 #: The four runs, and the finding each exists to show. Slugs are stable: the frontend routes
@@ -95,7 +203,16 @@ FEATURED: dict[str, str] = {
     "metformin-lactic-acidosis": "metformin and lactic acidosis",
 }
 
-DEFAULT_OUT = "../frontend/src/fixtures"
+#: ⚠️ ANCHORED ON __file__, NOT THE CWD. Resolved relatively, running the generator from the
+#: repo root instead of `backend/` wrote fixtures OUTSIDE the repo and still printed success --
+#: a silent-wrong-place failure, which is the shape this project keeps finding and refusing.
+#: src/biolit_evals/fixture_export.py -> parents: biolit_evals, src, backend, <repo root>.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_OUT = str(_REPO_ROOT / "frontend" / "src" / "fixtures")
+#: Same reasoning. A missing labels file RAISES rather than silently producing fixtures whose
+#: every `label` is absent -- the site would render an unlabelled run as though it had no
+#: annotation, which is a different claim from "the annotation was not loaded".
+LABELS_PATH = _REPO_ROOT / "backend" / "evals" / "gold" / "relevance_labels.jsonl"
 #: 60, matching the frozen corpus this project's published numbers come from -- measured,
 #: not guessed: its eight runs retrieved 58-60 papers each. An earlier draft of this plan
 #: said 40 while asserting a cluster count taken from a 58-paper run, which is not a check
@@ -117,7 +234,6 @@ def main(argv: list[str] | None = None) -> None:
     import gzip
     import json
     from datetime import UTC, datetime
-    from pathlib import Path
 
     import httpx
 
@@ -166,12 +282,16 @@ def main(argv: list[str] | None = None) -> None:
                 names.setdefault(concept_id, name)
 
     labels: dict[str, dict[str, str]] = {}
-    labels_path = Path("evals/gold/relevance_labels.jsonl")
-    if labels_path.exists():
-        for line in labels_path.read_text(encoding="utf-8").splitlines():
-            row = json.loads(line)
-            if not row["is_distractor"]:
-                labels.setdefault(row["query"], {})[row["cluster_key"]] = row["label"]
+    if not LABELS_PATH.exists():
+        raise RuntimeError(
+            f"fixture_export: relevance labels not found at {LABELS_PATH}. Refusing to "
+            "generate: every cluster would ship with `label` absent, and the site cannot "
+            "distinguish that from a run nobody annotated."
+        )
+    for line in LABELS_PATH.read_text(encoding="utf-8").splitlines():
+        row = json.loads(line)
+        if not row["is_distractor"]:
+            labels.setdefault(row["query"], {})[row["cluster_key"]] = row["label"]
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -220,6 +340,9 @@ def main(argv: list[str] | None = None) -> None:
         state.answer = answer
         state.stages.append(synthesis_report)
 
+        # `project_run` is where the leak check, the ledger-balance check and the
+        # paper-count check now live (moved from here): a second caller of `project_run`
+        # must get the same defences, not just this function.
         run = project_run(
             state,
             slug=slug,
@@ -231,27 +354,7 @@ def main(argv: list[str] | None = None) -> None:
             findings=[],
             generated_at=datetime.now(UTC).isoformat(),
         )
-        # ⛔ THE SPEC'S §5 REQUIREMENT, and it belongs HERE rather than in a verification step
-        # someone can forget to run. A fixture must be impossible to WRITE unsanitised, not
-        # merely checkable afterwards -- "we'll check later" is the exact shape of DEF-0006.
-        # Content, not the literal word "abstract": a leak copies TEXT, not a field name.
-        # 10-word windows at stride 5, which catches any leaked run of >= 14 consecutive
-        # words. Not exhaustive, and deliberately not claimed to be: the primary guarantee is
-        # structural -- PaperStub has no abstract field at all -- and this is defence in depth
-        # behind it.
         blob = run.model_dump_json(indent=2)
-        for paper in papers:
-            if paper.extraction_allowed or not paper.abstract:
-                continue
-            words = paper.abstract.split()
-            shingles = [" ".join(words[i : i + 10]) for i in range(0, max(len(words) - 10, 1), 5)]
-            leaked = [sh for sh in shingles if sh and sh in blob]
-            if leaked:
-                raise RuntimeError(
-                    f"{slug}: REFUSED paper {paper.id} leaked text into the fixture: "
-                    f"{leaked[0]!r}. Refusing to write. This is DEF-0006 reaching a public "
-                    "page; fix the projection rather than this check."
-                )
 
         path = out_dir / f"{slug}.json"
         path.write_text(blob, encoding="utf-8")
