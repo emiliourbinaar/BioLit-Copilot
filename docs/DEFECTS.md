@@ -83,6 +83,42 @@ PubMed are not rare, but no survey was run. **The last write wins**, so which pa
 determined by retrieval order rather than by any rule — that is also unexamined, and no claim is
 made that keeping the last is better or worse than keeping the first.
 
+### ⭐ ADDENDUM 2026-09-09 — a SECOND collision site, and it is a rights issue, not an accounting one
+
+Found by a fresh-context review of the accounting fix above. **`records_stage` is not the only
+place keyed on `Paper.id`.** One stage earlier, `entities_stage` does the same thing:
+
+```python
+by_paper[paper.id] = entities       # stages.py:75
+```
+
+The consequence is worse than a miscount. When papers A and B share an id and **B is
+licence-refused while A is allowed**, `by_paper[id]` holds **B's** entities, and
+`build_record(A, entities=B's)` returns a record — because *A* is allowed. `Entity.text` carries
+verbatim substrings of the abstract, and `extract/base.py` states plainly why that matters:
+the gate suppresses the whole record precisely because entity text leaks abstract text.
+
+⚠️ **So a refused paper's text can reach an `ExtractedRecord` through an allowed paper's id.**
+`collapsed` stays 0, the ledger balances, and nothing fires — the accounting fix above does not
+touch this path.
+
+**Scope, stated precisely.** This is **not** reachable in the evidence-viewer fixtures:
+`PaperStub` and `FixtureCluster` carry no entity text, and `Finding.text` is sliced from the
+allowed paper's own abstract. It **is** live in `--json-out`, which serialises
+`ExtractedRecord.entities` — the same surface as **DEF-0006**, reached through this defect's
+mechanism rather than that one's.
+
+**Not fixed.** The accounting fix deliberately did not touch `entities_stage`, and fixing this
+properly means deciding what `Paper.id` should be — which is the same open question the
+last-write-wins note above declines to answer.
+
+### A downstream mislabel, recorded while it is nameable
+
+`biolit_evals/relevance_screen.py` reads `n_licensed = stages["licence_gate"]["n_out"]`. On a
+run with a collapse that is the count of *records built*, not papers licensed — 40 where 41 were
+licensed. Pre-existing and harmless to that module's yield-only purpose, but the field is
+misnamed and the fix above is what makes it possible to say so.
+
 ---
 
 ## DEF-0006 — `--json-out` serialises the abstracts of papers the licence gate refused: the gate's own justification for being the sole enforcement point lapsed when a second consumer of `Paper` was added

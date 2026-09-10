@@ -145,14 +145,12 @@ def records_stage(
             # ledger's own checkable invariant fails. Two causes, not one: a licence refusal,
             # and a duplicate-id collapse (DEF-0007).
             dropped=refused | ({"duplicate_paper_id": collapsed} if collapsed else {}),
-            note=(
-                "Refused papers carry no Creative Commons licence in the publisher's "
-                "permissions block (LicenseTier.unknown). This is the Phase 1 compliance "
-                "rule working as designed, not a failure. A `duplicate_paper_id` drop is NOT a "
-                "licence decision: two papers shared a DOI and collapsed to one record "
-                "(DEF-0007); it is counted here because this stage's n_out is where the loss "
-                "shows up."
-            ),
+            # ⚠️ CONDITIONAL, and it must be. An unconditional sentence about the collapse
+            # asserted on every run that two papers shared a DOI -- false on three of four
+            # generated fixtures, and published. `dropped` was already conditional; the prose
+            # was not, which made the prose the only part of this stage that changed behaviour
+            # for a run WITHOUT duplicates. A note is a claim about THIS run.
+            note=_LICENCE_NOTE + (_DUPLICATE_NOTE if collapsed else ""),
         ),
         extract=StageReport(
             name=EXTRACT,
@@ -166,6 +164,18 @@ def records_stage(
         ),
     )
 
+
+_LICENCE_NOTE = (
+    "Refused papers carry no Creative Commons licence in the publisher's permissions block "
+    "(LicenseTier.unknown). This is the Phase 1 compliance rule working as designed, not a "
+    "failure."
+)
+#: Appended ONLY when a collapse actually happened -- see the note assembly in `records_stage`.
+_DUPLICATE_NOTE = (
+    " A `duplicate_paper_id` drop is NOT a licence decision: two papers shared a DOI and "
+    "collapsed to one record (DEF-0007); it is counted on this stage because this stage's "
+    "n_out is where the loss shows up."
+)
 
 ADR_0017_NOTE = (
     "Contradiction detection is not implemented. The CTD-derived gold standard was "

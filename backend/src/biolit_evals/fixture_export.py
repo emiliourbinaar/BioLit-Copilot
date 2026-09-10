@@ -161,8 +161,12 @@ def _assert_no_papers_collapsed(run: FixtureRun, state: PipelineState, *, slug: 
     retrieved" is reading the wrong field; it should read the ledger, which is why the ledger
     balances.
 
-    What this still catches: a stub silently missing for an id that some cluster cites, or a
-    projection bug that drops a paper for any reason other than sharing an id.
+    ⚠️ HONEST SCOPE: as written this is very nearly a tautology — `run.papers` is a dict
+    comprehension keyed on `paper.id` over the same list, so the two counts are equal by
+    construction of `dict`. It does NOT catch a stub missing for a cited id; the `run.papers[...]`
+    lookup in the committed-fixture test does that. It is kept as a canary: if anyone later adds
+    a filter or a conditional to that comprehension, this fires. Recorded as thin rather than
+    deleted, and deliberately not described as coverage it does not provide.
     """
     distinct = {paper.id for paper in state.candidate_papers}
     if len(run.papers) != len(distinct):

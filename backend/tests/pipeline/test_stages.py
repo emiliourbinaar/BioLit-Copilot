@@ -438,3 +438,63 @@ def test_two_papers_sharing_an_id_are_counted_as_a_drop_so_the_ledger_still_bala
     assert gate.dropped.get("duplicate_paper_id") == 1
     assert gate.n_in - sum(gate.dropped.values()) == gate.n_out, "the ledger must balance"
     assert len(outcome.records) == 1
+
+
+def test_a_collision_alongside_a_refusal_counts_each_loss_once_and_only_once():
+    """⚠️ CLOSES THE GAP THE FIRST DEF-0007 TEST LEFT. That test had no refused paper, so the
+    plausible-but-wrong fix `collapsed = len(papers) - len(records)` would have passed it --
+    while being wrong on exactly the real case that produced the defect, where a refusal and a
+    collision occur in the same run (statins: 58 retrieved, 17 refused, 1 collapsed).
+
+    A refused paper never reaches the records dict, so it must be charged to the refusal and
+    NOT to the collapse. Three papers, two ids, one refusal: 3 - 1 refused - 1 collapsed = 1.
+    """
+    allowed = Paper(
+        id="10.1/dup",
+        source=Source.pubmed,
+        title="Allowed, first",
+        abstract="Metformin caused acidosis.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = allowed.model_copy(update={"title": "Allowed, second, same DOI"})
+    refused = allowed.model_copy(
+        update={
+            "id": "10.1/refused",
+            "title": "Refused",
+            "license": None,
+            "license_tier": LicenseTier.unknown,
+            "extraction_allowed": False,
+        }
+    )
+
+    gate = records_stage([allowed, twin, refused], {"10.1/dup": [], "10.1/refused": []}).licence
+
+    assert gate.dropped == {"licence_refused:none": 1, "duplicate_paper_id": 1}
+    assert gate.n_in - sum(gate.dropped.values()) == gate.n_out == 1
+
+
+def test_the_ledger_note_claims_a_collapse_only_when_one_happened():
+    """A note is a claim about THIS run. An unconditional sentence about the DEF-0007 collapse
+    asserted on every run that two papers shared a DOI -- false on three of four generated
+    fixtures, and published on a public page before this was caught.
+    """
+    clean = Paper(
+        id="10.1/a",
+        source=Source.pubmed,
+        title="Only paper",
+        abstract="Metformin caused acidosis.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = clean.model_copy(update={"id": "10.1/a", "title": "Same id"})
+
+    without = records_stage([clean], {"10.1/a": []}).licence
+    with_dup = records_stage([clean, twin], {"10.1/a": []}).licence
+
+    assert "DEF-0007" not in (without.note or ""), "no collapse, no claim about one"
+    assert "DEF-0007" in (with_dup.note or "")
