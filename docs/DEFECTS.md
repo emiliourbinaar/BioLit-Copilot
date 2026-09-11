@@ -95,12 +95,46 @@ which `ArticleIdList` is read. The fixture pin also excluded this module on purp
 (`fixture_pin.py`, gap 1), with the upgrade path written down: *"If it ever bites, hash that
 function's AST subtree alone."* It has now bitten.
 
-### What is NOT claimed, yet
+### ⭐ AUDIT 2026-09-10 — every corpus this client built, and what rests on a borrowed licence
 
-The 236-paper figure is from the four fixtures only. **How many papers in every other corpus
-this client has touched carry a borrowed DOI or licence — and whether any published number
-rests on one — is unmeasured at the time of filing**, and is the next piece of work. No
-published number is changed by this entry.
+`biolit_evals/identifier_audit.py`, run log `evals/identifier_audit_runs.jsonl`. Each stored
+paper records the PMC id its licence was actually looked up under (`raw.pmc_id`); the audit
+compares that, and the stored DOI, with the paper's own identifiers fetched fresh from PubMed.
+**Corpora built with `efetch_abstracts` (contradiction, Alamri, and the domain annotation sample
+drawn from it) never read a DOI or PMC id and are out of scope.**
+
+| Corpus | Papers | Allowed | **Wrongly allowed** | DOI not own | Id collisions |
+|---|---|---|---|---|---|
+| frozen 8-query | 473 | 285 | **15 (5.3%)** | 197 (41.6%) | 3 |
+| 25-query screen | 991 | 529 | **34 (6.4%)** | 437 (44.1%) | 2 |
+| 3-query scale test | 449 | 233 | **14 (6.0%)** | 183 (40.8%) | 0 |
+
+**Every wrongly-allowed paper produced a record** (15, 34 and 14 respectively): a borrowed
+licence is not an accounting curiosity, it is text the gate would have refused.
+
+**What the published numbers would be without those papers.** Recomputed by removing their
+records and re-running the real stages; the stored figures reproduce exactly, which is what
+makes the corrected ones comparable.
+
+| Published | As published | Without mis-licensed papers | Verdict |
+|---|---|---|---|
+| frozen corpus clusters (ADR-0020) | **83** | **80** | moves |
+| kept without ADR-0022 / with it (ADR-0022) | **70 → 75** | **67 → 72** | both move; **the +5 recovery is identical**, and all five recovered `Atorvastatin` clusters are the same ones |
+| screen queries clearing the floor (ADR-0023) | **4 of 25** | **4 of 25** | unchanged |
+| `no_cluster` attrition (DEF-0005) | 59.7% | 59.5% | unchanged |
+| acronym census (DEF-0001) | **23 of 44 pairs (52.3%)**, **132 of 204 mentions (64.7%)** | **22 of 42 (52.4%)**, **128 of 189 (67.7%)** | conclusion unchanged; the mention rate rises 3 points |
+| relevance rows (ADR-0020/0021) | 91 rows | **7 rows** contain a mis-licensed paper (labels: 4 background, 2 answers, 1 off_topic) | rows stand, provenance flagged |
+| Gate A scored clusters (ADR-0019) | 30 | **4** contain one | conclusion is structural, unaffected |
+
+⚠️ **No published number has been changed on the strength of this table.** It is reported so
+that the decision to restate, annotate or leave each figure is made deliberately.
+
+### What is NOT claimed
+
+The audit judges a paper by whether its licence was looked up under its OWN PMC id, not by
+re-reading what that licence said; a paper allowed under a borrowed id might coincidentally
+have carried a permissive licence of its own. One screen PMID (42633983) no longer returns a
+PubMed record and is reported as unverifiable rather than clean.
 
 ---
 
