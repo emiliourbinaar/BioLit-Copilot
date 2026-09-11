@@ -1,0 +1,114 @@
+---
+import AnswerPane from "../../components/AnswerPane.astro";
+import ClusterList from "../../components/ClusterList.astro";
+import FindingCallout from "../../components/FindingCallout.astro";
+import PaperTable from "../../components/PaperTable.astro";
+import StageLedger from "../../components/StageLedger.astro";
+import Base from "../../layouts/Base.astro";
+import { formatDate, RUN_NOTES, RUNS, type FixtureRun } from "../../lib/fixtures";
+
+export function getStaticPaths() {
+  return RUNS.map((run) => ({ params: { slug: run.slug }, props: { run } }));
+}
+
+interface Props {
+  run: FixtureRun;
+}
+
+const { run } = Astro.props;
+const note = RUN_NOTES[run.slug]!;
+---
+
+<Base
+  title={`“${run.query}”: BioLit Copilot`}
+  description={`Stage-by-stage record of one BioLit Copilot run for “${run.query}”.`}
+  current={run.slug}
+>
+  <div class="wrap">
+    <header class="run-head">
+      <p class="kicker">One run of the pipeline, asked</p>
+      <h1>“{run.query}”</h1>
+      <p class="lede">{note.text}</p>
+      <p class="caveat">
+        Retrieved from PubMed on <strong>{formatDate(run.generated_at)}</strong>. Counts drift
+        between retrievals, because live PubMed returns a different paper set on a different day
+        (ADR-0023); this page records this retrieval, not a fixed benchmark.
+        <span class="pin">Source pin <span class="mono">{run.source_pin.slice(0, 12)}</span></span>
+      </p>
+    </header>
+
+    <section class="section" aria-labelledby="ledger-h">
+      <div class="section-head">
+        <h2 id="ledger-h">What each stage did</h2>
+        <p>
+          Every stage reports what it took in, what it removed and why, and what it only noted.
+          Where a stage keeps its unit, the subtraction is shown and must balance.
+        </p>
+      </div>
+      <StageLedger run={run} />
+    </section>
+
+    <section class="section" aria-labelledby="findings-h">
+      <div class="section-head">
+        <h2 id="findings-h">Defects this run shows</h2>
+      </div>
+      <FindingCallout run={run} />
+    </section>
+
+    <section class="section" aria-labelledby="clusters-h">
+      <div class="section-head">
+        <h2 id="clusters-h">The clusters it answered with</h2>
+        <p>
+          A cluster is a pair of MeSH concepts that co-occur in the same sentence across papers.
+        </p>
+      </div>
+      <ClusterList run={run} />
+    </section>
+
+    <section class="section" aria-labelledby="answer-h">
+      <div class="section-head">
+        <h2 id="answer-h">The answer</h2>
+      </div>
+      <AnswerPane run={run} />
+    </section>
+
+    <section class="section" aria-labelledby="papers-h">
+      <div class="section-head">
+        <h2 id="papers-h">Every paper it retrieved</h2>
+        <p>Citation and licence facts only. No abstract text is published on this site.</p>
+      </div>
+      <PaperTable run={run} />
+    </section>
+  </div>
+</Base>
+
+<style>
+  .run-head {
+    padding-top: 3.5rem;
+    display: grid;
+    gap: 1rem;
+  }
+  .kicker {
+    color: var(--ink-3);
+    font-size: 1rem;
+    font-style: italic;
+  }
+  h1 {
+    font-size: clamp(2.3rem, 5.5vw, 4rem);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.05;
+    max-width: 22ch;
+  }
+  .lede {
+    font-size: 1.25rem;
+    max-width: var(--measure);
+    line-height: 1.5;
+  }
+  .pin {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.88rem;
+    color: var(--ink-3);
+  }
+</style>

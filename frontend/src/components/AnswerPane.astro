@@ -1,0 +1,107 @@
+---
+/**
+ * ⚠️ THE ANSWER IS RENDERED VERBATIM, and must not be "improved" here (plan §2). Re-rendering it
+ * from clusters would be a second implementation of the synthesis template, presented as the
+ * pipeline's own output. If the raw MeSH ids look unfriendly, the fix belongs in
+ * `synth/template.py`, where it is pinned and regenerates the fixtures.
+ */
+import { citedPaperIds, licenceLabel, type FixtureRun } from "../lib/fixtures";
+
+interface Props {
+  run: FixtureRun;
+}
+
+const { run } = Astro.props;
+const cited = citedPaperIds(run).map((id) => ({ id, paper: run.papers[id]! }));
+---
+
+<p class="caveat">
+  <strong>This is the pipeline's output, unedited.</strong> The deterministic template
+  (ADR-0019) heads each cluster with raw MeSH ids; the cluster list above names them. Every
+  quoted sentence in it comes from an abstract the licence gate allowed.
+</p>
+
+<pre class="answer" tabindex="0" aria-label="Pipeline answer, verbatim">{run.answer}</pre>
+
+<div class="attribution">
+  <h3>Attribution for every quoted paper</h3>
+  <p class="quiet">
+    Every licence the gate allows is Creative Commons, and every one requires attribution. The
+    pipeline does not assemble citations yet (the synthesis stage says so in the ledger), so
+    they are given here, one per quoted paper.
+  </p>
+  <ol class="cites">
+    {
+      cited.map(({ id, paper }) => (
+        <li>
+          <span class="title">{paper.title}</span>{" "}
+          <span class="quiet">
+            {paper.journal}
+            {paper.year ? `, ${paper.year}` : ""}.
+          </span>{" "}
+          <span class="licence">{licenceLabel(paper.license)}</span>{" "}
+          {paper.doi && <a href={`https://doi.org/${paper.doi}`}>doi:{paper.doi}</a>}
+          {paper.pmid && (
+            <>
+              {" "}
+              <a class="pmid" href={`https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`}>
+                PMID {paper.pmid}
+              </a>
+            </>
+          )}
+          {!paper.doi && !paper.pmid && <span class="mono">{id}</span>}
+        </li>
+      ))
+    }
+  </ol>
+</div>
+
+<style>
+  .answer {
+    margin: 1.5rem 0 0;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--ink);
+    padding: 1.25rem 1.4rem;
+    max-height: 34rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .attribution {
+    margin-top: 2.25rem;
+    display: grid;
+    gap: 0.6rem;
+  }
+  .attribution > .quiet {
+    font-size: 0.98rem;
+    max-width: var(--measure);
+  }
+  .cites {
+    margin: 0.5rem 0 0;
+    padding-left: 1.6rem;
+    display: grid;
+    gap: 0.45rem;
+    font-size: 0.95rem;
+    max-width: 58rem;
+  }
+  .cites li::marker {
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .licence {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--hema);
+    white-space: nowrap;
+  }
+  .cites a {
+    overflow-wrap: anywhere;
+  }
+  .pmid {
+    white-space: nowrap;
+  }
+</style>

@@ -1,0 +1,302 @@
+---
+/**
+ * One row per stage, in pipeline order. Both units are always printed, because stages change
+ * unit (pmids -> papers -> entities) and an undeclared change reads as impossible growth.
+ * Dropped (removed, eosin) and noted (passed through, haematoxylin) are never merged.
+ */
+import { inlineMarkdown } from "../lib/markdown";
+import { countOf, ledgerArithmetic, parseAnchor, type FixtureRun } from "../lib/fixtures";
+
+interface Props {
+  run: FixtureRun;
+}
+
+const { run } = Astro.props;
+
+/** The unit word alone, agreed with its count; the number is set separately, larger. */
+const unitFor = (count: number, unit: string | undefined) =>
+  countOf(count, unit ?? "").slice(String(count).length + 1);
+
+// Which drops a finding is anchored on, so the row can point at its callout.
+const anchored = new Map<string, string>();
+for (const finding of run.findings) {
+  const anchor = parseAnchor(finding.anchor);
+  if (anchor.kind === "stage") anchored.set(`${anchor.stage}/${anchor.reason}`, finding.defect_id);
+}
+
+const rows = run.stages.map((stage) => {
+  const sum = ledgerArithmetic(stage);
+  const dropped = Object.entries(stage.dropped ?? {});
+  const noted = Object.entries(stage.noted ?? {});
+  const absent = stage.status === "not_implemented";
+  const segments =
+    sum && stage.n_in > 0
+      ? [
+          { kind: "kept", label: `${stage.n_out} kept`, share: stage.n_out / stage.n_in },
+          ...sum.terms.map((term, index) => ({
+            kind: index === 0 ? "drop" : "drop-alt",
+            label: `${term.count} dropped: ${term.reason}`,
+            share: term.count / stage.n_in,
+          })),
+        ]
+      : [];
+  return { stage, sum, dropped, noted, absent, segments };
+});
+---
+
+<ol class="ledger">
+  {
+    rows.map(({ stage, sum, dropped, noted, absent, segments }) => (
+      <li class:list={["stage", { absent }]} id={`stage-${stage.name}`}>
+        <div class="who">
+          <span class="name mono">{stage.name}</span>
+          {absent && <span class="absent-badge">Not implemented</span>}
+        </div>
+
+        <p class="flow num">
+          <span class="n">{stage.n_in}</span> <span class="unit">{unitFor(stage.n_in, stage.unit_in)}</span>
+          <span class="arrow" aria-label="to">→</span>
+          {absent ? (
+            <span class="nothing">nothing produced</span>
+          ) : (
+            <>
+              <span class="n">{stage.n_out}</span> <span class="unit">{unitFor(stage.n_out, stage.unit_out)}</span>
+            </>
+          )}
+        </p>
+
+        <div class="detail">
+          {segments.length > 0 && (
+            <div
+              class="strip"
+              role="img"
+              aria-label={`${stage.n_in} ${stage.unit_in} in: ${segments.map((s) => s.label).join(", ")}`}
+            >
+              {segments.map((segment) => (
+                <span class={`seg ${segment.kind}`} style={`flex-grow: ${segment.share}`} />
+              ))}
+            </div>
+          )}
+
+          {sum && (
+            <p class="sum num">
+              {sum.terms.length === 0 ? (
+                <>
+                  {sum.n_in} in, {sum.n_out} out, nothing dropped
+                </>
+              ) : (
+                <>
+                  {sum.n_in}
+                  {sum.terms.map((term) => (
+                    <>
+                      {" "}
+                      − <span class="minus">{term.count}</span>
+                    </>
+                  ))}{" "}
+                  = {sum.n_out}
+                </>
+              )}
+              {!sum.balances && <span class="broken"> does not balance</span>}
+            </p>
+          )}
+
+          {(dropped.length > 0 || noted.length > 0) && (
+            <dl class="accounts">
+              {dropped.map(([reason, count]) => {
+                const defect = anchored.get(`${stage.name}/${reason}`);
+                return (
+                  <div class:list={["account", "dropped", { anchored: defect }]}>
+                    <dt>
+                      Dropped <code>{reason}</code>
+                    </dt>
+                    <dd class="num">
+                      {countOf(count, stage.unit_in ?? "")}
+                      {defect && (
+                        <a class="defect-link" href={`#finding-${defect}`}>
+                          {defect}
+                        </a>
+                      )}
+                    </dd>
+                  </div>
+                );
+              })}
+              {noted.map(([reason, count]) => (
+                <div class="account noted">
+                  <dt>
+                    Noted <code>{reason}</code>
+                  </dt>
+                  <dd class="num">{count}, passed through</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+
+          {stage.note && <p class="note" set:html={inlineMarkdown(stage.note)} />}
+        </div>
+      </li>
+    ))
+  }
+</ol>
+
+<style>
+  .ledger {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 2px solid var(--ink);
+  }
+  .stage {
+    display: grid;
+    grid-template-columns: 11rem 15rem minmax(0, 1fr);
+    gap: 0.5rem 1.75rem;
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--rule);
+    scroll-margin-top: 1.5rem;
+  }
+  .who {
+    display: grid;
+    gap: 0.4rem;
+    align-content: start;
+  }
+  .name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--ink);
+    padding-top: 0.2rem;
+  }
+  .flow {
+    font-size: 1.05rem;
+    color: var(--ink-2);
+  }
+  .flow .n {
+    font-size: 1.6rem;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .unit {
+    font-style: italic;
+  }
+  .arrow {
+    color: var(--ink-3);
+    margin-inline: 0.25rem;
+  }
+  .nothing {
+    font-style: italic;
+  }
+  .detail {
+    display: grid;
+    gap: 0.65rem;
+    align-content: start;
+    min-width: 0;
+  }
+  .strip {
+    display: flex;
+    height: 0.9rem;
+    gap: 2px;
+    margin-top: 0.45rem;
+  }
+  .seg {
+    flex-basis: 0;
+    min-width: 3px;
+  }
+  .seg.kept {
+    background: var(--kept);
+  }
+  .seg.drop {
+    background: var(--eosin);
+  }
+  .seg.drop-alt {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--eosin) 0 3px,
+      var(--eosin-2) 3px 6px
+    );
+  }
+  .sum {
+    font-size: 1rem;
+    color: var(--ink-2);
+  }
+  .minus {
+    color: var(--eosin);
+    font-weight: 600;
+  }
+  .broken {
+    color: var(--eosin);
+    font-weight: 600;
+  }
+  .accounts {
+    margin: 0;
+    display: grid;
+    gap: 0.3rem;
+    font-size: 0.95rem;
+  }
+  .account {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.75rem;
+    align-items: baseline;
+    padding: 0.2rem 0.55rem;
+    border-radius: 3px;
+  }
+  .account dt,
+  .account dd {
+    margin: 0;
+  }
+  .dropped {
+    background: var(--eosin-wash);
+  }
+  .dropped dt {
+    color: var(--eosin);
+  }
+  .noted {
+    background: var(--hema-wash);
+  }
+  .noted dt {
+    color: var(--hema);
+  }
+  .account code {
+    background: transparent;
+    padding: 0;
+    color: var(--ink);
+  }
+  .anchored {
+    outline: 2px solid var(--eosin);
+  }
+  .defect-link {
+    margin-left: 0.5rem;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--eosin);
+    font-weight: 500;
+  }
+  .note {
+    font-size: 0.95rem;
+    color: var(--ink-2);
+    max-width: var(--measure);
+  }
+
+  /* Visibly absent, not quietly missing: the stage exists in the pipeline and does nothing. */
+  .absent {
+    background: repeating-linear-gradient(
+      135deg,
+      transparent 0 9px,
+      rgba(28, 35, 49, 0.05) 9px 10px
+    );
+  }
+  .absent-badge {
+    justify-self: start;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 0.05rem 0.45rem;
+    border-radius: 3px;
+  }
+
+  @media (max-width: 52rem) {
+    .stage {
+      grid-template-columns: 1fr;
+      gap: 0.4rem;
+    }
+  }
+</style>

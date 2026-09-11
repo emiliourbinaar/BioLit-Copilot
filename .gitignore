@@ -43,3 +43,6 @@ Thumbs.db
 # Local agent / dev state (not for the public repo)
 .claude/
 .superpowers/
+
+# Astro (frontend)
+.astro/

@@ -1,0 +1,160 @@
+---
+/**
+ * Every retrieved paper's citation and licence facts, refused ones included. There is no
+ * abstract text anywhere in the data -- the fixture schema has no field for it -- and this
+ * component must not invent one.
+ */
+import { licenceLabel, stageByName, type FixtureRun, type PaperStub } from "../lib/fixtures";
+
+interface Props {
+  run: FixtureRun;
+}
+
+const { run } = Astro.props;
+const papers = Object.entries(run.papers);
+
+const groups: { title: string; tone: string; rows: [string, PaperStub][] }[] = [
+  {
+    title: "Licensed for extraction",
+    tone: "allowed",
+    rows: papers.filter(([, p]) => p.extraction_allowed),
+  },
+  {
+    title: "Refused by the licence gate",
+    tone: "refused",
+    rows: papers.filter(([, p]) => !p.extraction_allowed),
+  },
+].filter((group) => group.rows.length > 0);
+
+for (const group of groups) {
+  group.rows.sort(([, a], [, b]) => (b.year ?? 0) - (a.year ?? 0) || a.title.localeCompare(b.title));
+}
+
+const retrieved = stageByName(run, "retrieve")?.n_out ?? papers.length;
+const collapsed = stageByName(run, "licence_gate")?.dropped?.["duplicate_paper_id"] ?? 0;
+---
+
+<p class="quiet counts num">
+  {papers.length} {papers.length === 1 ? "paper" : "papers"} listed for {retrieved} retrieved.
+  {
+    collapsed > 0 && (
+      <>
+        {" "}
+        {collapsed} {collapsed === 1 ? "pair" : "pairs"} of retrieved papers arrived under the same
+        id and became one record, which is the drop the ledger counts as <code>duplicate_paper_id</code>.
+      </>
+    )
+  }
+</p>
+
+{
+  groups.map((group) => (
+    <details class={`group ${group.tone}`} open={group.tone === "refused" ? undefined : true}>
+      <summary>
+        <span class="group-title">{group.title}</span>{" "}
+        <span class="num quiet">{group.rows.length}</span>
+      </summary>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Year</th>
+              <th scope="col">Title</th>
+              <th scope="col">Journal</th>
+              <th scope="col">Licence</th>
+              <th scope="col">Identifier</th>
+            </tr>
+          </thead>
+          <tbody>
+            {group.rows.map(([id, paper]) => (
+              <tr>
+                <td class="num">{paper.year ?? ""}</td>
+                <td>{paper.title}</td>
+                <td class="quiet">{paper.journal ?? ""}</td>
+                <td class="licence">
+                  {licenceLabel(paper.license)}
+                  <span class="tier"> {paper.license_tier.replace("_", "-")}</span>
+                </td>
+                <td class="ident">
+                  {paper.doi ? (
+                    <a href={`https://doi.org/${paper.doi}`}>{paper.doi}</a>
+                  ) : paper.pmid ? (
+                    <a href={`https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`}>PMID {paper.pmid}</a>
+                  ) : (
+                    <span class="mono">{id}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  ))
+}
+
+<style>
+  .counts {
+    font-size: 0.98rem;
+    max-width: var(--measure);
+    margin-bottom: 1.25rem;
+  }
+  .group {
+    border-top: 2px solid var(--ink);
+    margin-top: 1rem;
+  }
+  .group.refused {
+    border-top-color: var(--eosin);
+  }
+  summary {
+    cursor: pointer;
+    padding: 0.7rem 0;
+    font-size: 1.1rem;
+  }
+  .group-title {
+    font-weight: 600;
+  }
+  .refused .group-title {
+    color: var(--eosin);
+  }
+  .scroll {
+    overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 44rem;
+    font-size: 0.9rem;
+  }
+  th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--ink-2);
+    border-bottom: 1px solid var(--rule-strong);
+    padding: 0.4rem 0.6rem 0.4rem 0;
+  }
+  td {
+    vertical-align: top;
+    border-bottom: 1px solid var(--rule);
+    padding: 0.45rem 0.8rem 0.45rem 0;
+  }
+  .licence {
+    white-space: nowrap;
+    font-weight: 600;
+    color: var(--hema);
+  }
+  .refused .licence {
+    color: var(--eosin);
+  }
+  .tier {
+    display: block;
+    font-weight: 400;
+    color: var(--ink-3);
+    font-size: 0.82rem;
+  }
+  .ident {
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+    max-width: 16rem;
+  }
+</style>

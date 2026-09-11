@@ -1,0 +1,140 @@
+---
+import "@fontsource-variable/newsreader/opsz.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "../styles/global.css";
+import { RUNS } from "../lib/fixtures";
+import { REPO_URL } from "../lib/site";
+
+interface Props {
+  title: string;
+  description: string;
+  current?: string;
+}
+
+const { title, description, current } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap bar">
+        <a class="site-name" href={base}>BioLit Copilot</a>
+        <nav aria-label="Site">
+          <ul>
+            {
+              RUNS.map((run) => (
+                <li>
+                  <a
+                    href={`${base}runs/${run.slug}/`}
+                    aria-current={current === run.slug ? "page" : undefined}
+                  >
+                    {run.query}
+                  </a>
+                </li>
+              ))
+            }
+            <li class="split">
+              <a href={`${base}findings/`} aria-current={current === "findings" ? "page" : undefined}>
+                Findings
+              </a>
+            </li>
+            <li>
+              <a href={`${base}evidence/`} aria-current={current === "evidence" ? "page" : undefined}>
+                Evidence
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="wrap">
+        <p>
+          A static site. Every page is built from a committed, licence-checked record of one
+          pipeline run; nothing is queried live. Source and records on <a href={REPO_URL}>GitHub</a>.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .skip {
+    position: absolute;
+    left: -999px;
+  }
+  .skip:focus {
+    left: 1rem;
+    top: 1rem;
+    background: var(--surface);
+    padding: 0.4rem 0.8rem;
+    z-index: 10;
+  }
+  .site-header {
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface);
+  }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 2rem;
+    padding-block: 0.9rem;
+  }
+  .site-name {
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 1.05rem;
+  }
+  nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.1rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.95rem;
+  }
+  nav a {
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  nav a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+  nav a[aria-current="page"] {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-color: var(--eosin);
+    text-decoration-thickness: 2px;
+  }
+  .split {
+    margin-left: 0.6rem;
+    padding-left: 1.1rem;
+    border-left: 1px solid var(--rule);
+  }
+  main {
+    padding-bottom: 5rem;
+  }
+  .site-footer {
+    border-top: 1px solid var(--rule);
+    padding-block: 1.5rem 2.5rem;
+    color: var(--ink-3);
+    font-size: 0.92rem;
+  }
+</style>

@@ -1,0 +1,125 @@
+---
+import Base from "../layouts/Base.astro";
+import { docUrl, REPO_URL } from "../lib/site";
+
+const records = [
+  {
+    file: "RETROSPECTIVE.md",
+    what: "The project's argument end to end: what shipped, what was rejected, and the times the measuring instrument was what broke.",
+  },
+  {
+    file: "EVAL_REPORT.md",
+    what: "The evaluation results, with the runs that produced them.",
+  },
+  {
+    file: "DECISIONS.md",
+    what: "The architecture decision records, negative results included.",
+  },
+  {
+    file: "DEFECTS.md",
+    what: "Defects verified against real data, each with its measurement and current status.",
+  },
+  {
+    file: "ARCHITECTURE.md",
+    what: "How the pipeline's stages fit together.",
+  },
+];
+---
+
+<Base
+  title="Evidence: BioLit Copilot"
+  description="The records behind BioLit Copilot: retrospective, evaluation report, decisions and defects."
+  current="evidence"
+>
+  <div class="wrap">
+    <header class="head">
+      <h1>The records behind this site</h1>
+      <p class="prose">
+        This site shows four runs. The claims about the project as a whole live in its written
+        record, where each number sits next to the run that produced it.
+      </p>
+    </header>
+
+    <ul class="records">
+      {
+        records.map((record) => (
+          <li>
+            <a href={docUrl(record.file)}>{record.file}</a>
+            <p>{record.what}</p>
+          </li>
+        ))
+      }
+    </ul>
+
+    <div class="regen prose">
+      <h2>How these pages are made</h2>
+      <p>
+        Each run page is built from a fixture that the Python pipeline writes directly, in
+        process, with a schema that has no field for abstract text. A test fails when the
+        pipeline modules that determine what a fixture shows have changed since it was
+        generated; what that check does not cover is listed in <code>fixture_pin.py</code>.
+        Regenerating the fixtures is a single command, run from <code>backend/</code>:
+      </p>
+      <pre><code>uv run python -m biolit_evals.fixture_export</code></pre>
+      <p>
+        Source: <a href={REPO_URL}>{REPO_URL.replace("https://", "")}</a>
+      </p>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .head {
+    padding-top: 3.5rem;
+    display: grid;
+    gap: 1.25rem;
+    margin-bottom: 2.5rem;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 400;
+  }
+  .records {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 2px solid var(--ink);
+    max-width: 48rem;
+  }
+  .records li {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    gap: 0.2rem;
+  }
+  .records a {
+    font-family: var(--mono);
+    font-size: 0.95rem;
+    font-weight: 500;
+  }
+  .records p {
+    color: var(--ink-2);
+    font-size: 1rem;
+  }
+  .regen {
+    margin-top: 3.5rem;
+  }
+  .regen h2 {
+    font-size: 1.4rem;
+  }
+  .regen p {
+    font-size: 1rem;
+    color: var(--ink-2);
+  }
+  .regen pre {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    padding: 0.8rem 1rem;
+    overflow-x: auto;
+  }
+  .regen pre code {
+    background: none;
+    padding: 0;
+    font-size: 1em;
+  }
+</style>

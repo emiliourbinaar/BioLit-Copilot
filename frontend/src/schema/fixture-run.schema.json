@@ -1,0 +1,327 @@
+{
+  "$defs": {
+    "FixtureCluster": {
+      "additionalProperties": false,
+      "description": "One cluster as displayed: identity, membership, and why it ranks where it does.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "concept_names": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Concept Names",
+          "type": "array"
+        },
+        "paper_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Paper Ids",
+          "type": "array"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "matched": {
+          "title": "Matched",
+          "type": "integer"
+        },
+        "proximity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Proximity"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        }
+      },
+      "required": [
+        "key",
+        "concept_names",
+        "paper_ids",
+        "rank",
+        "matched",
+        "proximity"
+      ],
+      "title": "FixtureCluster",
+      "type": "object"
+    },
+    "FixtureFinding": {
+      "additionalProperties": false,
+      "description": "A defect pinned to this run, quoting the adjudication rather than paraphrasing it.",
+      "properties": {
+        "defect_id": {
+          "title": "Defect Id",
+          "type": "string"
+        },
+        "anchor": {
+          "title": "Anchor",
+          "type": "string"
+        },
+        "headline": {
+          "title": "Headline",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "defect_id",
+        "anchor",
+        "headline",
+        "reason"
+      ],
+      "title": "FixtureFinding",
+      "type": "object"
+    },
+    "PaperStub": {
+      "additionalProperties": false,
+      "description": "Citation metadata and licence facts. NEVER text.\n\n`license` and `doi` are not optional decoration: every tier the gate allows is a Creative\nCommons licence and every one of them REQUIRES ATTRIBUTION, while the synthesis stage's own\nledger note says citation assembly is not yet built. The viewer has to supply what the\npipeline does not, and it can only do that if the fixture carries it.",
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Journal"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Doi"
+        },
+        "pmid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pmid"
+        },
+        "license": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License"
+        },
+        "license_tier": {
+          "title": "License Tier",
+          "type": "string"
+        },
+        "extraction_allowed": {
+          "title": "Extraction Allowed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "title",
+        "license_tier",
+        "extraction_allowed"
+      ],
+      "title": "PaperStub",
+      "type": "object"
+    },
+    "StageReport": {
+      "description": "One stage's accounting, including what it dropped and why.\n\nLives in PipelineState rather than only in the printed report so the JSON dump carries\nit too: `contradictions: []` alone is indistinguishable from \"ran and found nothing\",\nand a machine reader must be able to tell those apart.\n\n`dropped` and `noted` are NOT interchangeable. `dropped` is what this stage REMOVED, in\nthe unit it consumes; `noted` is what it observed and passed through. Conflating them\nmade the first rendered ledger misreport: `no_abstract`, `zero_findings` and\n`entity_unlinked` remove nothing, yet all three printed as \"dropped N\".\n\n`unit_in`/`unit_out` exist because stages legitimately change unit -- 20 papers in, 412\nentities out -- and an undeclared change reads as impossible growth. Where the two units\nmatch, the ledger is checkable: n_in - sum(dropped) == n_out.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/StageStatus"
+        },
+        "n_in": {
+          "title": "N In",
+          "type": "integer"
+        },
+        "n_out": {
+          "title": "N Out",
+          "type": "integer"
+        },
+        "unit_in": {
+          "default": "papers",
+          "title": "Unit In",
+          "type": "string"
+        },
+        "unit_out": {
+          "default": "papers",
+          "title": "Unit Out",
+          "type": "string"
+        },
+        "dropped": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Dropped",
+          "type": "object"
+        },
+        "noted": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Noted",
+          "type": "object"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "name",
+        "status",
+        "n_in",
+        "n_out"
+      ],
+      "title": "StageReport",
+      "type": "object"
+    },
+    "StageStatus": {
+      "description": "Only the two states something actually produces today.\n\nNo `blocked`/`skipped`/`failed` member exists until a stage emits one — ADR-0013's\n\"no infrastructure without a demonstrated consumer\".",
+      "enum": [
+        "completed",
+        "not_implemented"
+      ],
+      "title": "StageStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One frozen run, sanitised for publication.",
+  "properties": {
+    "schema_version": {
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "slug": {
+      "title": "Slug",
+      "type": "string"
+    },
+    "query": {
+      "title": "Query",
+      "type": "string"
+    },
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "source_pin": {
+      "title": "Source Pin",
+      "type": "string"
+    },
+    "stages": {
+      "items": {
+        "$ref": "#/$defs/StageReport"
+      },
+      "title": "Stages",
+      "type": "array"
+    },
+    "clusters": {
+      "items": {
+        "$ref": "#/$defs/FixtureCluster"
+      },
+      "title": "Clusters",
+      "type": "array"
+    },
+    "answer": {
+      "title": "Answer",
+      "type": "string"
+    },
+    "papers": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PaperStub"
+      },
+      "title": "Papers",
+      "type": "object"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/FixtureFinding"
+      },
+      "title": "Findings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "slug",
+    "query",
+    "generated_at",
+    "source_pin",
+    "stages",
+    "clusters",
+    "answer",
+    "papers",
+    "findings"
+  ],
+  "title": "FixtureRun",
+  "type": "object"
+}
