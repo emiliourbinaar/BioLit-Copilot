@@ -42,11 +42,20 @@ would want read first.
 | **Phase 5** — Critic | Is the derived gold standard valid? | **π̂ 0.067** on blind annotation; stop rule fired | **Retired unspent** | $0 |
 | ↳ replacement gold | Does any corpus support the paper-pair unit? | six corpora, three families; best **π̂ 0.60** — annotator agreement, not an F1 — with zero separation | **Closed** | $0 |
 | **Gate A** — synthesis | Can a metric suite with no gold certify quality? | a one-word-per-paper `index` arm **dominates the template** on both comparative axes | **Gate retired**, template ships | $0 |
-| **Post-phase** — selection | Does consulting the question help? | 83 clusters → 75; a strictly tighter filter returns an **empty answer on 2 of the 8 queries** | Shipped | $0 |
+| **Post-phase** — selection | Does consulting the question help? | 80 clusters → 72 †; a strictly tighter filter returns an **empty answer on 2 of the 8 queries** | Shipped | $0 |
 | **Post-phase** — ordering | Does relevance ordering fix the lead? | Gate 4a **leads correct 5 of 8, baseline 3 of 8** — but **2 of 3 vs 2 of 3** on uncontaminated queries; control instrument later compromised | Shipped, **unvalidated** | $0 |
-| **Post-phase** — acronym census | How wrong is linking on short acronyms? | **23 of 44 pairs (52.3%)**, **132 of 204 mentions (64.7%)** wrong | Defect recorded | $0 |
-| **Post-phase** — class matching | Can class-level queries be fixed? | 70 → **75** kept, three named false drops recovered, zero off-topic admitted | Shipped, ordering **unvalidated** | $0 |
+| **Post-phase** — acronym census | How wrong is linking on short acronyms? | **22 of 42 pairs (52.4%)**, **128 of 189 mentions (67.7%)** wrong † | Defect recorded | $0 |
+| **Post-phase** — class matching | Can class-level queries be fixed? | 67 → **72** kept †, three named false drops recovered, zero off-topic admitted | Shipped, ordering **unvalidated** | $0 |
 | ↳ its validation | Can a fresh label set score it? | **4 of 25** candidate queries productive; mechanism fires where yield collapses | **Closed as a negative result about the instrument** | $0 |
+
+† ⚠️ *Corrected 2026-09-12 (DEF-0008).* First published as **83 clusters → 75**, **70 → 75** kept, and
+**23 of 44 pairs (52.3%) / 132 of 204 mentions (64.7%)**. A PubMed parsing defect read cited
+references' identifiers as each paper's own, so some papers were licensed under another
+article's PMC id; recomputed without them, the frozen corpus has 80 clusters rather than 83.
+**The underlying conclusions are unchanged:** class matching still recovers exactly +5, the same
+five clusters; the census still finds a majority of acronym links wrong. The "empty answer on 2 of
+8" belongs to a rejected filter no longer in code and was not recomputed; removing clusters cannot
+make a filter keep more, so it cannot improve.
 
 ---
 
@@ -150,8 +159,10 @@ fresh label set — the two existing ones were spent, one to disclosure and one 
 duplication. 25 new queries were resolved and run behind a screen whose blindness is enforced
 by the import graph. **4 cleared the productivity floor.** The reason was structural: cluster
 yield collapses in proportion to how collective the drug term is (`no_cluster` **31%** for
-single agents, **74%** for drug classes), and the mechanism under test fires only at the
-collective end (ADR-0023). **No arm disagreement was ever scored.**
+single agents, **73%** for drug classes), and the mechanism under test fires only at the
+collective end (ADR-0023). **No arm disagreement was ever scored.** *(Corrected 2026-09-12 for
+DEF-0008: 74% as first published, before papers licensed under a cited article's PMC id were
+removed. The conclusion is unchanged — still 4 of 25.)*
 
 ### The inverse also happened, once
 
@@ -178,7 +189,7 @@ gold-measured layers.
 | `biolit.cluster` | ✅ | **Gold-measured** | same-sentence **paper-pair** F1 0.6327 against gold CID relations |
 | `biolit.extract` (deterministic) | ✅ | **Gold-measured** | **sentence-selection** F1 0.6238, beat the paid arm and 17 free heuristics |
 | Licence gate | ✅ | **Rule-verified** | one enforcement point; never infers rights from PMC presence |
-| `select_stage` filtering | ✅ | **Gold-measured (weakly)** | Gate 3's confusion matrix over 83 labelled clusters; 3 false drops found and later fixed |
+| `select_stage` filtering | ✅ | **Gold-measured (weakly)** | Gate 3's confusion matrix over 83 labelled clusters; 3 false drops found and later fixed. *Note 2026-09-12 (DEF-0008): three of the 83 existed only through mis-licensed papers — none `answers` — so the 83 is what was labelled, the corpus is 80, and the three false drops are unchanged.* |
 | **Cluster ordering (ADR-0020)** | ✅ | ⛔ **Design argument + mechanical check only** | **No attributable evidence of lead improvement.** Not a null result — the instrument that would have made the reading attributable was itself defective (ADR-0021). DEF-0003's fix rests on all-tied queries falling 4/8 → 2/8 and nothing else. |
 | **Pharmacological-class matching (ADR-0022)** | ✅ | ⛔ **Design argument + mechanical check only** | Verified: it recovers the three named false drops. Everything else — keep-set composition, improved ordering — re-reads spent labels and is **descriptive**. Its ordering claim is **not validatable by this instrument at reasonable cost** (ADR-0023). |
 | **Synthesis template (ADR-0019)** | ✅ | ⚠️ **Ships because its rival's gate was undecidable** | Not "the template won a comparison." No LLM arm was ever bought. The template ships because it is the only option requiring no unjustifiable judgment call, and everything it says traces to a source sentence. |
@@ -211,12 +222,16 @@ All six are recorded rather than quietly carried. Full entries in `DEFECTS.md`.
 
 | | What | Status |
 |---|---|---|
-| **DEF-0001** | Short acronyms link to whichever concept owns them in CTD, with no context check | **Measured** — 52.3% of pairs, 64.7% of mentions wrong; 10/27 on undisclosed pairs. Not fixed: refusing these links converts wrong entities into NILs, and abstention is already the dominant failure mode |
+| **DEF-0001** | Short acronyms link to whichever concept owns them in CTD, with no context check | **Measured** — 52.4% of pairs, 67.7% of mentions wrong; 10/26 on undisclosed pairs ‡. Not fixed: refusing these links converts wrong entities into NILs, and abstention is already the dominant failure mode |
 | **DEF-0002** | A bare parent-concept mention is indistinguishable from its specific child | Not fixed; **partially routed around** downstream since ADR-0022 (chemical side, selection only) |
 | **DEF-0003** | ADR-0020's hierarchy term was unreachable — every cluster scored proximity 0 | **Fixed** structurally; **unvalidated** — mechanical check only |
 | **DEF-0004** | A link whose concept type contradicts the mention's own NER label is never refused | Not fixed. 87 of 3,696 links (2.4%); 10/10 precision on the adjudicated set. The check is free and **unreachable** — the `Linker` protocol never receives the label |
-| **DEF-0005** | Same-sentence clustering collapses on class-referring prose | Not fixed. `no_cluster` 74% on class queries vs 31% on single agents; **flat in paper count** |
+| **DEF-0005** | Same-sentence clustering collapses on class-referring prose | Not fixed. `no_cluster` 73% on class queries vs 31% on single agents ‡; **flat in paper count** |
 | **DEF-0006** | `--json-out` serialises abstracts of papers the licence gate refused | Not fixed. 7 of 8 refused papers carried a verbatim abstract. The gate is correct; its *sufficiency argument* lapsed when a third consumer of `Paper` appeared |
+
+‡ ⚠️ *Corrected 2026-09-12 (DEF-0008).* First published as 52.3% / 64.7% / 10 of 27 for DEF-0001
+and 74% for DEF-0005, before papers licensed under a cited article's PMC id were removed. **The
+conclusions are unchanged.**
 
 ---
 
