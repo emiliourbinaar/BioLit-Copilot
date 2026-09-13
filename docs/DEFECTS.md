@@ -1,7 +1,9 @@
 # Defect Log
 
-Measured defects in shipped components that are **recorded and not yet fixed**. Newest at
-top. Citable as `DEFECTS.md DEF-000N`.
+Measured defects in shipped components, **recorded whether or not they have since been fixed**
+— each entry's **Status** says which, and a fixed entry is kept so the trail stays readable.
+Newest at top. Citable as `DEFECTS.md DEF-000N`. *(Updated 2026-09-13: this first said
+"recorded and not yet fixed", which DEF-0003, DEF-0008 and DEF-0009 have since made untrue.)*
 
 This log exists because these were being recorded inside whichever ADR happened to notice
 them, which buries a standing defect in the prose of a decision about something else. An
@@ -97,7 +99,10 @@ a person to read.
 - **Date:** 2026-09-10
 - **Component:** `biolit.clients.pubmed` — `_parse_article` (the DOI) and `_pmc_id_of` (the PMC
   id, and through it the licence)
-- **Status:** **Parser FIXED 2026-09-10; consequences for past corpora NOT yet audited.** Both
+- **Status:** **Parser FIXED 2026-09-10; every corpus AUDITED 2026-09-10; published figures
+  RESTATED 2026-09-12** (see *AUDIT* and *APPLIED* below). *Updated 2026-09-13: this line first
+  read "consequences for past corpora NOT yet audited", true when written; the rest of this
+  field is as recorded on 2026-09-10.* Both
   lookups now read only the paper's own `PubmedData/ArticleIdList`, a cassette carrying a real
   `<ReferenceList>` pins that, and the parsing functions are in the fixture pin by AST subtree.
   Regenerated the same day, the four fixtures carry **0** DOIs that are not the paper's own and

@@ -264,8 +264,18 @@ differentiating work and was never allowed to be crowded out.
 
 *Update 2026-09-13:* `frontend/` now holds the evidence viewer — a static site over four
 licence-checked runs, built after the harness rather than instead of it, and published at
-https://emiliourbinaar.github.io/BioLit-Copilot/. Building it surfaced three defects: DEF-0007 through a guard
-on the generated fixtures, and DEF-0008 and DEF-0009 by rendering data for a person to read.
+https://emiliourbinaar.github.io/BioLit-Copilot/.
+
+**The viewer was not supposed to find anything, and it found two real defects.** Its spec scoped
+it as a *presentation sub-project, not a measurement question*, and its plan set the bar
+*deliberately lower than the backend's*. Rendering an attribution list for a person to read still
+exposed DEF-0008 — papers licensed under a cited article's licence, which forced an audit of all
+36 stored states across three corpora and a restatement of every published figure it moved
+before anything shipped — and DEF-0009, titles cut at their first italic word. (DEF-0007 surfaced
+there too, through a guard on the generated fixtures; its observed case turned out to be
+DEF-0008's.) None of this was planned, any more than §4's six were designed. It is the
+complementary point: §4 is about the instruments failing while they were being graded; this is
+the same discipline holding on the part that was not being graded.
 
 ---
 
