@@ -41,6 +41,40 @@ def _licence_of(article: ET.Element) -> str | None:
     return None
 
 
+def _pmcid_of(article: ET.Element) -> str | None:
+    """The article's own normalized PMCID, or None."""
+    for article_id in article.findall(".//article-id"):
+        # `pmcid` is what the service actually emits, carrying the PMC-prefixed value
+        # (`PMC8917620`). Verified against efetch db=pmc across 10 articles spanning the
+        # id range: every one emits pmcid, pmcid-ver, pmcaid and pmcaiid, and not one
+        # emits a bare `pmc`. Matching `pmc` as well would be dead surface that exists
+        # only to accommodate a fixture, which is backwards -- the fixture follows the
+        # service. The match is exact, so the `pmcid-ver` sibling (`PMC8917620.1`) is
+        # correctly skipped rather than parsed as a different article.
+        if article_id.get("pub-id-type") == "pmcid":
+            return normalize_pmcid(article_id.text)
+    return None
+
+
+def copyrights_by_pmcid(root: ET.Element) -> dict[str, str | None]:
+    """{normalized PMCID: the article's copyright notice, or None} for every article.
+
+    Creative Commons licences require keeping the copyright notice supplied with the work, so
+    attribution needs the publisher's own `<copyright-statement>` text, kept as written (only
+    surrounding whitespace is stripped). Keyed exactly as `licences_by_pmcid` keys, through the
+    same id rule, so the two maps cannot disagree about which article is which.
+    """
+    out: dict[str, str | None] = {}
+    for article in root.findall(".//article"):
+        pmcid = _pmcid_of(article)
+        if pmcid is None:
+            continue
+        statement = article.find(".//permissions/copyright-statement")
+        text = "".join(statement.itertext()).strip() if statement is not None else ""
+        out[pmcid] = text or None
+    return out
+
+
 def licences_by_pmcid(root: ET.Element) -> dict[str, str | None]:
     """{normalized PMCID: licence identifier or None} for every article in the response.
 
@@ -50,18 +84,7 @@ def licences_by_pmcid(root: ET.Element) -> dict[str, str | None]:
     """
     out: dict[str, str | None] = {}
     for article in root.findall(".//article"):
-        pmcid = None
-        for article_id in article.findall(".//article-id"):
-            # `pmcid` is what the service actually emits, carrying the PMC-prefixed value
-            # (`PMC8917620`). Verified against efetch db=pmc across 10 articles spanning the
-            # id range: every one emits pmcid, pmcid-ver, pmcaid and pmcaiid, and not one
-            # emits a bare `pmc`. Matching `pmc` as well would be dead surface that exists
-            # only to accommodate a fixture, which is backwards -- the fixture follows the
-            # service. The match is exact, so the `pmcid-ver` sibling (`PMC8917620.1`) is
-            # correctly skipped rather than parsed as a different article.
-            if article_id.get("pub-id-type") == "pmcid":
-                pmcid = normalize_pmcid(article_id.text)
-                break
+        pmcid = _pmcid_of(article)
         if pmcid is None:
             continue
         out[pmcid] = _licence_of(article)

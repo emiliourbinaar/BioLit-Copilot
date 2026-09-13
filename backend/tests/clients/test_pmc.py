@@ -1,7 +1,7 @@
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from biolit.clients.pmc import licences_by_pmcid, normalize_pmcid
+from biolit.clients.pmc import copyrights_by_pmcid, licences_by_pmcid, normalize_pmcid
 
 CASSETTES = Path(__file__).parent.parent / "cassettes"
 
@@ -32,6 +32,14 @@ def test_licence_falls_back_to_the_license_href_when_there_is_no_ali_ref():
     xlink:href -- still an identifier, never the element's prose."""
     licences = licences_by_pmcid(_root("pmc_efetch_cc_by.xml"))
     assert licences["7654321"] == "https://creativecommons.org/licenses/by-nc-nd/4.0/"
+
+
+def test_the_copyright_notice_is_read_verbatim_and_its_absence_is_none():
+    """Creative Commons licences require keeping the copyright notice supplied with the work.
+    It is the publisher's own text, kept as written; an article without one maps to None."""
+    copyrights = copyrights_by_pmcid(_root("pmc_efetch_cc_by.xml"))
+    assert copyrights == {"8917620": "© The Author(s) 2022", "7654321": None}
+    assert copyrights_by_pmcid(_root("pmc_efetch_restricted_stub.xml")) == {"1401093": None}
 
 
 def test_a_restricted_stub_yields_no_licence_rather_than_a_guess():

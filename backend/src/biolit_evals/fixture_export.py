@@ -82,6 +82,7 @@ def project_run(
             pmid=paper.pmid,
             license=paper.license,
             license_url=license_deed_url(paper.raw.get("license_url")),
+            copyright=paper.raw.get("copyright"),
             license_tier=str(paper.license_tier),
             extraction_allowed=paper.extraction_allowed,
             excerpted=paper.id in in_answer and paper.id in quoting,

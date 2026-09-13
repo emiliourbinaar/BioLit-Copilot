@@ -119,7 +119,10 @@ def _excerpted_state() -> PipelineState:
         license="cc_by_nc_nd",
         license_tier=LicenseTier.non_commercial,
         extraction_allowed=True,
-        raw={"license_url": "http://creativecommons.org/licenses/by-nc-nd/3.0/legalcode"},
+        raw={
+            "license_url": "http://creativecommons.org/licenses/by-nc-nd/3.0/legalcode",
+            "copyright": "© 2026 The Authors",
+        },
     )
     silent = quoted.model_copy(
         update={"id": "10.1/silent", "doi": "10.1/silent", "pmid": "2", "title": "Silent"}
@@ -166,6 +169,20 @@ def test_a_quoted_paper_carries_its_creators_and_the_deed_of_its_own_licence_ver
     assert quoted.license_url == "https://creativecommons.org/licenses/by-nc-nd/3.0/"
     assert quoted.excerpted is True
     assert run.papers["10.1/silent"].excerpted is False
+
+
+def test_a_stub_carries_the_publishers_copyright_notice_as_written():
+    """Creative Commons licences require keeping the copyright notice supplied with the work.
+    The stub carries the publisher's text unchanged, and None where PMC supplied none."""
+    state = _excerpted_state()
+    state.candidate_papers[1] = state.candidate_papers[1].model_copy(
+        update={"raw": {**state.candidate_papers[1].raw, "copyright": None}}
+    )
+
+    run = _project(state)
+
+    assert run.papers["10.1/quoted"].copyright == "© 2026 The Authors"
+    assert run.papers["10.1/silent"].copyright is None
 
 
 def test_project_run_refuses_an_excerpt_whose_licence_it_cannot_link_to_a_deed():

@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "statins-rhabdomyolysis",
   "query": "statins and rhabdomyolysis",
-  "generated_at": "2026-09-13T06:31:46.753722+00:00",
-  "source_pin": "3cb12fa61a694167d06d5c0ca738645b67acef0df071bc468deae6625e1ef876",
+  "generated_at": "2026-09-13T16:38:16.419342+00:00",
+  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
   "stages": [
     {
       "name": "retrieve",
@@ -425,6 +425,7 @@
       "pmid": "42702544",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -441,6 +442,7 @@
       "pmid": "42694622",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright: © 2026 The Author(s). Published by IMR Press.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -461,6 +463,7 @@
       "pmid": "42694066",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Liu, Chen, Zhong, Yu, Liu and Yu.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -478,6 +481,7 @@
       "pmid": "42633337",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Behzadi et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -493,6 +497,7 @@
       "pmid": "42583985",
       "license": "cc_by_nc_sa",
       "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "copyright": "Copyright: © 2026 Indian Journal of Pharmacology",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -510,6 +515,7 @@
       "pmid": "42549153",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2026. Published by Oxford University Press.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -528,6 +534,7 @@
       "pmid": "42473504",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Ansar et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -549,6 +556,7 @@
       "pmid": "42456875",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -568,6 +576,7 @@
       "pmid": "42445248",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Wang, Wu, Xin, Shou and Pan.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -588,6 +597,7 @@
       "pmid": "42440952",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Zhang, Wang, Wang, Ji, Yang and Li.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -606,6 +616,7 @@
       "pmid": "42396714",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2026 The Author(s). Basic & Clinical Pharmacology & Toxicology published by John Wiley & Sons Ltd on behalf of Nordic Association for the Publication of BCPT (former Nordic Pharmacological Society).",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -624,6 +635,7 @@
       "pmid": "42380684",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2026",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -650,6 +662,7 @@
       "pmid": "42379788",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "©2026 The Author(s). Published by the International Institute of Anticancer Research.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -665,6 +678,7 @@
       "pmid": "42356146",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the author.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -687,6 +701,7 @@
       "pmid": "42343053",
       "license": null,
       "license_url": null,
+      "copyright": "© The Author(s), under exclusive licence to Society of General Internal Medicine 2026. Springer Nature or its licensor (e.g. a society or other partner) holds exclusive rights to this article under a publishing agreement with the author(s) or other rightsholder(s); author self-archiving of the accepted manuscript version of this article is solely governed by the terms of such publishing agreement and applicable law.",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -714,6 +729,7 @@
       "pmid": "42296115",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 The Author(s). Clinical Cardiology published by Wiley Periodicals LLC.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -731,6 +747,7 @@
       "pmid": "42220835",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Chatterjee et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -752,6 +769,7 @@
       "pmid": "42091231",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -772,6 +790,7 @@
       "pmid": "42070773",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Author(s). British Journal of Clinical Pharmacology published by John Wiley & Sons Ltd on behalf of British Pharmacological Society.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -789,6 +808,7 @@
       "pmid": "42037837",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Ong et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -811,6 +831,7 @@
       "pmid": "42012764",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -829,6 +850,7 @@
       "pmid": "41994779",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Kaiteris et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -847,6 +869,7 @@
       "pmid": "41988628",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Lynn et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -870,6 +893,7 @@
       "pmid": "41984191",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -886,6 +910,7 @@
       "pmid": "41935388",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -904,6 +929,7 @@
       "pmid": "41890483",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Acheampong et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -922,6 +948,7 @@
       "pmid": "41887741",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -940,6 +967,7 @@
       "pmid": "41859227",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 The Juntendo Medical Society.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -960,6 +988,7 @@
       "pmid": "41835783",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Valente et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -975,6 +1004,7 @@
       "pmid": "41827485",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the author.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -996,6 +1026,7 @@
       "pmid": "41819627",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1015,6 +1046,7 @@
       "pmid": "41757155",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "Copyright © 2025; The Author(s).",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1032,6 +1064,7 @@
       "pmid": "41756106",
       "license": null,
       "license_url": null,
+      "copyright": "© The Author(s) 2026",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1048,6 +1081,7 @@
       "pmid": "41728554",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Silver et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1065,6 +1099,7 @@
       "pmid": "41726791",
       "license": null,
       "license_url": null,
+      "copyright": "© 2025 American Academy of Neurology",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1085,6 +1120,7 @@
       "pmid": "41685015",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Okoli et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1103,6 +1139,7 @@
       "pmid": "41668831",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© EFIM 2026",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1132,6 +1169,7 @@
       "pmid": "41657777",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Gazzaniga, Romio, Galuppi, Gentile, Valentino, De Toni, Foschiatti, Gringeri, D’Onghia, Menichelli, Pastori, Scatigna, Fornasari, Grosdani and Pani.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1155,6 +1193,7 @@
       "pmid": "41637232",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2026 The Author(s). Published by S. Karger AG, Basel",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1177,6 +1216,7 @@
       "pmid": "41580055",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1203,6 +1243,7 @@
       "pmid": "41568406",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Author(s). Clinical and Translational Science published by Wiley Periodicals LLC on behalf of American Society for Clinical Pharmacology and Therapeutics.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1231,6 +1272,7 @@
       "pmid": "41424321",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1261,6 +1303,7 @@
       "pmid": "41392983",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 Weninger et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1280,6 +1323,7 @@
       "pmid": "41385062",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2025",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1297,6 +1341,7 @@
       "pmid": "41368596",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2025 Liu et al.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1314,6 +1359,7 @@
       "pmid": "41322739",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025, Kothia et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1333,6 +1379,7 @@
       "pmid": "41281093",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025, Pereira et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1351,6 +1398,7 @@
       "pmid": "41266329",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© The Author(s) 2025",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1367,6 +1415,7 @@
       "pmid": "41221741",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1387,6 +1436,7 @@
       "pmid": "41215490",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© Am J Case Rep, 2025",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1406,6 +1456,7 @@
       "pmid": "41182102",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1423,6 +1474,7 @@
       "pmid": "41181639",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2025 Abbas et al.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1439,6 +1491,7 @@
       "pmid": "41088598",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025 the Author(s). Published by Wolters Kluwer Health, Inc.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1517,6 +1570,7 @@
       "pmid": "41045938",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1534,6 +1588,7 @@
       "pmid": "41037507",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1551,6 +1606,7 @@
       "pmid": "40973549",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1567,6 +1623,7 @@
       "pmid": "40955993",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
