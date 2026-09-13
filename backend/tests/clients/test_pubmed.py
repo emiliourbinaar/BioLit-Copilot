@@ -41,6 +41,36 @@ async def test_efetch_classifies_from_the_permissions_block(settings):
 
 
 @respx.mock
+async def test_the_publishers_licence_url_is_kept_because_the_token_drops_its_version(settings):
+    """`cc_by` names a tier; attribution must link the licence actually granted, and only
+    the publisher's URL says which version that is."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_pmc_oa.xml"))
+    )
+    respx.get(EFETCH, params__contains={"db": "pmc"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pmc_efetch_cc_by.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["11111111"])
+    assert papers[0].raw["license_url"] == "https://creativecommons.org/licenses/by/4.0/"
+
+
+@respx.mock
+async def test_the_publishers_copyright_notice_is_kept_for_attribution(settings):
+    """Creative Commons licences require keeping the copyright notice supplied with the work,
+    and the licence lookup is the one place the pipeline reads the publisher's permissions."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_pmc_oa.xml"))
+    )
+    respx.get(EFETCH, params__contains={"db": "pmc"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pmc_efetch_cc_by.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["11111111"])
+    assert papers[0].raw["copyright"] == "© The Author(s) 2022"
+
+
+@respx.mock
 async def test_a_restricted_stub_is_refused_not_permitted(settings):
     """The PMC1401093 shape. The dangerous failure here is over-permitting, so this pins
     the refusal rather than merely pinning that something was returned."""
@@ -112,6 +142,31 @@ async def test_an_http_error_from_the_permissions_call_refuses_rather_than_crash
 
 
 @respx.mock
+async def test_a_papers_identifiers_come_from_its_own_id_list_never_from_its_references(
+    settings,
+):
+    """⛔ DEF-0008, a RIGHTS defect. Searching the whole article with `.//ArticleIdList` read a
+    CITED paper's DOI as this paper's own (41.5% of 236 fixture papers), and -- for a paper with
+    no PMC record -- a cited article's PMC id, under whose licence the paper was then allowed.
+
+    The db=pmc route is deliberately UNMOCKED: respx fails any unmocked request, so a licence
+    lookup made under a reference's PMC id fails this test rather than passing unnoticed.
+    """
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_with_references.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["44444444"])
+    paper = papers[0]
+
+    assert paper.doi == "10.1000/the-papers-own"
+    assert paper.id == "10.1000/the-papers-own"
+    assert paper.full_text_pointer is None
+    assert paper.license is None
+    assert paper.extraction_allowed is False
+
+
+@respx.mock
 async def test_efetch_no_pmc_is_abstract_only(settings):
     respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
         return_value=httpx.Response(200, text=_cassette("pubmed_efetch_no_pmc.xml"))
@@ -125,6 +180,37 @@ async def test_efetch_no_pmc_is_abstract_only(settings):
     # Unstructured abstract (single unlabelled AbstractText) must pass through
     # unchanged: plain text, no label prefix, no whitespace changes.
     assert paper.abstract == "Open abstract."
+
+
+@respx.mock
+async def test_a_title_with_inline_markup_is_read_whole_not_cut_at_the_first_tag(settings):
+    """PubMed titles carry inline markup (`<i>in vitro</i>`, `CO<sub>2</sub>`). `findtext`
+    returns only the text BEFORE the first child element, so attribution published titles such
+    as "...in human proximal tubular" -- found by screenshot on the evidence viewer."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_title_markup.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["55555555"])
+    assert papers[0].title == (
+        "Biomarkers in human proximal tubular in vitro models of injury: a CO2 review."
+    )
+
+
+@respx.mock
+async def test_a_group_author_is_a_creator_and_is_not_dropped(settings):
+    """Attribution names the creators, and a `<CollectiveName>` author IS one -- a study group
+    or consortium. Reading only LastName/ForeName silently omitted them from every citation."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_collective_author.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["44444444"])
+    assert [author.name for author in papers[0].authors] == [
+        "Jane Doe",
+        "Example Trial Study Group",
+        "Roe",
+    ]
 
 
 @respx.mock

@@ -1,0 +1,162 @@
+/*
+ * Palette: haematoxylin and eosin, the stains of a histology slide. Eosin marks what a stage
+ * DROPPED; haematoxylin marks what it only NOTED and passed through. The two must never be
+ * confused -- conflating them once made the first rendered ledger misreport three of seven
+ * stages -- so they are separated by hue, not by a label alone.
+ */
+:root {
+  --paper: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #1c2331;
+  --ink-2: #4b5365;
+  --ink-3: #737b8e;
+  --rule: #d6dbe3;
+  --rule-strong: #b9c0cc;
+  --eosin: #a93259;
+  --eosin-2: #d4668b;
+  --eosin-wash: #f8e3ea;
+  --hema: #4a3d8f;
+  --hema-wash: #e7e3f5;
+  --kept: #2a3346;
+
+  --serif: "Newsreader Variable", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --measure: 42rem;
+  --wide: 70rem;
+  --gutter: clamp(1rem, 4vw, 2.75rem);
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1.125rem;
+  line-height: 1.6;
+  font-optical-sizing: auto;
+  font-variant-numeric: lining-nums;
+}
+
+a {
+  color: var(--hema);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--hema);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--mono);
+  font-size: 0.8em;
+}
+
+code {
+  background: var(--hema-wash);
+  color: var(--ink);
+  padding: 0.05em 0.3em;
+  border-radius: 3px;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 500;
+  line-height: 1.15;
+  margin: 0;
+  text-wrap: balance;
+}
+
+h2 {
+  font-size: 1.75rem;
+}
+
+h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+p {
+  margin: 0;
+}
+
+.wrap {
+  max-width: var(--wide);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.prose {
+  max-width: var(--measure);
+}
+
+.prose > * + * {
+  margin-top: 0.9em;
+}
+
+.quiet {
+  color: var(--ink-2);
+}
+
+.num {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.section {
+  margin-top: 4.5rem;
+}
+
+.section-head {
+  display: grid;
+  gap: 0.6rem;
+  margin-bottom: 1.75rem;
+  max-width: var(--measure);
+}
+
+.section-head p {
+  color: var(--ink-2);
+  font-size: 1rem;
+}
+
+/* An honesty qualifier: part of the content, never a footnote. */
+.caveat {
+  border-left: 3px solid var(--rule-strong);
+  padding: 0.1rem 0 0.1rem 0.9rem;
+  color: var(--ink-2);
+  font-size: 0.98rem;
+  max-width: var(--measure);
+}
+
+.caveat + .caveat {
+  margin-top: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}

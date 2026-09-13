@@ -406,3 +406,119 @@ def test_select_stage_keeps_a_cluster_that_matches_only_through_its_pharmacologi
     assert kept == [member]
     assert report.dropped == {"off_query": 1}
     assert "pharmacological" in (report.note or "").lower()
+
+
+def test_two_papers_sharing_an_id_are_counted_as_a_drop_so_the_ledger_still_balances():
+    """DEF-0007, the regression test. `Paper.id` is `doi or pmid` and PubMed returns duplicate
+    DOIs, so two DISTINCT papers can arrive under one key. The records dict kept the last and
+    the loss appeared NOWHERE: on the frozen statins query, 58 retrieved minus 17 refused should
+    have left 41, and 40 records existed.
+
+    ⚠️ It must be a DROP, not a NOTE. `noted` is pass-through by definition, so counting it
+    there would leave `n_in - sum(dropped) == n_out` still false -- the invariant `StageReport`'s
+    own docstring advertises as checkable. The paper really is gone from every later stage.
+
+    The assertion on the arithmetic is the point of the test; the count is how it gets there.
+    """
+    shared = Paper(
+        id="10.1/dup",
+        source=Source.pubmed,
+        title="First paper with this DOI",
+        abstract="Metformin caused acidosis in this cohort.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = shared.model_copy(update={"title": "Second, distinct paper, same DOI"})
+
+    outcome = records_stage([shared, twin], {"10.1/dup": []})
+
+    gate = outcome.licence
+    assert gate.dropped.get("duplicate_paper_id") == 1
+    assert gate.n_in - sum(gate.dropped.values()) == gate.n_out, "the ledger must balance"
+    assert len(outcome.records) == 1
+
+
+def test_a_collision_alongside_a_refusal_counts_each_loss_once_and_only_once():
+    """⚠️ CLOSES THE GAP THE FIRST DEF-0007 TEST LEFT. That test had no refused paper, so the
+    plausible-but-wrong fix `collapsed = len(papers) - len(records)` would have passed it --
+    while being wrong on exactly the real case that produced the defect, where a refusal and a
+    collision occur in the same run (statins: 58 retrieved, 17 refused, 1 collapsed).
+
+    A refused paper never reaches the records dict, so it must be charged to the refusal and
+    NOT to the collapse. Three papers, two ids, one refusal: 3 - 1 refused - 1 collapsed = 1.
+    """
+    allowed = Paper(
+        id="10.1/dup",
+        source=Source.pubmed,
+        title="Allowed, first",
+        abstract="Metformin caused acidosis.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = allowed.model_copy(update={"title": "Allowed, second, same DOI"})
+    refused = allowed.model_copy(
+        update={
+            "id": "10.1/refused",
+            "title": "Refused",
+            "license": None,
+            "license_tier": LicenseTier.unknown,
+            "extraction_allowed": False,
+        }
+    )
+
+    gate = records_stage([allowed, twin, refused], {"10.1/dup": [], "10.1/refused": []}).licence
+
+    assert gate.dropped == {"licence_refused:none": 1, "duplicate_paper_id": 1}
+    assert gate.n_in - sum(gate.dropped.values()) == gate.n_out == 1
+
+
+def test_the_ledger_note_claims_a_collapse_only_when_one_happened():
+    """A note is a claim about THIS run. An unconditional sentence about the DEF-0007 collapse
+    asserted on every run that two papers had collapsed -- false on three of four generated
+    fixtures, and published on a public page before this was caught.
+    """
+    clean = Paper(
+        id="10.1/a",
+        source=Source.pubmed,
+        title="Only paper",
+        abstract="Metformin caused acidosis.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = clean.model_copy(update={"id": "10.1/a", "title": "Same id"})
+
+    without = records_stage([clean], {"10.1/a": []}).licence
+    with_dup = records_stage([clean, twin], {"10.1/a": []}).licence
+
+    assert "DEF-0007" not in (without.note or ""), "no collapse, no claim about one"
+    assert "DEF-0007" in (with_dup.note or "")
+
+
+def test_the_collapse_note_states_what_the_stage_saw_not_a_cause_it_cannot_know():
+    """The note once said "two papers shared a DOI". The only observed case was two papers with
+    DIFFERENT DOIs that the client had read from their reference lists (DEF-0008). This stage
+    sees two papers under one `Paper.id`; why they share it is decided upstream and is not
+    something it can vouch for, so it must not narrate one.
+    """
+    paper = Paper(
+        id="10.1/a",
+        source=Source.pubmed,
+        title="One",
+        abstract="Metformin caused acidosis.",
+        text_type=TextType.abstract_only,
+        license="cc_by",
+        license_tier=LicenseTier.open,
+        extraction_allowed=True,
+    )
+    twin = paper.model_copy(update={"title": "Two"})
+
+    note = records_stage([paper, twin], {"10.1/a": []}).licence.note or ""
+
+    assert "Paper.id" in note
+    assert "DOI" not in note, "the stage cannot know the shared id was a genuine DOI"

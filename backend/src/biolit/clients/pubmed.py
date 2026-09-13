@@ -6,7 +6,7 @@ from xml.etree import ElementTree as ET
 import httpx
 
 from biolit.clients.http import RetryConfig, request_with_retry
-from biolit.clients.pmc import licences_by_pmcid, normalize_pmcid
+from biolit.clients.pmc import copyrights_by_pmcid, licences_by_pmcid, normalize_pmcid
 from biolit.config import Settings
 from biolit.domain.enums import Source, TextType
 from biolit.domain.licensing import (
@@ -46,11 +46,25 @@ class SearchResult:
     concept_terms: tuple[str, ...]
 
 
-def _pmc_id_of(article: ET.Element) -> str | None:
-    for article_id in article.findall(".//ArticleIdList/ArticleId"):
-        if article_id.get("IdType") == "pmc":
-            return normalize_pmcid(article_id.text)
+#: ⛔ DEF-0008. The article's OWN id list, as a direct path -- never `.//ArticleIdList`. PubMed
+#: carries one ArticleIdList per CITED REFERENCE under `PubmedData/ReferenceList`, and a
+#: descendant search read those as the paper's own: a cited paper's DOI became this paper's
+#: (41.5% of 236 fixture papers), and a cited article's PMC id became the one this paper was
+#: LICENSED under whenever it had none of its own. A rights defect, not an identity quirk.
+_OWN_ARTICLE_IDS = "PubmedData/ArticleIdList/ArticleId"
+
+
+def _own_id(article: ET.Element, id_type: str) -> str | None:
+    """This paper's own identifier of `id_type`, or None. References are never consulted."""
+    for article_id in article.findall(_OWN_ARTICLE_IDS):
+        if article_id.get("IdType") == id_type and article_id.text:
+            return article_id.text
     return None
+
+
+def _pmc_id_of(article: ET.Element) -> str | None:
+    pmc = _own_id(article, "pmc")
+    return normalize_pmcid(pmc) if pmc else None
 
 
 class PubMedClient:
@@ -121,8 +135,8 @@ class PubMedClient:
         root = ET.fromstring(resp.text)
         articles = root.findall(".//PubmedArticle")
         pmc_ids = sorted({p for article in articles if (p := _pmc_id_of(article))})
-        licences = await self._fetch_licences(pmc_ids)
-        return [self._parse_article(article, licences) for article in articles]
+        licences, copyrights = await self._fetch_permissions(pmc_ids)
+        return [self._parse_article(article, licences, copyrights) for article in articles]
 
     async def efetch_abstracts(self, pmids: list[str]) -> dict[str, tuple[str | None, int | None]]:
         """{pmid: (abstract, publication year)} for consumers that judge abstracts only.
@@ -133,7 +147,7 @@ class PubMedClient:
         id -- which at NCBI's unkeyed 3 req/s is the dominant cost of a multi-thousand-paper
         fetch. (It was also fatal when this was written: the dead OA service answered 404 for
         any article outside the OA subset and `request_with_retry` raises for status. That is
-        no longer true -- `_fetch_licences` degrades to an empty map instead -- so cost is now
+        no longer true -- `_fetch_permissions` degrades to empty maps instead -- so cost is now
         the whole reason, not merely the surviving one.)
 
         Year comes from JournalIssue/PubDate/Year and may be None; it is here because the
@@ -160,16 +174,19 @@ class PubMedClient:
             out[pmid] = (self._parse_abstract(article), year)
         return out
 
-    async def _fetch_licences(self, pmc_ids: list[str]) -> dict[str, str | None]:
-        """One batched request for every PMC id in the response, or none at all.
+    async def _fetch_permissions(
+        self, pmc_ids: list[str]
+    ) -> tuple[dict[str, str | None], dict[str, str | None]]:
+        """({pmcid: licence}, {pmcid: copyright notice}) from one batched request, or none at all.
 
-        Degrades to an empty map on any HTTP failure, which refuses rather than crashing.
+        Both maps come from the same `<permissions>` blocks of the same response. Degrades to
+        empty maps on any HTTP failure, which refuses rather than crashing.
         A licence lookup that cannot answer must never be read as permission, and must
         never take the whole fetch down with it -- which is exactly what the dead OA
         endpoint did.
         """
         if not pmc_ids:
-            return {}
+            return {}, {}
         try:
             resp = await request_with_retry(
                 self._client,
@@ -179,15 +196,24 @@ class PubMedClient:
                 params=self._params(db="pmc", id=",".join(pmc_ids), retmode="xml"),
             )
         except httpx.HTTPError:
-            return {}
+            return {}, {}
         try:
-            return licences_by_pmcid(ET.fromstring(resp.text))
+            root = ET.fromstring(resp.text)
+            return licences_by_pmcid(root), copyrights_by_pmcid(root)
         except ET.ParseError:
-            return {}
+            return {}, {}
 
-    def _parse_article(self, article: ET.Element, licences: Mapping[str, str | None]) -> Paper:
+    def _parse_article(
+        self,
+        article: ET.Element,
+        licences: Mapping[str, str | None],
+        copyrights: Mapping[str, str | None],
+    ) -> Paper:
         pmid = article.findtext(".//MedlineCitation/PMID") or ""
-        title = article.findtext(".//Article/ArticleTitle") or ""
+        # itertext, not findtext: titles carry inline markup (`<i>in vitro</i>`), and findtext
+        # stops at the first child element, truncating the title attribution must name whole.
+        title_el = article.find(".//Article/ArticleTitle")
+        title = "".join(title_el.itertext()) if title_el is not None else ""
         abstract = self._parse_abstract(article)
         journal = article.findtext(".//Journal/Title")
         year_text = article.findtext(".//JournalIssue/PubDate/Year")
@@ -197,8 +223,12 @@ class PubMedClient:
         for author in article.findall(".//AuthorList/Author"):
             last = author.findtext("LastName")
             fore = author.findtext("ForeName")
+            collective = (author.findtext("CollectiveName") or "").strip()
             if last or fore:
                 authors.append(Author(name=" ".join(p for p in (fore, last) if p)))
+            elif collective:
+                # A study group or consortium is a creator too; attribution must name it.
+                authors.append(Author(name=collective))
 
         mesh = [
             el.text
@@ -206,13 +236,8 @@ class PubMedClient:
             if el.text
         ]
 
-        doi = None
+        doi = _own_id(article, "doi")
         pmc_id = _pmc_id_of(article)
-
-        for aid in article.findall(".//ArticleIdList/ArticleId"):
-            id_type = aid.get("IdType")
-            if id_type == "doi":
-                doi = aid.text
 
         raw_licence = licences.get(pmc_id) if pmc_id else None
         token, tier = normalize_license(license_token_from_url(raw_licence))
@@ -239,7 +264,15 @@ class PubMedClient:
             license=token,
             license_tier=tier,
             extraction_allowed=extraction_allowed_for(tier),
-            raw={"pmid": pmid, "pmc_id": pmc_id},
+            # `license_url` is kept because `license` is a version-less token: attribution
+            # must link the licence version actually granted, which only this URL names.
+            raw={
+                "pmid": pmid,
+                "pmc_id": pmc_id,
+                "license_url": raw_licence,
+                # CC licences require keeping the copyright notice supplied with the work.
+                "copyright": copyrights.get(pmc_id) if pmc_id else None,
+            },
         )
 
     @staticmethod

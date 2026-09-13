@@ -1,0 +1,106 @@
+---
+/**
+ * Defects pinned to this run. Every one comes from `fixture.findings`, which the Python
+ * generator refuses to write unless its anchor resolves against this run's own data. The
+ * headline is DEFECTS.md's title and the reason is quoted from that entry, never paraphrased.
+ */
+import { inlineMarkdown } from "../lib/markdown";
+import { parseAnchor, type FixtureRun } from "../lib/fixtures";
+import { clusterDomId } from "../lib/dom";
+import { docUrl } from "../lib/site";
+
+interface Props {
+  run: FixtureRun;
+}
+
+const { run } = Astro.props;
+const base = import.meta.env.BASE_URL;
+
+const findings = run.findings.map((finding) => {
+  const anchor = parseAnchor(finding.anchor);
+  const where =
+    anchor.kind === "stage"
+      ? { href: `#stage-${anchor.stage}`, text: `${anchor.stage}, dropped ${anchor.reason}` }
+      : {
+          href: `#${clusterDomId(anchor.key)}`,
+          text: run.clusters.find((c) => c.key === anchor.key)?.concept_names.join(" and ") ?? anchor.key,
+        };
+  return { finding, where };
+});
+---
+
+{
+  findings.length === 0 ? (
+    <p class="none">
+      No measured defect is visible in this run's data. Defects measured on other corpora are
+      listed on the <a href={`${base}findings/`}>findings page</a> and are not attached to runs
+      that do not show them.
+    </p>
+  ) : (
+    <div class="findings">
+      {findings.map(({ finding, where }) => (
+        <aside class="finding" id={`finding-${finding.defect_id}`} aria-label={finding.defect_id}>
+          <p class="where">
+            <a class="id" href={`${base}findings/#${finding.defect_id}`}>
+              {finding.defect_id}
+            </a>{" "}
+            is visible in this run at <a href={where.href}>{where.text}</a>
+          </p>
+          <h3>{finding.headline}</h3>
+          <blockquote cite={docUrl("DEFECTS.md")}>
+            <p set:html={inlineMarkdown(finding.reason)} />
+          </blockquote>
+          <p class="source">
+            Quoted from <a href={docUrl("DEFECTS.md")}>DEFECTS.md</a>.
+          </p>
+        </aside>
+      ))}
+    </div>
+  )
+}
+
+<style>
+  .none {
+    color: var(--ink-2);
+    max-width: var(--measure);
+    font-size: 1rem;
+  }
+  .findings {
+    display: grid;
+    gap: 1rem;
+  }
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--eosin);
+    padding: 1.1rem 1.4rem 1.2rem;
+    max-width: 52rem;
+    display: grid;
+    gap: 0.6rem;
+    scroll-margin-top: 1.5rem;
+  }
+  .where {
+    font-size: 0.95rem;
+    color: var(--ink-2);
+  }
+  .id {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--eosin);
+  }
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 500;
+  }
+  blockquote {
+    margin: 0;
+    padding-left: 1rem;
+    border-left: 2px solid var(--rule);
+    font-size: 1rem;
+  }
+  .source {
+    font-size: 0.85rem;
+    color: var(--ink-3);
+  }
+</style>

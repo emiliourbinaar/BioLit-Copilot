@@ -14,7 +14,291 @@ a defect does the most damage, because everything downstream — pairing, cluste
 synthesis — consumes `canonical_id` and has no way to second-guess it. **DEF-0005 is the first
 entry in the clustering layer**, and it is there because the loss it measures happens *after*
 linking succeeds. **DEF-0006 is the first that is not about the system being wrong at all** — it
-is about the system disclosing something it had correctly declined to use.
+is about the system disclosing something it had correctly declined to use. **DEF-0007 is
+the first found by a GUARD rather than by reading** — six code reviews passed over the code
+without seeing it, because it is invisible in any single module and only shows up in
+generated data. **DEF-0008 is the first in the retrieval client, and the first found by
+rendering data for a human to read** — an attribution list printed DOIs from the wrong journals
+and the wrong decades. It is also DEF-0007's actual cause.
+
+---
+
+## DEF-0008 — The PubMed client reads a paper's DOI and PMC id from its reference list: a cited paper's identifiers become the citing paper's own, including the one that decides its licence
+
+- **Date:** 2026-09-10
+- **Component:** `biolit.clients.pubmed` — `_parse_article` (the DOI) and `_pmc_id_of` (the PMC
+  id, and through it the licence)
+- **Status:** **Parser FIXED 2026-09-10; consequences for past corpora NOT yet audited.** Both
+  lookups now read only the paper's own `PubmedData/ArticleIdList`, a cassette carrying a real
+  `<ReferenceList>` pins that, and the parsing functions are in the fixture pin by AST subtree.
+  Regenerated the same day, the four fixtures carry **0** DOIs that are not the paper's own and
+  **0** allowed papers without a PMC record of their own, across 237 papers, and `statins`
+  no longer collapses any paper. Every other corpus this client has touched is audited
+  separately, and no published number changes until that audit reports.
+- **Severity:** ⛔ **RIGHTS.** Papers were licensed on **another article's** Creative Commons
+  licence and their abstracts quoted verbatim. That is the exact failure the licence gate exists
+  to prevent, reached upstream of the gate, where no downstream check could see it. It also
+  corrupts attribution (the DOI a reader would cite) and paper identity (`Paper.id`).
+
+### What was observed
+
+Both lookups search the WHOLE `PubmedArticle` element:
+
+```python
+for aid in article.findall(".//ArticleIdList/ArticleId"):   # pubmed.py:212
+    if aid.get("IdType") == "doi":
+        doi = aid.text                                      # last match wins
+```
+
+`.//` descends into every `ArticleIdList` under the article, and PubMed's XML carries one per
+**cited reference** (`PubmedData/ReferenceList/Reference/ArticleIdList`) after the article's own
+(`PubmedData/ArticleIdList`). So:
+
+- **DOI — last match wins.** Any paper whose reference list contains a DOI gets the DOI of the
+  **last cited reference that has one**, not its own.
+- **PMC id — first match wins** (`_pmc_id_of`, `pubmed.py:50`). Correct when the paper has a PMC
+  record, because its own id list comes first. When it has **none**, the first cited reference
+  with a PMC id supplies one — and that id is what `_fetch_licences` looks up, so the paper is
+  licensed on the **cited article's** licence.
+
+**Measured 2026-09-10 on the 236 papers of the four evidence-viewer fixtures**, each compared
+with its own `PubmedData/ArticleIdList` fetched from PubMed:
+
+| | |
+|---|---|
+| DOI is a **cited paper's**, not the paper's own | **98 of 236 (41.5%)** — every one of the 98 had a DOI of its own |
+| no PMC record of its own, given a **cited article's** PMC id | **11** |
+| of those 11, **allowed** through the licence gate on the borrowed licence | **10** |
+| of those 10, **quoted verbatim** in a committed fixture's answer | **5** |
+
+### Why it matters
+
+- **Rights.** Five abstracts were quoted under a licence that belongs to a different article.
+  The fixtures carrying them had been pushed to the `feat/evidence-viewer-python` branch; that
+  branch's history was rewritten on 2026-09-10 to remove every fixture version, and `master`
+  never carried them. The orphaned commits stay reachable by direct SHA on GitHub until GitHub
+  garbage-collects them, which is outside this repository's control.
+- **Attribution.** Where a quote was legitimately licensed, the DOI shown for it was a cited
+  paper's 41.5% of the time — the attribution the licence requires pointed at the wrong work.
+- **Identity.** `Paper.id` is `doi or pmid`, so two papers whose reference lists end with the
+  same DOI get the same id and collapse into one. **That is DEF-0007's observed collision**:
+  PMIDs 42694066 and 42440952 (own DOIs `10.3389/fphar.2026.1895524` and
+  `10.3389/fphar.2026.1852621`) both end their reference lists with `10.3389/fphar.2024.1445324`.
+- `full_text_pointer` is built from the same PMC id, so it can point at the wrong article.
+
+### Why nothing caught it, which is the transferable part
+
+**Every test input was trimmed below the shape that triggers it.** None of the five PubMed
+cassettes under `tests/cassettes/` contains a `<ReferenceList>`, so `.//` and a direct child
+path return the same answer on all of them — the tests pass either way and pin nothing about
+which `ArticleIdList` is read. The fixture pin also excluded this module on purpose
+(`fixture_pin.py`, gap 1), with the upgrade path written down: *"If it ever bites, hash that
+function's AST subtree alone."* It has now bitten.
+
+### ⭐ AUDIT 2026-09-10 — every corpus this client built, and what rests on a borrowed licence
+
+`biolit_evals/identifier_audit.py`, run log `evals/identifier_audit_runs.jsonl`. Each stored
+paper records the PMC id its licence was actually looked up under (`raw.pmc_id`); the audit
+compares that, and the stored DOI, with the paper's own identifiers fetched fresh from PubMed.
+**Corpora built with `efetch_abstracts` (contradiction, Alamri, and the domain annotation sample
+drawn from it) never read a DOI or PMC id and are out of scope.**
+
+| Corpus | Papers | Allowed | **Wrongly allowed** | DOI not own | Id collisions |
+|---|---|---|---|---|---|
+| frozen 8-query | 473 | 285 | **15 (5.3%)** | 197 (41.6%) | 3 |
+| 25-query screen | 991 | 529 | **34 (6.4%)** | 437 (44.1%) | 2 |
+| 3-query scale test | 449 | 233 | **14 (6.0%)** | 183 (40.8%) | 0 |
+
+**Every wrongly-allowed paper produced a record** (15, 34 and 14 respectively): a borrowed
+licence is not an accounting curiosity, it is text the gate would have refused.
+
+**What the published numbers would be without those papers.** Recomputed by removing their
+records and re-running the real stages; the stored figures reproduce exactly, which is what
+makes the corrected ones comparable.
+
+| Published | As published | Without mis-licensed papers | Verdict |
+|---|---|---|---|
+| frozen corpus clusters (ADR-0020) | **83** | **80** | moves |
+| kept without ADR-0022 / with it (ADR-0022) | **70 → 75** | **67 → 72** | both move; **the +5 recovery is identical**, and all five recovered `Atorvastatin` clusters are the same ones |
+| screen queries clearing the floor (ADR-0023) | **4 of 25** | **4 of 25** | unchanged |
+| `no_cluster` attrition (DEF-0005) | 59.7% | 59.5% | unchanged |
+| acronym census (DEF-0001) | **23 of 44 pairs (52.3%)**, **132 of 204 mentions (64.7%)** | **22 of 42 (52.4%)**, **128 of 189 (67.7%)** | conclusion unchanged; the mention rate rises 3 points |
+| relevance rows (ADR-0020/0021) | 91 rows | **7 rows** contain a mis-licensed paper (labels: 4 background, 2 answers, 1 off_topic) | rows stand, provenance flagged |
+| Gate A scored clusters (ADR-0019) | 30 | **4** contain one | conclusion is structural, unaffected |
+
+⭐ **APPLIED 2026-09-12, on the project owner's decision to annotate and update.** Each figure
+above is restated in place in RETROSPECTIVE.md, EVAL_REPORT.md, README.md, ARCHITECTURE.md,
+DEF-0001, DEF-0005 and ADR-0020/0022/0023, with a dated note citing this entry, the original
+value, and the statement that the conclusion is unchanged. Dependent figures on the same lines
+moved with them and were recomputed the same way: ADR-0023's rankable pairs **593 → 582** and
+**353 → 303** and its strata table; the label mix of the kept set (**43 of 70 → 41 of 67**
+`background`, **3 of 83 → 2 of 80** `off_topic`); the census's disclosure split (**10 / 27 →
+10 / 26** undisclosed). The three clusters that existed only through mis-licensed papers are
+`Cisplatin | Wounds and Injuries`, `Isotretinoin | Intracranial Hypertension` and `Warfarin |
+Atrial Fibrillation`; none was labelled `answers`.
+
+**Left as measured, deliberately:** facts about what an annotator actually labelled (83 real
+rows, 44 pairs and 204 mentions adjudicated) — restating those would misdescribe the instrument;
+and figures that could not be recomputed because the thing measured is no longer in code
+(ADR-0020's rejected narrowing filter, "33 of 83" and "empty on 2 of 8"), each carrying a note
+saying so. **Not restated, and measured rather than left uncertain:** DEF-0004's figures — 87 of
+3,696 becomes 80 of 3,501, and its ten flagged pairs become nine, all still `wrong` (`BLM` drops
+out) — are recorded in DEF-0004's own entry as a dated cross-reference, with its tables left as
+first published. **Not restated and not recomputed:** Gate 4's lead and inversion counts, and
+DEF-0003's all-tied 4 → 2 of 8 — both on the same corpus.
+
+### What is NOT claimed
+
+The audit judges a paper by whether its licence was looked up under its OWN PMC id, not by
+re-reading what that licence said; a paper allowed under a borrowed id might coincidentally
+have carried a permissive licence of its own. One screen PMID (42633983) no longer returns a
+PubMed record and is reported as unverifiable rather than clean.
+
+---
+
+## DEF-0007 — Two retrieved papers given the same `Paper.id` silently become one record, and no stage says so: the ledger stops balancing and a paper disappears
+
+- **Date:** 2026-09-09
+- **Component:** `biolit.pipeline.stages.records_stage` — the collapse; `biolit.clients.pubmed`
+  supplies the colliding id, **by reading it from the papers' reference lists (DEF-0008)**
+- **Status:** **Accounting half FIXED 2026-09-09; rights half (the addendum below) NOT fixed.**
+  When two retrieved papers are given the same id the second still overwrites the first, but
+  `records_stage` now counts the collapse in `dropped` as `duplicate_paper_id`, so the ledger
+  balances and the lost paper is visible rather than silent. ⚠️ Corrected 2026-09-10: this
+  line read "Recorded, **not fixed**" after the accounting fix had landed, contradicting the
+  severity line below it.
+- ⛔ **Cause CORRECTED 2026-09-10.** This entry originally said the two papers **shared a DOI**.
+  They did not. The collision was manufactured by **DEF-0008**: both papers' reference lists end
+  with the same DOI, and the client read that as each paper's own. The ledger arithmetic below
+  was real and the accounting fix stands; the explanation of where the shared id came from was
+  wrong, and is kept below, struck through by this note, rather than silently rewritten.
+- **Severity:** Silent data loss, plus a self-contradicting ledger. Unlike DEF-0001 through
+  DEF-0005 this is not a wrong answer — it is a **missing** one that the accounting was supposed
+  to make impossible to miss. ⛔ **And see the addendum: the same collision has a second site
+  that is a LIVE RIGHTS RISK, not an accounting one** — refused text reaching an allowed paper's
+  record. The accounting half is fixed; that half is not.
+
+### What was observed
+
+`Paper.id` is `doi or pmid`. `records_stage` accumulates into a dict keyed on it:
+
+```python
+records[paper.id] = record          # stages.py:119
+```
+
+When two retrieved papers are given the same id, the second overwrites the first. The
+`licence_gate` report is then built from that collapsed dict:
+
+```python
+n_in=len(papers), n_out=len(records), dropped=refused   # refusals only
+```
+
+so the paper vanishes from `n_out` without being counted anywhere in `dropped`.
+
+**Measured on `statins and rhabdomyolysis`, reproduced on two independent retrievals a day
+apart:**
+
+| | |
+|---|---|
+| retrieved | 58 |
+| licence-refused | 17 |
+| should survive | **41** |
+| records actually built | **40** |
+| stage stubs emitted | 57 for 58 retrieved |
+
+⚠️ **`StageReport`'s own docstring promises this cannot happen:** *"Where the two units match,
+the ledger is checkable: `n_in - sum(dropped) == n_out`."* On this run it is 58 − 17 = 41 ≠ 40.
+The invariant the ledger advertises is false, and nothing in the pipeline noticed.
+
+⛔ **Where the shared id came from — CORRECTED 2026-09-10 (DEF-0008).** The two papers were
+PMIDs 42694066 and 42440952, both in *Frontiers in pharmacology*, with distinct DOIs of their
+own (`10.3389/fphar.2026.1895524`, `10.3389/fphar.2026.1852621`). Each ends its reference list
+with `10.3389/fphar.2024.1445324`, and the client read that cited DOI as each paper's own. Keyed
+on the papers' own DOIs, the same retrieval has **no** collision. "Reproduced on two independent
+retrievals a day apart" is still true, and is explained by the same two papers being retrieved
+both times.
+
+### Why it matters beyond the arithmetic
+
+**A paper that passed the licence gate is dropped from the answer with no record of it.** Every
+downstream count — clusters, cited papers, the rendered answer — is computed over 40 papers
+while the ledger claims 41 survived. The stage ledger exists precisely so that a reader can
+account for every paper; this is the one loss it cannot see.
+
+**It was found by a guard, not by review.** Six independent code reviews passed over the code
+without catching it, because it is invisible in any single module: the id policy is in
+`clients/`, the collapse is in `stages.py`, and the contradiction is only observable in
+generated data. A whole-branch reviewer found it in a committed artifact, and an assertion added
+afterwards reproduced it on fresh data.
+
+### What is NOT claimed
+
+The frequency is unmeasured. It was seen twice on one query out of four. ⚠️ **An earlier
+version of this paragraph said "duplicate DOIs in PubMed are not rare". That was an assertion,
+not a measurement, and the one instance it was explaining turned out not to be a duplicate DOI
+at all (DEF-0008).** Whether PubMed ever returns two records carrying the same DOI of their own
+is unmeasured; in the 2026-09-10 audit of 236 fixture papers it happened zero times. **The last
+write wins**, so which paper survives is
+determined by retrieval order rather than by any rule — that is also unexamined, and no claim is
+made that keeping the last is better or worse than keeping the first.
+
+### ⛔ ADDENDUM 2026-09-09 — a SECOND collision site: a LIVE RIGHTS RISK IN PRODUCTION, not an accounting bug
+
+⚠️ **Severity, stated plainly because the rest of this entry is about arithmetic and this is
+not.** The defect above miscounts. **This one can put a licence-refused paper's verbatim text
+inside an allowed paper's record**, which is a rights and attribution failure of the same class
+as DEF-0006 — the thing the licence gate exists to make impossible. It is unreachable in the
+evidence-viewer fixtures specifically, and that narrowness must not be read as low severity:
+`--json-out` is a shipped code path, and the gate's whole design premise is that no refused
+paper's text survives `build_record`. Here it does.
+
+Found by a fresh-context review of the accounting fix above. **`records_stage` is not the only
+place keyed on `Paper.id`.** One stage earlier, `entities_stage` does the same thing:
+
+```python
+by_paper[paper.id] = entities       # stages.py:75
+```
+
+The consequence is worse than a miscount. When papers A and B share an id and **B is
+licence-refused while A is allowed**, `by_paper[id]` holds **B's** entities, and
+`build_record(A, entities=B's)` returns a record — because *A* is allowed. `Entity.text` carries
+verbatim substrings of the abstract, and `extract/base.py` states plainly why that matters:
+the gate suppresses the whole record precisely because entity text leaks abstract text.
+
+⚠️ **So a refused paper's text can reach an `ExtractedRecord` through an allowed paper's id.**
+`collapsed` stays 0, the ledger balances, and nothing fires — the accounting fix above does not
+touch this path.
+
+⚠️ **Updated 2026-09-10 for DEF-0008.** While DEF-0008 stands, "sharing an id" requires only that
+two papers end their reference lists with the same DOI — far more common than a genuine
+duplicate. Once DEF-0008 is fixed, a collision needs two records carrying the same DOI of their
+own, whose frequency is unmeasured. That makes this path **latent, not closed**: the key is
+still collidable, and the fix for DEF-0008 does not change what happens when it collides.
+
+**Scope, stated precisely.** This is **not** reachable in the evidence-viewer fixtures:
+`PaperStub` and `FixtureCluster` carry no entity text, and `Finding.text` is sliced from the
+allowed paper's own abstract. It **is** live in `--json-out`, which serialises
+`ExtractedRecord.entities` — the same surface as **DEF-0006**, reached through this defect's
+mechanism rather than that one's.
+
+**Not fixed, and deliberately not patched in passing.** The accounting fix did not touch
+`entities_stage`. Fixing this properly means deciding what `Paper.id` should be — whether a DOI
+may serve as a primary key at all when the source might emit it twice, or, as DEF-0008 showed,
+when the client can misread it — and that is an
+architectural question deserving its own design pass, not a rushed edit inside a frontend
+branch. **The risk is recorded here at its real severity so that decision is made deliberately
+rather than by default.**
+
+**What would close it, for whoever picks it up:** either a key that cannot collide (PMID-first,
+or a composite), or entity storage that is not keyed on `Paper.id` at all. Both are behaviour
+changes to the pipeline's identity model and both need their own measurement of what breaks.
+
+### A downstream mislabel, recorded while it is nameable
+
+`biolit_evals/relevance_screen.py` reads `n_licensed = stages["licence_gate"]["n_out"]`. On a
+run with a collapse that is the count of *records built*, not papers licensed — 40 where 41 were
+licensed. Pre-existing and harmless to that module's yield-only purpose, but the field is
+misnamed and the fix above is what makes it possible to say so.
 
 ---
 
@@ -113,14 +397,16 @@ mechanism rather than a set of unlucky queries:
 
 | query drug term | queries | licensed papers | clusters | `no_cluster` |
 |---|---|---|---|---|
-| single agent (`clozapine`, `tamoxifen`, `vancomycin`) | 5 | 116 | 34 | **31%** |
-| structural class (`fluoroquinolones`, `tetracyclines`) | 6 | 117 | 21 | 53% |
-| pharmacological action class (`anticoagulants`, `immunosuppressive agents`) | 14 | 295 | 54 | **74%** |
+| single agent (`clozapine`, `tamoxifen`, `vancomycin`) | 5 | 107 | 33 | **31%** |
+| structural class (`fluoroquinolones`, `tetracyclines`) | 6 | 110 | 20 | 53% |
+| pharmacological action class (`anticoagulants`, `immunosuppressive agents`) | 14 | 277 | 49 | **73%** |
 
 Worst individual cases, all at 40 papers: `anticoagulants and intracranial hemorrhage` **19 of
-19 papers dropped, 0 clusters**; `immunosuppressive agents and opportunistic infections` 19 of
-19, 0 clusters; `proton pump inhibitors and Clostridioides difficile infection` 28 of 30, 1
-cluster. `Anti-Bacterial Agents` — the largest pharmacological class in MeSH at 209 members —
+19 papers dropped, 0 clusters**; `immunosuppressive agents and opportunistic infections` 17 of
+17, 0 clusters; `proton pump inhibitors and Clostridioides difficile infection` 27 of 29, 1
+cluster.
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* As first published the table read 116 / 34 / 31%, 117 / 21 / 53% and 295 / 54 / 74%, and the worst cases read `immunosuppressive agents` 19 of 19 and `proton pump inhibitors` 28 of 30. Those counts included papers licensed under a cited article's PMC id; recomputed without them. **The conclusion is unchanged:** the gradient is still monotone in how collective the drug term is, and every named worst case still yields the same number of clusters. `Anti-Bacterial Agents` — the largest pharmacological class in MeSH at 209 members —
 yielded **2 clusters from 15 licensed papers**.
 
 ⚠️ **IT IS NOT A SAMPLING PROBLEM, and this is the part that took a measurement to establish.**
@@ -178,6 +464,16 @@ quantified, and their relative weight is unknown.
   because the tradeoff below is true regardless of how those labels came out; **decomposed
   2026-09-06** once they existed — 8 of the 10 flagged pairs are link errors, 1 is an NER span
   error and 1 is both.
+- ⚠️ **Cross-reference 2026-09-12 — see DEF-0008.** Every figure in this entry was measured on the
+  frozen 8-query corpus, which DEF-0008's audit found included papers licensed under a cited
+  article's PMC id rather than their own. **The figures below are left as first published and are
+  not restated here**; the effect was measured, reproducing the published values exactly first:
+  87 of 3,696 type-violating mentions (2.4%) becomes **80 of 3,501 (2.3%)**; the flagged census
+  pairs go from 10 to **9, all still `wrong`** — `BLM` drew every mention from such papers and drops
+  out, while `CPA` keeps its flag; 74 violating census mentions become **70**, and the 77 mentions
+  on flagged pairs become **73**. **This entry's claim is unchanged:** the check is still free,
+  still unreachable, and every flagged pair still reads `wrong`. The 8 / 1 / 1 decomposition above
+  was not re-derived for the nine.
 - **Severity:** Wrong entity, silently, at full confidence — the same reader-visible damage as
   DEF-0001, but with a **mechanically detectable** signature that DEF-0001's class does not have.
 
@@ -300,7 +596,7 @@ distinction is now stated rather than left for a reader to trip over.
 
 - **Date:** 2026-09-05
 - **Component:** `biolit.canon` — `MeshDictionary.lookup` / `DictionaryLinker`
-- **Status:** ⭐ **MEASURED 2026-09-06** — 23 of 44 pairs (52.3%) and 132 of 204 mentions (64.7%) carry a wrong concept. Still **not fixed**; no consumer-side workaround, see "Why not fixed here".
+- **Status:** ⭐ **MEASURED 2026-09-06** — 22 of 42 pairs (52.4%) and 128 of 189 mentions (67.7%) carry a wrong concept *(corrected 2026-09-12 for DEF-0008; first published as 23 of 44 (52.3%) and 132 of 204 (64.7%) — see the note under the table below. The conclusion is unchanged)*. Still **not fixed**; no consumer-side workaround, see "Why not fixed here".
 - **Severity:** Wrong entity, silently, at full confidence. `LinkResult.tiebroken` is `False`
   for these, so nothing downstream can tell them from a clean link.
 
@@ -363,10 +659,12 @@ fixed before any label existed (`docs/superpowers/specs/2026-09-06-acronym-adjud
 
 | | per pair | per mention |
 |---|---|---|
-| **`wrong`** — the concept is not what the author meant | **23 / 44 (52.3%)** | **132 / 204 (64.7%)** |
-| `granularity` — right subject, wrong level (DEF-0002's shape) | 2 / 44 | 18 / 204 |
-| `correct` | 19 / 44 | 54 / 204 |
+| **`wrong`** — the concept is not what the author meant | **22 / 42 (52.4%)** | **128 / 189 (67.7%)** |
+| `granularity` — right subject, wrong level (DEF-0002's shape) | 2 / 42 | 10 / 189 |
+| `correct` | 18 / 42 | 51 / 189 |
 | `cant_tell` | **0** | — |
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* As first published this table read `wrong` 23 / 44 (52.3%) and 132 / 204 (64.7%), `granularity` 2 / 44 and 18 / 204, `correct` 19 / 44 and 54 / 204. Fifteen of the 204 adjudicated mentions came from papers the licence gate should have refused — they were licensed under a cited article's PMC id — and are excluded; two pairs (`BLM`, `wrong`; `LMWH`, `correct`) drew every mention from such papers and drop out. The adjudication itself is untouched: all 44 pairs and 204 mentions were labelled as described. **The conclusion is unchanged:** a majority of short-acronym links are wrong, and the per-mention figure is worse than the per-pair one.
 
 **A majority of these links are wrong, and the reader-facing figure is worse than the
 mechanism-facing one.** Per pair asks how often the mechanism errs; per mention asks how much
@@ -382,14 +680,16 @@ labelling:
 
 | | pairs `wrong` | mentions `wrong` |
 |---|---|---|
-| disclosed (17) | 13 / 17 | 93 / 131 |
-| **undisclosed (27)** | **10 / 27** | **39 / 73** |
+| disclosed (16) | 12 / 16 | 89 / 119 |
+| **undisclosed (26)** | **10 / 26** | **39 / 70** |
+
+*Corrected 2026-09-12 (DEF-0008), as above: first published as disclosed 13 / 17 and 93 / 131, undisclosed 10 / 27 and 39 / 73. The split's reading is unchanged.*
 
 ⛔ **The gap between the two rows must NOT be read as disclosure bias.** The disclosed set was
 *selected for looking wrong* — `DEFECTS.md` picked known-bad examples and DEF-0004's flag picked
 inconsistencies — so a higher rate there is expected by construction, disclosure or not.
 Selection and disclosure are confounded and this design cannot separate them. What the split
-does establish is that **on 27 pairs carrying no prior disclosure at all, 10 are still wrong**.
+does establish is that **on 26 pairs carrying no prior disclosure at all, 10 are still wrong** *(27 as first published; DEF-0008)*.
 
 **Two signs the labels are independent judgment rather than an echo.** The annotator marked
 `ICH` as `granularity` where this entry had named it *correct* — reading intracranial

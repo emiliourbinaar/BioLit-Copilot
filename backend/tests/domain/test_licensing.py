@@ -3,6 +3,7 @@ import pytest
 from biolit.domain.enums import LicenseTier
 from biolit.domain.licensing import (
     extraction_allowed_for,
+    license_deed_url,
     license_token_from_url,
     normalize_license,
 )
@@ -109,3 +110,57 @@ def test_non_creative_commons_terms_yield_no_token_and_are_therefore_refused(raw
     _, tier = normalize_license(token)
     assert tier is LicenseTier.unknown
     assert extraction_allowed_for(tier) is False
+
+
+@pytest.mark.parametrize(
+    ("url", "deed"),
+    [
+        (
+            "https://creativecommons.org/licenses/by/4.0/",
+            "https://creativecommons.org/licenses/by/4.0/",
+        ),
+        (
+            "http://creativecommons.org/licenses/by-nc-nd/3.0/",
+            "https://creativecommons.org/licenses/by-nc-nd/3.0/",
+        ),
+        (
+            "https://creativecommons.org/licenses/by-nc/4.0/legalcode",
+            "https://creativecommons.org/licenses/by-nc/4.0/",
+        ),
+        (
+            "https://www.creativecommons.org/licenses/by-nd/4.0/deed.en",
+            "https://creativecommons.org/licenses/by-nd/4.0/",
+        ),
+        (
+            "https://creativecommons.org/licenses/by/3.0/us/",
+            "https://creativecommons.org/licenses/by/3.0/us/",
+        ),
+        (
+            "http://creativecommons.org/publicdomain/zero/1.0/",
+            "https://creativecommons.org/publicdomain/zero/1.0/",
+        ),
+    ],
+)
+def test_a_licence_url_becomes_the_deed_for_its_own_version(url, deed):
+    """Attribution links the deed the publisher actually granted, version included.
+
+    3.0 and 4.0 are one TIER but not one licence: their attribution terms differ, so a link
+    to the wrong version misstates the terms a reader may reuse under.
+    """
+    assert license_deed_url(url) == deed
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        None,
+        "https://creativecommons.org/licenses/by/",
+        "https://creativecommons.org/licenses/by-nc/latest/",
+        "https://www.cochranelibrary.com/cdsr/editorial-policies",
+        "https://creativecommons.org.example.com/licenses/by/4.0/",
+    ],
+)
+def test_no_deed_is_invented_for_a_url_that_does_not_name_a_version(raw):
+    """A missing version is not filled in with the current one. None makes the fixture
+    generator refuse to publish an excerpt it cannot link to its actual terms."""
+    assert license_deed_url(raw) is None

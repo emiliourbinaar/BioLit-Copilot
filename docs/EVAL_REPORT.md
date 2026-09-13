@@ -2499,15 +2499,24 @@ and `evals/relevance_runs.jsonl` (`rows_hash` 2ace2b57aa8e387e, `labels_hash` c3
 |---|---|---|
 | **1 — tractability** | `cant_tell` **0 of 83** | `TRACTABLE` |
 | **2 — control discrimination** | **8 of 8** distractors labelled `off_topic` | `DISCRIMINATING` — ⚠️ later withdrawn, see below |
-| **3 — filter confusion matrix** | kept: 25 `answers`, 43 `background`, 2 `off_topic`; dropped: **3 `answers`**, 9 `background`, 1 `off_topic` | — |
+| **3 — filter confusion matrix** | kept: 25 `answers`, 41 `background`, 1 `off_topic`; dropped: **3 `answers`**, 9 `background`, 1 `off_topic` *(corrected 2026-09-12, see note below)* | — |
 | **4a — lead correctness** | ranked **5 of 8**, MeSH-id baseline **3 of 8** | ⚠️ does not survive the split |
 | **4b — pairwise inversions** | ranked **92**, baseline **102**, over 178 comparable pairs | — |
 
 **Gate 3's three false drops are named, not summarised:** `Atorvastatin | Muscle Weakness`,
 `| Muscular Diseases`, `| Myalgia` — all labelled `answers`, all deleted. They are the subject
-of ADR-0022 below. Note also that **`background` dominates the kept set (43 of 70)**, which is
-what makes "admits off-topic clusters" a weak test at this scale: only **3 of 83** clusters are
+of ADR-0022 below. Note also that **`background` dominates the kept set (41 of 67)**, which is
+what makes "admits off-topic clusters" a weak test at this scale: only **2 of 80** clusters are
 `off_topic` at all, before any filtering.
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* Three of the 83 clusters existed only through papers the
+licence gate should have refused — licensed under a cited article's PMC id — and are removed:
+`Cisplatin | Wounds and Injuries` (`off_topic`), `Isotretinoin | Intracranial Hypertension` and
+`Warfarin | Atrial Fibrillation` (both `background`). First published as a kept set of 25 / 43 / 2,
+**43 of 70** `background` and **3 of 83** `off_topic`. The annotation itself is untouched: 83 real
+rows plus 8 distractors were labelled, and Gate 1's `cant_tell` 0 of 83 describes that pass as run.
+**The conclusion is unchanged:** no `answers` cluster was among the three, so Gate 3's three false
+drops are exactly the same clusters.
 
 ⚠️ **Gate 4a does not survive its pre-registered contamination split.** Both leads the ranker
 fixed — `metformin and lactic acidosis` and `warfarin and bleeding risk` — were queries whose
@@ -2566,10 +2575,17 @@ for one question into a second, and nine of the 44 pairs carry no in-document gl
 
 | | by pair | by mention |
 |---|---|---|
-| `correct` | 19 | 54 |
-| **`wrong`** | **23 (52.3%)** | **132 (64.7%)** |
-| `granularity` | 2 | 18 |
-| total | 44 | 204 |
+| `correct` | 18 | 51 |
+| **`wrong`** | **22 (52.4%)** | **128 (67.7%)** |
+| `granularity` | 2 | 10 |
+| total | 42 | 189 |
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* First published as `correct` 19 / 54, **`wrong` 23 (52.3%) /
+132 (64.7%)**, `granularity` 2 / 18, total 44 / 204. Fifteen of the 204 adjudicated mentions came
+from papers licensed under a cited article's PMC id and are excluded; two pairs (`BLM`, `LMWH`)
+drew every mention from such papers and drop out. All 44 pairs and 204 mentions were still
+adjudicated as described above. **The conclusion is unchanged:** a majority of short-acronym links
+are wrong, by pair and by mention.
 
 `cant_tell` **0 of 44** (`TRACTABLE`); controls **8 of 8** rejected (`DISCRIMINATING`).
 
@@ -2578,14 +2594,17 @@ nine in the defect log with a direction attached, ten as DEF-0004's type-violati
 
 | | wrong / pairs | wrong / mentions |
 |---|---|---|
-| disclosed (17) | 13 / 17 | 93 / 131 |
-| **undisclosed (27)** | **10 / 27** | **39 / 73** |
+| disclosed (16) | 12 / 16 | 89 / 119 |
+| **undisclosed (26)** | **10 / 26** | **39 / 70** |
+
+*Corrected 2026-09-12 (DEF-0008), as above: first published as disclosed 13 / 17 and 93 / 131,
+undisclosed 10 / 27 and 39 / 73. The split's reading is unchanged.*
 
 ⛔ **The gap must NOT be read as disclosure bias.** The disclosed set was selected for looking
 wrong in the first place, so a higher rate there is expected by construction, disclosure or
 not. Selection and disclosure are confounded and this design cannot separate them. What the
-split *does* establish is that **on 27 pairs carrying no prior disclosure at all, 10 are still
-wrong.**
+split *does* establish is that **on 26 pairs carrying no prior disclosure at all, 10 are still
+wrong** *(27 as first published; DEF-0008)*.
 
 ⚠️ **ADR-0021 applies here too** — the 8 controls were built by re-pairing in-population
 surfaces, so the 8 surfaces appearing twice in the sheet are exactly the 8 controls. **Unlike
@@ -2626,14 +2645,23 @@ They share no node, and `MeshTree.distance` returns `None`. For drug classes the
 not in the hierarchy; it is the `PharmacologicalAction` field of the same dump — **2,838
 descriptors, 5,084 memberships**, no new download.
 
-Measured on the frozen 83-cluster corpus:
+Measured on the frozen 80-cluster corpus:
 
 | variant | kept | recovers the 3? | `off_topic` admitted |
 |---|---|---|---|
-| baseline | 70 | — | — |
-| tree distance <= 1 | 71 | 1 of 3 | 0 |
-| tree distance <= 2 | 73 | yes | 0 |
-| **pharmacological action** | **75** | **yes** | **0** |
+| baseline | 67 | — | — |
+| tree distance <= 1 | 71 † | 1 of 3 | 0 |
+| tree distance <= 2 | 73 † | yes | 0 |
+| **pharmacological action** | **72** | **yes** | **0** |
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* First published on an 83-cluster corpus as baseline **70**
+and pharmacological action **75**. Three clusters existed only through papers licensed under a
+cited article's PMC id and are removed; none was labelled `answers`. **The conclusion is
+unchanged:** the action predicate still adds exactly 5, and the five it recovers — the three named
+false drops plus `Coronary Artery Disease` and `Hypertension` — are identical before and after.
+† The two tree-distance rows were **not** recomputed: those variants were rejected and never kept
+in code. They are left as measured on the 83-cluster corpus and are not comparable to the
+corrected rows beside them; their rejection was on principle, not on these numbers.
 
 Tree distance <= 2 was rejected **on principle, not on its numbers**: it rescues the three
 through the *disease* side by coincidence of this corpus, and `k` is a constant whose only
@@ -2657,7 +2685,8 @@ The screen's blindness is **enforced by the import graph**, not by intent:
 `biolit_evals/relevance_screen.py` imports nothing from `biolit`, and a test spawns a fresh
 interpreter and asserts the ranker is absent from `sys.modules`. Verified to fail on a
 *transitive* import, not merely a direct one. That construction also forces the right metric:
-`select_stage`'s kept-count differs between arms (70 against 75), so a screen that could import
+`select_stage`'s kept-count differs between arms (67 against 72; 70 against 75 as first
+published, corrected 2026-09-12 for DEF-0008), so a screen that could import
 the filter could screen on a quantity the arm changes.
 
 **Four of 25 cleared the floor.** Not a bad draw — cluster yield collapses in proportion to how
@@ -2665,14 +2694,21 @@ collective the drug term is, and the mechanism under test fires only at the coll
 
 | stratum | queries | licensed papers | clusters | `no_cluster` | rankable pairs |
 |---|---|---|---|---|---|
-| action class *(ADR-0022 fires)* | 14 | 295 | 54 | **74%** | 198 |
-| structural class *(tree fires, ADR-0022 inert)* | 6 | 117 | 21 | 53% | 49 |
-| single agent *(both inert)* | 5 | 116 | 34 | **31%** | 106 |
+| action class *(ADR-0022 fires)* | 14 | 277 | 49 | **73%** | 155 |
+| structural class *(tree fires, ADR-0022 inert)* | 6 | 110 | 20 | 53% | 47 |
+| single agent *(both inert)* | 5 | 107 | 33 | **31%** | 101 |
 
-**353 rankable pairs across 25 new queries, against 593 across the original 8.** Six queries
+**303 rankable pairs across 25 new queries, against 582 across the original 8.** Six queries
 produced zero clusters. `Anti-Bacterial Agents`, the largest action class in MeSH at 209
 members, produced two. The stratum that would isolate ADR-0022 from the tree term has **no
 eligible member at all** — its best query yields 7 against a floor of 8.
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* First published as 295 / 54 / 74% / 198, 117 / 21 / 53% / 49
+and 116 / 34 / 31% / 106, and as **353 against 593** rankable pairs. The screen included 34
+papers, and the original 8 fifteen, licensed under a cited article's PMC id; recomputed without
+them. **The conclusion is unchanged:** four of 25 still clear the floor, six queries still yield
+zero clusters, `Anti-Bacterial Agents` still yields two, the structural stratum's best query still
+yields 7, and the screen's shortfall against the original 8 widens (303 of 582, from 353 of 593).
 
 ⚠️ **A disclosure about this pass's own threshold.** `MIN_CLUSTERS = 8` was fixed before the 14
 new candidates ran but **after the yields of the first 11 were visible**, and it falls exactly

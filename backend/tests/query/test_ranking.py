@@ -2,7 +2,7 @@ from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.domain.records import Cluster
 from biolit.query.concepts import QueryConcepts
-from biolit.query.ranking import rank_clusters
+from biolit.query.ranking import rank_clusters, relevance_score
 
 # Synthetic ids throughout. ADR-0020's ranking must NOT be exercised against the eight frozen
 # queries anywhere in the test suite: a failure message would print their ordering, and the
@@ -208,3 +208,18 @@ def test_a_side_matched_by_pharmacological_class_scores_as_a_match_not_as_a_dist
     )
 
     assert ranked == [member, exact_but_further]
+
+
+def test_relevance_score_exposes_the_sort_key_without_its_negation():
+    """The fixture export displays this so a reader can see why a cluster ranks where it does.
+    It must be the SAME computation the sort uses -- a second implementation would drift -- but
+    without the sign flip, which exists only to make `sorted` ascending.
+
+    `MESH:MEMBER` matches via pharmacological class and `MESH:NEAR` is one edge from `MESH:QD`,
+    so a correct score is (1 matched, proximity 1).
+    """
+    cluster = _cluster("MESH:MEMBER|MESH:NEAR")
+
+    score = relevance_score(cluster, _concepts("MESH:QC", "MESH:QD"), tree=TREE, actions=ACTIONS)
+
+    assert score == (1, 1)

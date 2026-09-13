@@ -1,0 +1,195 @@
+---
+import retrospectiveMarkdown from "../../../docs/RETROSPECTIVE.md?raw";
+import Base from "../layouts/Base.astro";
+import { parseInstrumentFailures } from "../lib/docs";
+import { formatDate, RUN_NOTES, RUNS, stageByName } from "../lib/fixtures";
+import { inlineMarkdown } from "../lib/markdown";
+import { docUrl } from "../lib/site";
+
+const base = import.meta.env.BASE_URL;
+const failures = parseInstrumentFailures(retrospectiveMarkdown);
+
+const runs = RUNS.map((run) => ({
+  run,
+  note: RUN_NOTES[run.slug]!.text,
+  retrieved: stageByName(run, "retrieve")?.n_out ?? 0,
+  // The gate stage's OUTPUT, not "papers licensed": on a run where two papers collapsed to one
+  // id the two differ by the collapse (DEF-0007 records this exact mislabel in relevance_screen.py).
+  licensed: stageByName(run, "licence_gate")?.n_out ?? 0,
+  clusters: run.clusters.length,
+}));
+---
+
+<Base
+  title="BioLit Copilot: evidence viewer"
+  description="Four real runs of a biomedical literature pipeline, shown stage by stage, with what each stage dropped and why."
+>
+  <div class="wrap">
+    <header class="intro">
+      <h1>Four questions, followed through every stage that answered them</h1>
+      <div class="prose lede">
+        <p>
+          BioLit Copilot answers clinical questions from the biomedical literature: it retrieves
+          papers, links what they mention to MeSH, refuses anything its licence does not allow it
+          to quote, clusters what co-occurs, and writes a deterministic answer.
+        </p>
+        <p>
+          Each page below is one real run, recorded when it happened. The point of showing them is
+          the accounting: every stage says what it took in, what it removed and why, and what it
+          left out on purpose.
+        </p>
+      </div>
+    </header>
+
+    <section class="section" aria-labelledby="runs-h">
+      <h2 id="runs-h" class="visually-quiet">The runs</h2>
+      <ul class="runs">
+        {
+          runs.map(({ run, note, retrieved, licensed, clusters }) => (
+            <li class="run">
+              <a class="query" href={`${base}runs/${run.slug}/`}>
+                “{run.query}”
+              </a>
+              <p class="funnel num">
+                <span>
+                  <strong>{retrieved}</strong> retrieved
+                </span>
+                <span>
+                  <strong>{licensed}</strong> past the licence gate
+                </span>
+                <span>
+                  <strong>{clusters}</strong> {clusters === 1 ? "cluster" : "clusters"} in the answer
+                </span>
+              </p>
+              <p class="note">{note}</p>
+              <p class="date">Retrieved {formatDate(run.generated_at)}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </section>
+
+    <section class="section failures" aria-labelledby="failures-h">
+      <div class="section-head">
+        <h2 id="failures-h">{failures.heading}</h2>
+        <p>
+          The project's retrospective argues that its most durable results are the times the
+          measurement itself failed. Quoted from <a href={docUrl("RETROSPECTIVE.md")}>RETROSPECTIVE.md</a>,
+          section 4. None of these is a property of the four runs above; they are about how the
+          project was evaluated.
+        </p>
+      </div>
+      <ol class="failure-list">
+        {
+          failures.items.map((item) => (
+            <li>
+              <h3>{item.title}</h3>
+              <p set:html={inlineMarkdown(item.body)} />
+            </li>
+          ))
+        }
+      </ol>
+    </section>
+  </div>
+</Base>
+
+<style>
+  .intro {
+    padding-top: 4rem;
+    display: grid;
+    gap: 1.5rem;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 3.6rem);
+    font-weight: 400;
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    max-width: 20ch;
+  }
+  .lede {
+    font-size: 1.2rem;
+    color: var(--ink-2);
+  }
+  .visually-quiet {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .runs {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 2px solid var(--ink);
+  }
+  .run {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 0.4rem 2.5rem;
+    padding: 1.6rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .query {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    font-size: clamp(1.6rem, 3vw, 2.2rem);
+    line-height: 1.15;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .query:hover {
+    text-decoration: underline;
+    text-decoration-color: var(--eosin);
+    text-decoration-thickness: 2px;
+  }
+  .funnel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 1.2rem;
+    color: var(--ink-2);
+    font-size: 0.98rem;
+  }
+  .funnel strong {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .note {
+    font-size: 0.98rem;
+  }
+  .date {
+    grid-column: 1;
+    font-size: 0.88rem;
+    color: var(--ink-3);
+  }
+  .failure-list {
+    margin: 0;
+    padding-left: 2rem;
+    display: grid;
+    gap: 1.6rem;
+    max-width: var(--measure);
+  }
+  .failure-list li::marker {
+    font-size: 1.1rem;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .failure-list h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.35rem;
+  }
+  .failure-list p {
+    font-size: 1rem;
+    color: var(--ink-2);
+  }
+  @media (max-width: 48rem) {
+    .run {
+      grid-template-columns: 1fr;
+    }
+    .query,
+    .date {
+      grid-row: auto;
+      grid-column: auto;
+    }
+  }
+</style>

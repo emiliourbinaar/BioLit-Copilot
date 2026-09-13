@@ -1,0 +1,132 @@
+---
+import defectsMarkdown from "../../../docs/DEFECTS.md?raw";
+import Base from "../layouts/Base.astro";
+import { parseDefects } from "../lib/docs";
+import { RUNS } from "../lib/fixtures";
+import { inlineMarkdown } from "../lib/markdown";
+import { docUrl } from "../lib/site";
+
+const base = import.meta.env.BASE_URL;
+const defects = parseDefects(defectsMarkdown)
+  .sort((a, b) => a.id.localeCompare(b.id))
+  .map((defect) => ({
+    defect,
+    visibleIn: RUNS.filter((run) => run.findings.some((f) => f.defect_id === defect.id)),
+  }));
+---
+
+<Base
+  title="Findings: BioLit Copilot"
+  description="Every recorded defect in BioLit Copilot, its status, and which of the four runs visibly shows it."
+  current="findings"
+>
+  <div class="wrap">
+    <header class="head">
+      <h1>Recorded defects</h1>
+      <div class="prose">
+        <p>
+          Every entry in the project's defect log, with its status quoted as written. A defect is
+          attached to a run only where that run's own data shows it; otherwise it is listed here,
+          at project level.
+        </p>
+        <p class="quiet">
+          Each defect was measured on a specific corpus, recorded in its entry. The four runs on
+          this site are later, separate retrievals with different papers, so a defect measured
+          elsewhere is not assumed to appear in them.
+        </p>
+      </div>
+    </header>
+
+    <ol class="defects">
+      {
+        defects.map(({ defect, visibleIn }) => (
+          <li class="defect" id={defect.id}>
+            <p class="id mono">{defect.id}</p>
+            <div class="body">
+              <h2>{defect.title}</h2>
+              <p class="status" set:html={inlineMarkdown(defect.status)} />
+              <p class="visible">
+                {visibleIn.length > 0 ? (
+                  <>
+                    Visible in{" "}
+                    {visibleIn.map((run, index) => (
+                      <>
+                        {index > 0 && ", "}
+                        <a href={`${base}runs/${run.slug}/#finding-${defect.id}`}>“{run.query}”</a>
+                      </>
+                    ))}
+                    .
+                  </>
+                ) : (
+                  <span class="quiet">Not visible in any of the four runs on this site.</span>
+                )}
+              </p>
+            </div>
+          </li>
+        ))
+      }
+    </ol>
+
+    <p class="source quiet">
+      Quoted from <a href={docUrl("DEFECTS.md")}>DEFECTS.md</a>, which carries the measurement
+      behind each entry.
+    </p>
+  </div>
+</Base>
+
+<style>
+  .head {
+    padding-top: 3.5rem;
+    display: grid;
+    gap: 1.25rem;
+    margin-bottom: 3rem;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 400;
+  }
+  .defects {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 2px solid var(--ink);
+  }
+  .defect {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr);
+    gap: 0.5rem 1.5rem;
+    padding: 1.6rem 0;
+    border-bottom: 1px solid var(--rule);
+    scroll-margin-top: 1.5rem;
+  }
+  .id {
+    color: var(--eosin);
+    font-weight: 500;
+    padding-top: 0.3rem;
+  }
+  .body {
+    display: grid;
+    gap: 0.6rem;
+    max-width: 48rem;
+  }
+  h2 {
+    font-size: 1.35rem;
+    line-height: 1.3;
+  }
+  .status {
+    font-size: 0.98rem;
+    color: var(--ink-2);
+  }
+  .visible {
+    font-size: 0.95rem;
+  }
+  .source {
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+  }
+  @media (max-width: 40rem) {
+    .defect {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

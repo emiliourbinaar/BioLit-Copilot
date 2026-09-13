@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<!--
+  THE SHAPE EVERY OTHER CASSETTE WAS TRIMMED BELOW (DEF-0008). Real PubMed XML carries one
+  ArticleIdList per CITED REFERENCE after the article's own. This paper has a DOI of its own and
+  NO PMC record; its references carry both. A parser that searches the whole article reads the
+  last cited DOI as the paper's, and the first cited PMC id as the one to license it under.
+  Synthetic identifiers, same convention as the other cassettes.
+-->
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>44444444</PMID>
+      <Article>
+        <Journal><Title>Journal of Tests</Title>
+          <JournalIssue><PubDate><Year>2026</Year></PubDate></JournalIssue>
+        </Journal>
+        <ArticleTitle>A paper whose references carry identifiers</ArticleTitle>
+        <Abstract><AbstractText>Metformin caused acidosis in this cohort.</AbstractText></Abstract>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">44444444</ArticleId>
+        <ArticleId IdType="doi">10.1000/the-papers-own</ArticleId>
+      </ArticleIdList>
+      <ReferenceList>
+        <Reference>
+          <Citation>First cited work.</Citation>
+          <ArticleIdList>
+            <ArticleId IdType="doi">10.1000/cited-first</ArticleId>
+            <ArticleId IdType="pmc">PMC1111111</ArticleId>
+          </ArticleIdList>
+        </Reference>
+        <Reference>
+          <Citation>Last cited work.</Citation>
+          <ArticleIdList>
+            <ArticleId IdType="doi">10.1000/cited-last</ArticleId>
+            <ArticleId IdType="pmc">PMC2222222</ArticleId>
+          </ArticleIdList>
+        </Reference>
+      </ReferenceList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>

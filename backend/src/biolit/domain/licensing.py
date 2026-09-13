@@ -71,3 +71,24 @@ def license_token_from_url(raw: str | None) -> str | None:
     if segments[0] == "licenses":
         return "cc_" + segments[1].replace("-", "_")
     return None
+
+
+def license_deed_url(raw: str | None) -> str | None:
+    """The Creative Commons deed for exactly the licence version the publisher granted.
+
+    Unlike `license_token_from_url`, the VERSION IS KEPT: 3.0 and 4.0 share a tier but not
+    their attribution terms, so a deed link must name the one actually granted. A URL with
+    no version segment returns None rather than a guessed current version -- an invented
+    version is a false statement of the terms. `legalcode` and `deed.xx` suffixes point at
+    the same licence and are dropped; a jurisdiction port (`/3.0/us/`) is a different
+    licence and is kept.
+    """
+    if license_token_from_url(raw) is None:
+        return None
+    segments = [segment for segment in urlsplit((raw or "").strip()).path.split("/") if segment]
+    if len(segments) < 3 or not re.fullmatch(r"\d+(\.\d+)*", segments[2]):
+        return None
+    kept = segments[:3]
+    if len(segments) > 3 and not re.match(r"(legalcode|deed)", segments[3]):
+        kept.append(segments[3])
+    return "https://creativecommons.org/" + "/".join(kept) + "/"

@@ -107,6 +107,7 @@ def records_stage(
     extractor = SameSentenceAsEntitiesExtractor(entities_by_paper)
     records: dict[str, ExtractedRecord] = {}
     refused: dict[str, int] = {}
+    collapsed = 0
     zero_findings = 0
     for paper in papers:
         record = build_record(
@@ -116,6 +117,22 @@ def records_stage(
             key = f"licence_refused:{paper.license or 'none'}"
             refused[key] = refused.get(key, 0) + 1
             continue
+        # ⚠️ DEF-0007. `Paper.id` is `doi or pmid`, so two DISTINCT papers can arrive under one
+        # key. (An earlier version of this comment said "PubMed does return duplicate DOIs". The
+        # only observed case was not one: the client had read both papers' DOI from their
+        # reference lists -- DEF-0008.) The dict silently kept the last, and
+        # `n_out` fell by one with nothing in `dropped` accounting for it -- on the frozen
+        # statins query, 58 retrieved minus 17 refused should leave 41, and 40 records existed.
+        #
+        # COUNTED AS A DROP, NOT A NOTE. `noted` is pass-through by definition and would leave
+        # the arithmetic still broken; this genuinely removes a paper from every downstream
+        # stage, so it belongs in the term the ledger subtracts.
+        #
+        # Last-write-wins is PRESERVED rather than corrected. Which of two same-id papers
+        # ought to survive is a real question and this does not answer it -- it only stops the
+        # loss being invisible. See DEFECTS.md DEF-0007.
+        if paper.id in records:
+            collapsed += 1
         records[paper.id] = record
         if not record.key_findings:
             zero_findings += 1
@@ -126,12 +143,16 @@ def records_stage(
             status=StageStatus.completed,
             n_in=len(papers),
             n_out=len(records),
-            dropped=refused,
-            note=(
-                "Refused papers carry no Creative Commons licence in the publisher's "
-                "permissions block (LicenseTier.unknown). This is the Phase 1 compliance "
-                "rule working as designed, not a failure."
-            ),
+            # Everything lost between `len(papers)` and `len(records)` must appear here or the
+            # ledger's own checkable invariant fails. Two causes, not one: a licence refusal,
+            # and a duplicate-id collapse (DEF-0007).
+            dropped=refused | ({"duplicate_paper_id": collapsed} if collapsed else {}),
+            # ⚠️ CONDITIONAL, and it must be. An unconditional sentence about the collapse
+            # asserted on every run that two papers had collapsed -- false on three of four
+            # generated fixtures, and published. `dropped` was already conditional; the prose
+            # was not, which made the prose the only part of this stage that changed behaviour
+            # for a run WITHOUT duplicates. A note is a claim about THIS run.
+            note=_LICENCE_NOTE + (_DUPLICATE_NOTE if collapsed else ""),
         ),
         extract=StageReport(
             name=EXTRACT,
@@ -145,6 +166,18 @@ def records_stage(
         ),
     )
 
+
+_LICENCE_NOTE = (
+    "Refused papers carry no Creative Commons licence in the publisher's permissions block "
+    "(LicenseTier.unknown). This is the Phase 1 compliance rule working as designed, not a "
+    "failure."
+)
+#: Appended ONLY when a collapse actually happened -- see the note assembly in `records_stage`.
+_DUPLICATE_NOTE = (
+    " A `duplicate_paper_id` drop is NOT a licence decision: two retrieved papers arrived "
+    "under the same `Paper.id` and collapsed to one record (DEF-0007); it is counted on this "
+    "stage because this stage's n_out is where the loss shows up."
+)
 
 ADR_0017_NOTE = (
     "Contradiction detection is not implemented. The CTD-derived gold standard was "

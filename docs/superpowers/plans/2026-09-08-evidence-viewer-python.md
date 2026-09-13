@@ -290,7 +290,14 @@ class FixtureCluster(BaseModel):
     paper_ids: list[str]
     rank: int
     matched: int
-    proximity: float
+    #: ⚠️ `float | None`, NOT `float`, and the None is meaningful rather than defensive.
+    #: `_relevance_key` maps "no shared tree placement" to `inf` purely so `sorted` puts it
+    #: last, but JSON has no Infinity: `model_dump_json` writes `null` and a `float`-typed
+    #: field then REFUSES to reload it. `MeshTree.distance` already returns None for exactly
+    #: this case and its docstring insists it is "a category rather than a magnitude", so the
+    #: fixture restores the category instead of inventing a large number the frontend would
+    #: sort numerically. Measured: 8 of 17 statins clusters carry it.
+    proximity: float | None
     #: Present only where a frozen relevance label exists. The viewer MUST mark these as
     #: annotation labels from a pass whose control instrument was later found compromised
     #: (ADR-0021) -- never as ground truth the pipeline achieved.
@@ -499,12 +506,18 @@ def source_pin() -> str:
     """A hex digest over every pinned module's normalised source, in declaration order."""
     digest = hashlib.sha256()
     for name in PINNED_MODULES:
-        spec = importlib.util.find_spec(name)
+        # `find_spec` RAISES ModuleNotFoundError when the PARENT package is missing and
+        # returns None when only the leaf is -- two shapes for the same mistake. Both mean the
+        # same thing here, so both become the same refusal.
+        try:
+            spec = importlib.util.find_spec(name)
+        except ModuleNotFoundError:
+            spec = None
         if spec is None or spec.origin is None:
             raise RuntimeError(
-                f"fixture_pin: cannot locate {name!r}. A pinned module was renamed or removed "
-                "without updating PINNED_MODULES, which would silently reduce what the pin "
-                "covers -- refusing rather than hashing a smaller set."
+                f"fixture_pin: cannot locate {name!r}. A pinned module was renamed or "
+                "removed without updating PINNED_MODULES, which would silently reduce what "
+                "the pin covers -- refusing rather than hashing a smaller set."
             )
         with open(spec.origin, encoding="utf-8") as handle:
             digest.update(name.encode())
@@ -532,11 +545,17 @@ def test_source_pin_is_stable_across_calls_and_refuses_a_missing_module(monkeypa
     """
     assert source_pin() == source_pin()
 
-    monkeypatch.setattr(
-        "biolit_evals.fixture_pin.PINNED_MODULES", ("biolit.query.ranking", "biolit.no.such")
-    )
-    with pytest.raises(RuntimeError, match="biolit.no.such"):
-        source_pin()
+    # Both shapes of "gone", because `find_spec` reports them differently: a missing LEAF
+    # returns None, while a missing PARENT package raises ModuleNotFoundError. Verified against
+    # the real interpreter -- find_spec("biolit.no.such") raises, find_spec(
+    # "biolit.query.no_such_module") returns None -- so testing only one would leave the other
+    # path unexercised and the pin silently able to crash instead of refusing.
+    for gone in ("biolit.query.no_such_module", "biolit.no.such"):
+        monkeypatch.setattr(
+            "biolit_evals.fixture_pin.PINNED_MODULES", ("biolit.query.ranking", gone)
+        )
+        with pytest.raises(RuntimeError, match="a pinned module was renamed"):
+            source_pin()
 ```
 
 Update imports to:
@@ -743,7 +762,7 @@ def project_run(
     names: Mapping[str, str],
     labels: Mapping[str, str],
     findings: Sequence[FixtureFinding],
-    generated_at: str | None = None,
+    generated_at: str,
 ) -> FixtureRun:
     """Sanitised projection. Abstracts cannot survive it, because the schema has no field."""
     papers = {
@@ -763,6 +782,9 @@ def project_run(
     for rank, cluster in enumerate(state.clusters, start=1):
         matched, proximity = relevance_score(cluster, concepts, tree=tree, actions=actions)
         sides = cluster.key.split("|")
+        # inf is a sort-time stand-in for "no shared tree placement"; JSON cannot carry it and
+        # a float-typed field cannot reload the `null` it becomes. Restore the category.
+        finite = None if proximity == float("inf") else proximity
         clusters.append(
             FixtureCluster(
                 key=cluster.key,
@@ -770,7 +792,7 @@ def project_run(
                 paper_ids=list(cluster.paper_ids),
                 rank=rank,
                 matched=matched,
-                proximity=proximity,
+                proximity=finite,
                 label=labels.get(cluster.key),
             )
         )
@@ -778,7 +800,7 @@ def project_run(
         schema_version=SCHEMA_VERSION,
         slug=slug,
         query=state.question,
-        generated_at=generated_at or datetime.now(UTC).isoformat(),
+        generated_at=generated_at,
         source_pin=source_pin(),
         stages=list(state.stages),
         clusters=clusters,
@@ -842,6 +864,42 @@ def test_every_cluster_paper_resolves_to_a_stub_carrying_licence_and_doi():
 
 Run: `uv run pytest tests/evals/test_fixture_export.py -q`
 Expected: 2 passed.
+
+- [ ] **Step 6b: Add the round-trip test via Edit** (added after a pre-dispatch audit found the
+  fixture could be written but not read back)
+
+```python
+def test_a_cluster_with_no_shared_tree_survives_a_json_round_trip():
+    """⚠️ THE DEFECT THIS PINS, found before it shipped. `_relevance_key` uses `inf` to mean
+    "no shared tree placement" so that `sorted` puts it last. JSON has no Infinity:
+    `model_dump_json` writes `null`, and a `float`-typed field then REFUSES to reload it —
+    so the generator would emit fixtures the freshness check could not read, and the published
+    file would silently lose the distinction. Measured: 8 of 17 statins clusters score `inf`.
+
+    `MeshTree.distance` already returns None for this case and calls it "a category rather than
+    a magnitude", so `None` restores the original meaning rather than inventing a sentinel.
+    """
+    state = PipelineState(question="q")
+    state.clusters = [Cluster(key="MESH:A|MESH:B", paper_ids=[])]
+
+    run = project_run(
+        state,
+        slug="s",
+        concepts=_no_concepts(),
+        tree=MeshTree({}),
+        actions=PharmacologicalActions({}),
+        names={},
+        labels={},
+        findings=[],
+        generated_at="2026-09-08T00:00:00+00:00",
+    )
+
+    assert run.clusters[0].proximity is None, "inf must become the category, not null-as-float"
+    reloaded = FixtureRun.model_validate_json(run.model_dump_json())
+    assert reloaded.clusters[0].proximity is None
+```
+
+Add `FixtureRun` to the `biolit_evals.fixture_models` import line in the test file.
 
 - [ ] **Step 7: Add the ledger-integrity test via Edit**
 
@@ -956,7 +1014,11 @@ FEATURED: dict[str, str] = {
 }
 
 DEFAULT_OUT = "../frontend/src/fixtures"
-DEFAULT_MAX_PAPERS = 40
+#: 60, matching the frozen corpus this project's published numbers come from -- measured,
+#: not guessed: its eight runs retrieved 58-60 papers each. An earlier draft of this plan
+#: said 40 while asserting a cluster count taken from a 58-paper run, which is not a check
+#: a 40-paper run can pass.
+DEFAULT_MAX_PAPERS = 60
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -972,6 +1034,7 @@ def main(argv: list[str] | None = None) -> None:
     import asyncio
     import gzip
     import json
+    from datetime import UTC, datetime
     from pathlib import Path
 
     import httpx
@@ -1084,9 +1147,28 @@ def main(argv: list[str] | None = None) -> None:
             names=names,
             labels=labels.get(query, {}),
             findings=[],
+            generated_at=datetime.now(UTC).isoformat(),
         )
+        # ⛔ THE SPEC'S §5 REQUIREMENT, and it belongs HERE rather than in a verification step
+        # someone can forget to run. A fixture must be impossible to WRITE unsanitised, not
+        # merely checkable afterwards -- "we'll check later" is the exact shape of DEF-0006.
+        # Content, not the literal word "abstract": a leak copies TEXT, not a field name.
+        blob = run.model_dump_json(indent=2)
+        for paper in papers:
+            if paper.extraction_allowed or not paper.abstract:
+                continue
+            words = paper.abstract.split()
+            shingles = [" ".join(words[i : i + 10]) for i in range(0, max(len(words) - 10, 1), 25)]
+            leaked = [sh for sh in shingles if sh and sh in blob]
+            if leaked:
+                raise RuntimeError(
+                    f"{slug}: REFUSED paper {paper.id} leaked text into the fixture: "
+                    f"{leaked[0]!r}. Refusing to write. This is DEF-0006 reaching a public "
+                    "page; fix the projection rather than this check."
+                )
+
         path = out_dir / f"{slug}.json"
-        path.write_text(run.model_dump_json(indent=2), encoding="utf-8")
+        path.write_text(blob, encoding="utf-8")
         print(f"{slug}: {len(run.clusters)} clusters, {len(run.papers)} papers -> {path}")
 
     for slug in slugs:
@@ -1106,7 +1188,23 @@ cd backend
 PYTHONIOENCODING=utf-8 uv run python -m biolit_evals.fixture_export
 ```
 
-Expected: four lines, one per slug. **`statins-rhabdomyolysis` must report 17 clusters** — if it reports 12, the MeSH actions artifact was not built and ADR-0022 is not in effect.
+⛔ **DO NOT ASSERT A CLUSTER COUNT.** An earlier draft of this plan demanded "17 clusters", a
+figure taken from the frozen corpus. Live NCBI returns a different paper set on a different day
+— ADR-0023 and spec §3 both say so — so an exact count is not something a fresh run can be
+required to reproduce, and demanding one makes a correct run look broken.
+
+**Check CONTENT instead, because content is what the fixture is for.** `statins-rhabdomyolysis`
+exists to show ADR-0022 recovering clusters that carry a class MEMBER where the query resolved
+to the CLASS. So the acceptance check is: **at least one `Atorvastatin | …` cluster must be
+present** in the generated fixture.
+
+Verify it by loading the fixture and collecting `" | ".join(c["concept_names"])` for every
+cluster, then filtering for names starting with `Atorvastatin |`. Print the total cluster count
+and every member-side cluster found.
+
+Zero `Atorvastatin | …` clusters means the pharmacological-action artifact is not in effect and
+the fixture does not show what it was chosen to show — stop and report. Any count difference
+from an earlier run is **expected drift, not a failure**; report the number, do not assert on it.
 
 - [ ] **Step 3: Verify the invariant on real output**
 
