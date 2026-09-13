@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "cisplatin-nephrotoxicity",
   "query": "cisplatin nephrotoxicity",
-  "generated_at": "2026-09-13T06:32:10.661814+00:00",
-  "source_pin": "3cb12fa61a694167d06d5c0ca738645b67acef0df071bc468deae6625e1ef876",
+  "generated_at": "2026-09-13T16:38:41.483016+00:00",
+  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
   "stages": [
     {
       "name": "retrieve",
@@ -160,6 +160,7 @@
       "pmid": "42727991",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -181,6 +182,7 @@
       "pmid": "42698028",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -199,6 +201,7 @@
       "pmid": "42693981",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -224,6 +227,7 @@
       "pmid": "42687819",
       "license": null,
       "license_url": null,
+      "copyright": "© 2026 Federation of American Societies for Experimental Biology.",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -248,6 +252,7 @@
       "pmid": "42671218",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Author(s). Journal of Biochemical and Molecular Toxicology published by Wiley Periodicals LLC.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -264,6 +269,7 @@
       "pmid": "42663507",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -286,6 +292,7 @@
       "pmid": "42662804",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 The Author(s). Food Science & Nutrition published by Wiley Periodicals LLC.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -307,6 +314,7 @@
       "pmid": "42652681",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -331,6 +339,7 @@
       "pmid": "42650179",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -351,6 +360,7 @@
       "pmid": "42617418",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -379,6 +389,7 @@
       "pmid": "42610710",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© The Author(s) 2026. Published by Oxford University Press on behalf of the Society of Toxicology.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -401,6 +412,7 @@
       "pmid": "42600256",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -417,6 +429,7 @@
       "pmid": "42582541",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "©2026 The Korean Nutrition Society and the Korean Society of Community Nutrition",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -439,6 +452,7 @@
       "pmid": "42581566",
       "license": null,
       "license_url": null,
+      "copyright": "© 2026 Wiley‐VCH GmbH",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -462,6 +476,7 @@
       "pmid": "42581421",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -484,6 +499,7 @@
       "pmid": "42574880",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -507,6 +523,7 @@
       "pmid": "42571741",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -525,6 +542,7 @@
       "pmid": "42568566",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Ahmed, ElBishbishy, Sadek and Saher.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -551,6 +569,7 @@
       "pmid": "42563228",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -574,6 +593,7 @@
       "pmid": "42530708",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -591,6 +611,7 @@
       "pmid": "42510908",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -609,6 +630,7 @@
       "pmid": "42498919",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -628,6 +650,7 @@
       "pmid": "42495849",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -652,6 +675,7 @@
       "pmid": "42484733",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -667,6 +691,7 @@
       "pmid": "42482334",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -686,6 +711,7 @@
       "pmid": "42474532",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2026",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -703,6 +729,7 @@
       "pmid": "42471829",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2026 The Author(s)",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -723,6 +750,7 @@
       "pmid": "42469375",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -740,6 +768,7 @@
       "pmid": "42459863",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Rodríguez-Marcano, Pierucci and Romero Lugo.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -760,6 +789,7 @@
       "pmid": "42456377",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -780,6 +810,7 @@
       "pmid": "42446174",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -808,6 +839,7 @@
       "pmid": "42433252",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© AME Publishing Company.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -830,6 +862,7 @@
       "pmid": "42428979",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Kadoguchi, Matsushita, Takahashi, Esashika, Yang, Sugimoto, Tamai and Arakawa.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -853,6 +886,7 @@
       "pmid": "42426594",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -877,6 +911,7 @@
       "pmid": "42423006",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -899,6 +934,7 @@
       "pmid": "42400592",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -917,6 +953,7 @@
       "pmid": "42386543",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -932,6 +969,7 @@
       "pmid": "42385420",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -955,6 +993,7 @@
       "pmid": "42380498",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -977,6 +1016,7 @@
       "pmid": "42376386",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": null,
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1000,6 +1040,7 @@
       "pmid": "42367292",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Han, Zhang, Li, Zhang, Shen, Zhang, Xu, Zhou and Wang.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -1020,6 +1061,7 @@
       "pmid": "42358784",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Authors. Co-published by Nanjing University and American Chemical Society",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1038,6 +1080,7 @@
       "pmid": "42353025",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1062,6 +1105,7 @@
       "pmid": "42350154",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Author(s). ChemMedChem published by Wiley‐VCH GmbH",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1085,6 +1129,7 @@
       "pmid": "42342050",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1109,6 +1154,7 @@
       "pmid": "42329491",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2026",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -1128,6 +1174,7 @@
       "pmid": "42323899",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1154,6 +1201,7 @@
       "pmid": "42305710",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "Copyright: © 2026 Xia et al.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1169,6 +1217,7 @@
       "pmid": "42299336",
       "license": null,
       "license_url": null,
+      "copyright": "© King Abdulaziz City for Science and Technology 2026. Springer Nature or its licensor (e.g. a society or other partner) holds exclusive rights to this article under a publishing agreement with the author(s) or other rightsholder(s); author self-archiving of the accepted manuscript version of this article is solely governed by the terms of such publishing agreement and applicable law.",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1187,6 +1236,7 @@
       "pmid": "42293527",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Li, Li, Wu and Zhong.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1211,6 +1261,7 @@
       "pmid": "42285905",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2026 The Author(s). Cancer Science published by John Wiley & Sons Australia, Ltd on behalf of Japanese Cancer Association.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1235,6 +1286,7 @@
       "pmid": "42281409",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1258,6 +1310,7 @@
       "pmid": "42276319",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1284,6 +1337,7 @@
       "pmid": "42265434",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1302,6 +1356,7 @@
       "pmid": "42258992",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1321,6 +1376,7 @@
       "pmid": "42243346",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2026",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1341,6 +1397,7 @@
       "pmid": "42238184",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Authors. Published by Elsevier B.V.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1364,6 +1421,7 @@
       "pmid": "42232189",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Li, Yan, Xu, Ling, Zhang, Shao, Xia, Tang and Mou.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1383,6 +1441,7 @@
       "pmid": "42227549",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false

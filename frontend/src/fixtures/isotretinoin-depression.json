@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "isotretinoin-depression",
   "query": "isotretinoin and depression",
-  "generated_at": "2026-09-13T06:31:57.003452+00:00",
-  "source_pin": "3cb12fa61a694167d06d5c0ca738645b67acef0df071bc468deae6625e1ef876",
+  "generated_at": "2026-09-13T16:38:27.692457+00:00",
+  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
   "stages": [
     {
       "name": "retrieve",
@@ -205,6 +205,7 @@
       "pmid": "42699123",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Alshbiti et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -223,6 +224,7 @@
       "pmid": "42652851",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -238,6 +240,7 @@
       "pmid": "42217205",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -254,6 +257,7 @@
       "pmid": "41795820",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -272,6 +276,7 @@
       "pmid": "41517750",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 the Author(s). Published by Wolters Kluwer Health, Inc.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -289,6 +294,7 @@
       "pmid": "41378746",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -308,6 +314,7 @@
       "pmid": "41298831",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© The Author(s) 2025",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -333,6 +340,7 @@
       "pmid": "41266337",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© The Author(s) 2025",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -352,6 +360,7 @@
       "pmid": "41103707",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025 Yang, Xie, Jia, Cui and Xiao.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -374,6 +383,7 @@
       "pmid": "41011124",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -393,6 +403,7 @@
       "pmid": "40820662",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -409,6 +420,7 @@
       "pmid": "40692439",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -429,6 +441,7 @@
       "pmid": "40301234",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -448,6 +461,7 @@
       "pmid": "40260029",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 The Author(s). Health Science Reports published by Wiley Periodicals LLC.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -466,6 +480,7 @@
       "pmid": "40142609",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -486,6 +501,7 @@
       "pmid": "40105976",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2025",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -504,6 +520,7 @@
       "pmid": "40062686",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 The Author(s). Journal of Cosmetic Dermatology published by Wiley Periodicals LLC.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -523,6 +540,7 @@
       "pmid": "40024390",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -538,6 +556,7 @@
       "pmid": "40015569",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -555,6 +574,7 @@
       "pmid": "39951126",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -571,6 +591,7 @@
       "pmid": "39817790",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2025. Published by Oxford University Press on behalf of The Aesthetic Society.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -590,6 +611,7 @@
       "pmid": "39775941",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -606,6 +628,7 @@
       "pmid": "39761209",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -628,6 +651,7 @@
       "pmid": "39709951",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -646,6 +670,7 @@
       "pmid": "39479132",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2024, Ganjikunta et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -665,6 +690,7 @@
       "pmid": "39340675",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2024",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -685,6 +711,7 @@
       "pmid": "39180584",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -702,6 +729,7 @@
       "pmid": "39165891",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "2024 authors",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -727,6 +755,7 @@
       "pmid": "39041836",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -746,6 +775,7 @@
       "pmid": "39037104",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -773,6 +803,7 @@
       "pmid": "38923374",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -790,6 +821,7 @@
       "pmid": "38848882",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -809,6 +841,7 @@
       "pmid": "38608451",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -831,6 +864,7 @@
       "pmid": "38500340",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -849,6 +883,7 @@
       "pmid": "38463077",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "Copyright © 2024 The Author(s). Published by Wolters Kluwer Health, Inc.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -870,6 +905,7 @@
       "pmid": "38414983",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/3.0/",
+      "copyright": "© 2024 Abukhalil et al.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -892,6 +928,7 @@
       "pmid": "38402012",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2024 Sociedade Brasileira de Dermatologia. Published by Elsevier España, S.L.U.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -909,6 +946,7 @@
       "pmid": "38328516",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2023 by the American Academy of Dermatology, Inc. Published by Elsevier Inc.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -928,6 +966,7 @@
       "pmid": "38264057",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2024 Liang, Qi, Jiang, Chen and Dong.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -944,6 +983,7 @@
       "pmid": "38140757",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -963,6 +1003,7 @@
       "pmid": "38107219",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2023, Alamri et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -982,6 +1023,7 @@
       "pmid": "38019562",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright 2023 Tan NKW et al. JAMA Dermatology.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -997,6 +1039,7 @@
       "pmid": "37998335",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2023 by the author.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1013,6 +1056,7 @@
       "pmid": "37736468",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/3.0/",
+      "copyright": "Copyright © 2023, Gupta et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1029,6 +1073,7 @@
       "pmid": "37506605",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2023 The Authors",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1048,6 +1093,7 @@
       "pmid": "37456447",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/3.0/",
+      "copyright": "Copyright © 2023, Malebari et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1064,6 +1110,7 @@
       "pmid": "37343232",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1080,6 +1127,7 @@
       "pmid": "37146764",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1097,6 +1145,7 @@
       "pmid": "37037198",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1116,6 +1165,7 @@
       "pmid": "36915821",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "2023 Gland Surgery. All rights reserved.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1132,6 +1182,7 @@
       "pmid": "36841334",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1149,6 +1200,7 @@
       "pmid": "36788925",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/3.0/",
+      "copyright": "Copyright © 2023, Assiri et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1166,6 +1218,7 @@
       "pmid": "36780952",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1187,6 +1240,7 @@
       "pmid": "36597744",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1203,6 +1257,7 @@
       "pmid": "36273659",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1223,6 +1278,7 @@
       "pmid": "35791482",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1239,6 +1295,7 @@
       "pmid": "35321363",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/3.0/",
+      "copyright": "© 2021 Iran University of Medical Sciences",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1254,6 +1311,7 @@
       "pmid": "35103512",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1275,6 +1333,7 @@
       "pmid": "34893965",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2021",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": false
@@ -1296,6 +1355,7 @@
       "pmid": "34859487",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false

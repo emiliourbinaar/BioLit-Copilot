@@ -6,7 +6,7 @@ from xml.etree import ElementTree as ET
 import httpx
 
 from biolit.clients.http import RetryConfig, request_with_retry
-from biolit.clients.pmc import licences_by_pmcid, normalize_pmcid
+from biolit.clients.pmc import copyrights_by_pmcid, licences_by_pmcid, normalize_pmcid
 from biolit.config import Settings
 from biolit.domain.enums import Source, TextType
 from biolit.domain.licensing import (
@@ -135,8 +135,8 @@ class PubMedClient:
         root = ET.fromstring(resp.text)
         articles = root.findall(".//PubmedArticle")
         pmc_ids = sorted({p for article in articles if (p := _pmc_id_of(article))})
-        licences = await self._fetch_licences(pmc_ids)
-        return [self._parse_article(article, licences) for article in articles]
+        licences, copyrights = await self._fetch_permissions(pmc_ids)
+        return [self._parse_article(article, licences, copyrights) for article in articles]
 
     async def efetch_abstracts(self, pmids: list[str]) -> dict[str, tuple[str | None, int | None]]:
         """{pmid: (abstract, publication year)} for consumers that judge abstracts only.
@@ -147,7 +147,7 @@ class PubMedClient:
         id -- which at NCBI's unkeyed 3 req/s is the dominant cost of a multi-thousand-paper
         fetch. (It was also fatal when this was written: the dead OA service answered 404 for
         any article outside the OA subset and `request_with_retry` raises for status. That is
-        no longer true -- `_fetch_licences` degrades to an empty map instead -- so cost is now
+        no longer true -- `_fetch_permissions` degrades to empty maps instead -- so cost is now
         the whole reason, not merely the surviving one.)
 
         Year comes from JournalIssue/PubDate/Year and may be None; it is here because the
@@ -174,16 +174,19 @@ class PubMedClient:
             out[pmid] = (self._parse_abstract(article), year)
         return out
 
-    async def _fetch_licences(self, pmc_ids: list[str]) -> dict[str, str | None]:
-        """One batched request for every PMC id in the response, or none at all.
+    async def _fetch_permissions(
+        self, pmc_ids: list[str]
+    ) -> tuple[dict[str, str | None], dict[str, str | None]]:
+        """({pmcid: licence}, {pmcid: copyright notice}) from one batched request, or none at all.
 
-        Degrades to an empty map on any HTTP failure, which refuses rather than crashing.
+        Both maps come from the same `<permissions>` blocks of the same response. Degrades to
+        empty maps on any HTTP failure, which refuses rather than crashing.
         A licence lookup that cannot answer must never be read as permission, and must
         never take the whole fetch down with it -- which is exactly what the dead OA
         endpoint did.
         """
         if not pmc_ids:
-            return {}
+            return {}, {}
         try:
             resp = await request_with_retry(
                 self._client,
@@ -193,13 +196,19 @@ class PubMedClient:
                 params=self._params(db="pmc", id=",".join(pmc_ids), retmode="xml"),
             )
         except httpx.HTTPError:
-            return {}
+            return {}, {}
         try:
-            return licences_by_pmcid(ET.fromstring(resp.text))
+            root = ET.fromstring(resp.text)
+            return licences_by_pmcid(root), copyrights_by_pmcid(root)
         except ET.ParseError:
-            return {}
+            return {}, {}
 
-    def _parse_article(self, article: ET.Element, licences: Mapping[str, str | None]) -> Paper:
+    def _parse_article(
+        self,
+        article: ET.Element,
+        licences: Mapping[str, str | None],
+        copyrights: Mapping[str, str | None],
+    ) -> Paper:
         pmid = article.findtext(".//MedlineCitation/PMID") or ""
         title = article.findtext(".//Article/ArticleTitle") or ""
         abstract = self._parse_abstract(article)
@@ -254,7 +263,13 @@ class PubMedClient:
             extraction_allowed=extraction_allowed_for(tier),
             # `license_url` is kept because `license` is a version-less token: attribution
             # must link the licence version actually granted, which only this URL names.
-            raw={"pmid": pmid, "pmc_id": pmc_id, "license_url": raw_licence},
+            raw={
+                "pmid": pmid,
+                "pmc_id": pmc_id,
+                "license_url": raw_licence,
+                # CC licences require keeping the copyright notice supplied with the work.
+                "copyright": copyrights.get(pmc_id) if pmc_id else None,
+            },
         )
 
     @staticmethod

@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "metformin-lactic-acidosis",
   "query": "metformin and lactic acidosis",
-  "generated_at": "2026-09-13T06:32:21.244879+00:00",
-  "source_pin": "3cb12fa61a694167d06d5c0ca738645b67acef0df071bc468deae6625e1ef876",
+  "generated_at": "2026-09-13T16:38:53.504787+00:00",
+  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
   "stages": [
     {
       "name": "retrieve",
@@ -491,6 +491,7 @@
       "pmid": "42730466",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright 2026 Authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -511,6 +512,7 @@
       "pmid": "42696402",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -527,6 +529,7 @@
       "pmid": "42545322",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © Akl M., Ahmed A., 2026",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -545,6 +548,7 @@
       "pmid": "42377238",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 Welsch et al",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -564,6 +568,7 @@
       "pmid": "42289604",
       "license": null,
       "license_url": null,
+      "copyright": "© The Author(s), under exclusive licence to Japanese Society of Nephrology 2026. Springer Nature or its licensor (e.g. a society or other partner) holds exclusive rights to this article under a publishing agreement with the author(s) or other rightsholder(s); author self-archiving of the accepted manuscript version of this article is solely governed by the terms of such publishing agreement and applicable law.",
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -582,6 +587,7 @@
       "pmid": "42254136",
       "license": "cc_by_nd",
       "license_url": "https://creativecommons.org/licenses/by-nd/4.0/",
+      "copyright": "Copyright © 2026 The Author(s). Published by Wolters Kluwer Health, Inc.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -599,6 +605,7 @@
       "pmid": "42234904",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -618,6 +625,7 @@
       "pmid": "42196606",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -638,6 +646,7 @@
       "pmid": "42178010",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -658,6 +667,7 @@
       "pmid": "42164410",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/2.5/",
+      "copyright": "© Dustri-Verlag Dr. K. Feistle",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -678,6 +688,7 @@
       "pmid": "42153113",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 Ans Alamami et al., published by University of Medicine, Pharmacy, Science and Technology of Targu Mures",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -697,6 +708,7 @@
       "pmid": "42147805",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026 Zhanna Albany et al. Case Reports in Critical Care published by John Wiley & Sons Ltd.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -718,6 +730,7 @@
       "pmid": "42137698",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Almahmood et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -742,6 +755,7 @@
       "pmid": "42129892",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© The Author(s) 2026",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -757,6 +771,7 @@
       "pmid": "42075647",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the author.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -773,6 +788,7 @@
       "pmid": "42058699",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2026. Published by Oxford University Press on behalf of the Endocrine Society.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -795,6 +811,7 @@
       "pmid": "42010803",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Author(s). Pharmacology Research & Perspectives published by British Pharmacological Society and American Society for Pharmacology and Experimental Therapeutics and John Wiley & Sons Ltd.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -811,6 +828,7 @@
       "pmid": "41995776",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -830,6 +848,7 @@
       "pmid": "41994667",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Eser et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -852,6 +871,7 @@
       "pmid": "41948560",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© The Author(s), 2026",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -872,6 +892,7 @@
       "pmid": "41948515",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Khan RS et al., Applied Systems and Discoveries Journals.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -887,6 +908,7 @@
       "pmid": "41938317",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 Published by Elsevier Inc. on behalf of the AACE.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -904,6 +926,7 @@
       "pmid": "41914935",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Authors",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -926,6 +949,7 @@
       "pmid": "41911662",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -942,6 +966,7 @@
       "pmid": "41909343",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Sadiq et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -960,6 +985,7 @@
       "pmid": "41898617",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -981,6 +1007,7 @@
       "pmid": "41877042",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© The Author(s) 2026",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1000,6 +1027,7 @@
       "pmid": "41859615",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Noites et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1018,6 +1046,7 @@
       "pmid": "41804347",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© The Author(s), 2026",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1040,6 +1069,7 @@
       "pmid": "41798450",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2026, Zin Aung et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1062,6 +1092,7 @@
       "pmid": "41797748",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2026 The Author(s). Clinical Case Reports published by John Wiley & Sons Ltd.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1086,6 +1117,7 @@
       "pmid": "41751960",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2026 by the authors.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1104,6 +1136,7 @@
       "pmid": "41714245",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1122,6 +1155,7 @@
       "pmid": "41619701",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1144,6 +1178,7 @@
       "pmid": "41548682",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1163,6 +1198,7 @@
       "pmid": "41539435",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1178,6 +1214,7 @@
       "pmid": "41505222",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1197,6 +1234,7 @@
       "pmid": "41483718",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1212,6 +1250,7 @@
       "pmid": "41416058",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "(c) Therapeutic Guidelines",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": false
@@ -1232,6 +1271,7 @@
       "pmid": "41386809",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1248,6 +1288,7 @@
       "pmid": "41376140",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1267,6 +1308,7 @@
       "pmid": "41356654",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2025 The Author(s). Clinical Case Reports published by John Wiley & Sons Ltd.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1289,6 +1331,7 @@
       "pmid": "41291951",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© The Author(s) 2025",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1309,6 +1352,7 @@
       "pmid": "41287211",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 Mahidol university. Published by Informa UK Limited, trading as Taylor & Francis Group",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1327,6 +1371,7 @@
       "pmid": "41281028",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025, Miyata et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1346,6 +1391,7 @@
       "pmid": "41278064",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025, Taj et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1364,6 +1410,7 @@
       "pmid": "41269930",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© 2025 Peng et al",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1383,6 +1430,7 @@
       "pmid": "41269915",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "© 2025 The Author(s). Published by S. Karger AG, Basel",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1401,6 +1449,7 @@
       "pmid": "41241275",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1420,6 +1469,7 @@
       "pmid": "41189139",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "Copyright © 2025 the Author(s). Published by Wolters Kluwer Health, Inc.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1437,6 +1487,7 @@
       "pmid": "41179896",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025 Kortli, Amathieu and Ghalayini.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1454,6 +1505,7 @@
       "pmid": "41113081",
       "license": "cc_by_nc",
       "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+      "copyright": "©The Author(s) 2025. Published by Baishideng Publishing Group Inc. All rights reserved.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1480,6 +1532,7 @@
       "pmid": "41079154",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "© The Author(s) 2025. Published by Oxford University Press on behalf of the ERA.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1499,6 +1552,7 @@
       "pmid": "41054114",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025 the Author(s). Published by Wolters Kluwer Health, Inc.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1516,6 +1570,7 @@
       "pmid": "41048693",
       "license": "cc_by_nc_nd",
       "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+      "copyright": "© 2025 American Association of Clinical Endocrinologists. Published by Elsevier Inc.",
       "license_tier": "non_commercial",
       "extraction_allowed": true,
       "excerpted": true
@@ -1559,6 +1614,7 @@
       "pmid": "41030935",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false
@@ -1576,6 +1632,7 @@
       "pmid": "40963686",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025 Xie, Zhou and Cao.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1595,6 +1652,7 @@
       "pmid": "40904982",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025, Kessler et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1614,6 +1672,7 @@
       "pmid": "40787182",
       "license": "cc_by",
       "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "copyright": "Copyright © 2025, Sasaki et al.",
       "license_tier": "open",
       "extraction_allowed": true,
       "excerpted": true
@@ -1630,6 +1689,7 @@
       "pmid": "40773090",
       "license": null,
       "license_url": null,
+      "copyright": null,
       "license_tier": "unknown",
       "extraction_allowed": false,
       "excerpted": false

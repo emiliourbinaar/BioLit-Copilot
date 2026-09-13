@@ -56,6 +56,21 @@ async def test_the_publishers_licence_url_is_kept_because_the_token_drops_its_ve
 
 
 @respx.mock
+async def test_the_publishers_copyright_notice_is_kept_for_attribution(settings):
+    """Creative Commons licences require keeping the copyright notice supplied with the work,
+    and the licence lookup is the one place the pipeline reads the publisher's permissions."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_pmc_oa.xml"))
+    )
+    respx.get(EFETCH, params__contains={"db": "pmc"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pmc_efetch_cc_by.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["11111111"])
+    assert papers[0].raw["copyright"] == "© The Author(s) 2022"
+
+
+@respx.mock
 async def test_a_restricted_stub_is_refused_not_permitted(settings):
     """The PMC1401093 shape. The dangerous failure here is over-permitting, so this pins
     the refusal rather than merely pinning that something was returned."""
