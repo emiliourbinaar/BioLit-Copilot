@@ -183,6 +183,21 @@ async def test_efetch_no_pmc_is_abstract_only(settings):
 
 
 @respx.mock
+async def test_a_title_with_inline_markup_is_read_whole_not_cut_at_the_first_tag(settings):
+    """PubMed titles carry inline markup (`<i>in vitro</i>`, `CO<sub>2</sub>`). `findtext`
+    returns only the text BEFORE the first child element, so attribution published titles such
+    as "...in human proximal tubular" -- found by screenshot on the evidence viewer."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_title_markup.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["55555555"])
+    assert papers[0].title == (
+        "Biomarkers in human proximal tubular in vitro models of injury: a CO2 review."
+    )
+
+
+@respx.mock
 async def test_a_group_author_is_a_creator_and_is_not_dropped(settings):
     """Attribution names the creators, and a `<CollectiveName>` author IS one -- a study group
     or consortium. Reading only LastName/ForeName silently omitted them from every citation."""

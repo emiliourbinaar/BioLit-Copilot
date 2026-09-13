@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "isotretinoin-depression",
   "query": "isotretinoin and depression",
-  "generated_at": "2026-09-13T16:38:27.692457+00:00",
-  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
+  "generated_at": "2026-09-13T16:46:05.048897+00:00",
+  "source_pin": "21acb87a1224508f6e1c0709296e66f56a108c86f9254f0fc543fa0d7bf4a181",
   "stages": [
     {
       "name": "retrieve",
@@ -389,7 +389,7 @@
       "excerpted": true
     },
     "10.1002/lsm.70056": {
-      "title": "Ablative Fractional CO",
+      "title": "Ablative Fractional CO2 Laser Treatment With and Without Oral Isotretinoin: A Study on Side Effects and Acne Scars Improvement in Southeast Asians.",
       "authors": [
         "Patcharapong Rujirawan",
         "Kridipop Charoenchaipiyakul",
@@ -952,7 +952,7 @@
       "excerpted": false
     },
     "10.3389/fmed.2023.1340068": {
-      "title": "",
+      "title": "Lactobacillus plantarum MH-301 as an effective adjuvant to isotretinoin in the treatment of acne vulgaris: a randomized and open-label trail.",
       "authors": [
         "Lili Liang",
         "Xinyue Qi",

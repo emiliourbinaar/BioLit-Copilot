@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "cisplatin-nephrotoxicity",
   "query": "cisplatin nephrotoxicity",
-  "generated_at": "2026-09-13T16:38:41.483016+00:00",
-  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
+  "generated_at": "2026-09-13T16:46:17.974619+00:00",
+  "source_pin": "21acb87a1224508f6e1c0709296e66f56a108c86f9254f0fc543fa0d7bf4a181",
   "stages": [
     {
       "name": "retrieve",
@@ -258,7 +258,7 @@
       "excerpted": true
     },
     "10.1177/1096620X261481636": {
-      "title": "",
+      "title": "Cudrania tricuspidata Leaf-Derived Polysaccharides Attenuate Cisplatin-Induced Cytotoxicity in HEK 293T Cells via the Nrf2/HO-1 Pathway.",
       "authors": [
         "Hea-Ju Cho",
         "Eui-Hong Byun"
@@ -395,7 +395,7 @@
       "excerpted": false
     },
     "10.1016/j.colsurfb.2026.116069": {
-      "title": "Kidney-targeted delivery of rapamycin via folic acid-Mn",
+      "title": "Kidney-targeted delivery of rapamycin via folic acid-Mn3O4 nanoparticles for acute kidney injury therapy.",
       "authors": [
         "Weinan Sun",
         "Qin Wang",
@@ -529,7 +529,7 @@
       "excerpted": false
     },
     "10.3389/jpps.2026.16787": {
-      "title": "Innovative hyaluronic acid-decorated quatsomes for enhanced renal targeting: design, optimization and ",
+      "title": "Innovative hyaluronic acid-decorated quatsomes for enhanced renal targeting: design, optimization and in-vivo biochemical and nephroprotective assessments.",
       "authors": [
         "Sadek Ahmed",
         "Rana M ElBishbishy",
@@ -717,7 +717,7 @@
       "excerpted": false
     },
     "10.1016/j.namjnl.2026.100110": {
-      "title": "An AOP-guided ",
+      "title": "An AOP-guided in vitro platform for mechanistic screening of platinum-based nephrotoxicity.",
       "authors": [
         "Devon A Barnes",
         "Frank A Redegeld",
@@ -756,7 +756,7 @@
       "excerpted": false
     },
     "10.3389/ftox.2026.1862941": {
-      "title": "Biomarker selection and reporting architecture in human proximal tubular ",
+      "title": "Biomarker selection and reporting architecture in human proximal tubular in vitro models of cisplatin-induced nephrotoxicity: a systematic review.",
       "authors": [
         "María Gabriella Rodríguez-Marcano",
         "Ornella Pierucci",
@@ -1046,7 +1046,7 @@
       "excerpted": false
     },
     "10.1021/cbmi.5c00174": {
-      "title": "Concurrent Evaluation of Liver and Kidney Function by NIR-II ",
+      "title": "Concurrent Evaluation of Liver and Kidney Function by NIR-II In Vivo Imaging to Assess the Efficacy of Flavonoids in Preventing Their Injuries.",
       "authors": [
         "Yuxin Bai",
         "Ruihu Song",
@@ -1067,7 +1067,7 @@
       "excerpted": false
     },
     "10.3390/ijms27125302": {
-      "title": "Cisplatin-Induced Nephrotoxicity Attenuation by ",
+      "title": "Cisplatin-Induced Nephrotoxicity Attenuation by Schizophyllum commune Through Regulating Mitochondria-Associated Signaling, Apoptosis, Autophagy, and PINK1/Parkin-Mediated Mitophagy.",
       "authors": [
         "Yu-Wen Sun",
         "Te-Kai Sun",
@@ -1267,7 +1267,7 @@
       "excerpted": false
     },
     "10.1080/14786419.2026.2682375": {
-      "title": "",
+      "title": "In vitro nephroprotective indolizidine alkaloids from marine-derived Streptomyces sp. KIB629.",
       "authors": [
         "Xiaowei Guo",
         "Lei Wang",

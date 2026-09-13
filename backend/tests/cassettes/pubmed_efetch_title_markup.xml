@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>55555555</PMID>
+      <Article>
+        <Journal><Title>Journal of Tests</Title>
+          <JournalIssue><PubDate><Year>2026</Year></PubDate></JournalIssue>
+        </Journal>
+        <ArticleTitle>Biomarkers in human proximal tubular <i>in vitro</i> models of injury: a CO<sub>2</sub> review.</ArticleTitle>
+        <Abstract><AbstractText>Markup abstract.</AbstractText></Abstract>
+        <AuthorList>
+          <Author><LastName>Doe</LastName><ForeName>Jane</ForeName></Author>
+        </AuthorList>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">55555555</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>
