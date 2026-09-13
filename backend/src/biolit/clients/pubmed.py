@@ -210,7 +210,10 @@ class PubMedClient:
         copyrights: Mapping[str, str | None],
     ) -> Paper:
         pmid = article.findtext(".//MedlineCitation/PMID") or ""
-        title = article.findtext(".//Article/ArticleTitle") or ""
+        # itertext, not findtext: titles carry inline markup (`<i>in vitro</i>`), and findtext
+        # stops at the first child element, truncating the title attribution must name whole.
+        title_el = article.find(".//Article/ArticleTitle")
+        title = "".join(title_el.itertext()) if title_el is not None else ""
         abstract = self._parse_abstract(article)
         journal = article.findtext(".//Journal/Title")
         year_text = article.findtext(".//JournalIssue/PubDate/Year")

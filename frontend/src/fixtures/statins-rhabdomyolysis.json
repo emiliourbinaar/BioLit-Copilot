@@ -2,8 +2,8 @@
   "schema_version": 2,
   "slug": "statins-rhabdomyolysis",
   "query": "statins and rhabdomyolysis",
-  "generated_at": "2026-09-13T16:38:16.419342+00:00",
-  "source_pin": "124fde24cbb49b97c0da29bc86b628085654adb0c188be3f639441e8429ebaba",
+  "generated_at": "2026-09-13T16:45:53.986950+00:00",
+  "source_pin": "21acb87a1224508f6e1c0709296e66f56a108c86f9254f0fc543fa0d7bf4a181",
   "stages": [
     {
       "name": "retrieve",
@@ -1462,7 +1462,7 @@
       "excerpted": false
     },
     "10.2147/JEP.S555519": {
-      "title": "Effects of ",
+      "title": "Effects of Catha edulis Extract on Atorvastatin-Induced Myotoxicity in Rats: Biochemical and Histopathological Evidence.",
       "authors": [
         "Abdulatef Mohammed Mohammed Abbas",
         "Safia Abdulatef Abdulruhman Alrezami",
