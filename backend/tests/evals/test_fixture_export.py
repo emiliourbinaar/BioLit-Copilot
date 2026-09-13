@@ -5,10 +5,11 @@ import pytest
 from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
 from biolit.domain.enums import LicenseTier, Source, TextType
-from biolit.domain.paper import Paper
-from biolit.domain.records import Cluster
+from biolit.domain.paper import Author, Paper
+from biolit.domain.records import Cluster, ExtractedRecord, Finding
 from biolit.query.concepts import QueryConcepts
 from biolit.state.pipeline import PipelineState, StageReport, StageStatus
+from biolit.synth.template import render_cluster
 from biolit_evals.fixture_export import project_run
 from biolit_evals.fixture_models import FixtureFinding, FixtureRun
 
@@ -102,6 +103,99 @@ def test_every_cluster_paper_resolves_to_a_stub_carrying_licence_and_doi():
             stub = run.papers[paper_id]
             assert stub.license and stub.doi, "a cited paper must carry what attribution needs"
     assert run.clusters[0].concept_names == ["Alpha", "Beta"]
+
+
+def _excerpted_state() -> PipelineState:
+    """One quoted paper and one cluster member the answer names but quotes nothing from."""
+    quoted = Paper(
+        id="10.1/quoted",
+        source=Source.pubmed,
+        title="A quoted paper",
+        abstract="Alpha causes beta. Nothing else is quoted.",
+        doi="10.1/quoted",
+        pmid="1",
+        authors=[Author(name="Jane Doe"), Author(name="Example Trial Study Group")],
+        text_type=TextType.full_text_unverified,
+        license="cc_by_nc_nd",
+        license_tier=LicenseTier.non_commercial,
+        extraction_allowed=True,
+        raw={"license_url": "http://creativecommons.org/licenses/by-nc-nd/3.0/legalcode"},
+    )
+    silent = quoted.model_copy(
+        update={"id": "10.1/silent", "doi": "10.1/silent", "pmid": "2", "title": "Silent"}
+    )
+    records = {
+        quoted.id: ExtractedRecord(
+            paper_id=quoted.id,
+            key_findings=[Finding(text="Alpha causes beta.", start=0, end=18, sentence_index=0)],
+        ),
+        silent.id: ExtractedRecord(paper_id=silent.id),
+    }
+    cluster = Cluster(key="MESH:A|MESH:B", paper_ids=[quoted.id, silent.id])
+    state = PipelineState(question="q")
+    state.candidate_papers = [quoted, silent]
+    state.extracted_records = records
+    state.clusters = [cluster]
+    state.answer = render_cluster(cluster, records, {p.id: p for p in state.candidate_papers})
+    return state
+
+
+def _project(state: PipelineState) -> FixtureRun:
+    return project_run(
+        state,
+        slug="s",
+        concepts=_no_concepts(),
+        tree=MeshTree({}),
+        actions=PharmacologicalActions({}),
+        names={},
+        labels={},
+        findings=[],
+        generated_at="2026-09-13T00:00:00+00:00",
+    )
+
+
+def test_a_quoted_paper_carries_its_creators_and_the_deed_of_its_own_licence_version():
+    """Creative Commons attribution names the creators and links the licence. The stub
+    carries both, the deed at the version the publisher granted, and says which papers the
+    answer actually excerpts -- a cluster member with no finding sentence is named, not quoted.
+    """
+    run = _project(_excerpted_state())
+
+    quoted = run.papers["10.1/quoted"]
+    assert quoted.authors == ["Jane Doe", "Example Trial Study Group"]
+    assert quoted.license_url == "https://creativecommons.org/licenses/by-nc-nd/3.0/"
+    assert quoted.excerpted is True
+    assert run.papers["10.1/silent"].excerpted is False
+
+
+def test_project_run_refuses_an_excerpt_whose_licence_it_cannot_link_to_a_deed():
+    """An excerpt published without its licence deed is incomplete attribution -- DEF-0008's
+    class of mistake again. The generator refuses rather than ship the quote unlinked."""
+    state = _excerpted_state()
+    quoted = state.candidate_papers[0]
+    state.candidate_papers[0] = quoted.model_copy(
+        update={"raw": {"license_url": "https://creativecommons.org/licenses/by-nc-nd/"}}
+    )
+
+    with pytest.raises(RuntimeError, match="10.1/quoted"):
+        _project(state)
+
+
+def test_project_run_refuses_a_quoted_sentence_that_is_not_verbatim_from_its_abstract():
+    """ND licences permit no adapted material, so every excerpt must be the source's own text,
+    character for character, at the offsets the extractor recorded. One changed character is
+    an adaptation, and the generator refuses to publish it."""
+    state = _excerpted_state()
+    altered = Finding(text="Alpha causes beta!", start=0, end=18, sentence_index=0)
+    state.extracted_records["10.1/quoted"].key_findings = [altered]
+    state.answer = render_cluster(
+        state.clusters[0],
+        state.extracted_records,
+        {p.id: p for p in state.candidate_papers},
+    )
+
+    with pytest.raises(RuntimeError, match="not verbatim"):
+        _project(state)
 
 
 def test_a_cluster_with_no_shared_tree_survives_a_json_round_trip():

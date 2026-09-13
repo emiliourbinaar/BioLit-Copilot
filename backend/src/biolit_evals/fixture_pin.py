@@ -20,11 +20,11 @@ comment-only edit genuinely does not invalidate a fixture.
    identifiers as each paper's own, and five abstracts were quoted under borrowed licences
    while no pin could see the parser at all. `PubMedClient.efetch`'s own control flow remains
    unpinned transport.
-2. `biolit_evals/fixture_export.py` itself. `project_run` determines displayed values -- the
-   inf->None mapping, the concept-name lookup, rank numbering -- so by the rule above it
-   qualifies. It is unpinned because pinning the module wholesale would also pin `main()`'s
-   network plumbing; the recommended upgrade is to hash the `project_run` subtree alone, the
-   same technique as (1). ⚠️ RECORDED AS AN OPEN GAP, not as a decision that it does not apply.
+2. ~~`biolit_evals/fixture_export.py` itself~~ ⛔ CLOSED 2026-09-13, by the upgrade this entry
+   recommended: `project_run` and the two excerpt refusals are pinned by AST subtree, and
+   `main()`'s network plumbing is not. It closed when `project_run` began deciding attribution
+   (`authors`, `license_url`, `excerpted`) -- values a changed projection would otherwise
+   misstate on a public page with the pin still green.
 3. The MeSH ARTIFACTS (`mesh_tree.json.gz`, `mesh_actions.json.gz`, the alias dictionary) --
    data, not code. The traversal code is now pinned; the data it reads is not.
 4. The NER checkpoint, and NCBI's query translation.
@@ -74,6 +74,16 @@ PINNED_SUBTREES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "_pmc_id_of",  # the id the licence lookup uses -> licence, tier, gate counts
             "PubMedClient._parse_article",  # title, journal, year, doi, pmid, licence
             "PubMedClient._parse_abstract",  # the text every quote in `answer` is cut from
+        ),
+    ),
+    # ⭐ ADDED 2026-09-13 -- gap 2 below, closed when `project_run` began deciding attribution
+    # (`authors`, `license_url`, `excerpted`). `main()`'s network plumbing stays unpinned.
+    (
+        "biolit_evals.fixture_export",
+        (
+            "project_run",  # every stub value, the inf->None mapping, rank numbering
+            "_assert_excerpts_attributable",  # which excerpts may ship without a deed
+            "_assert_excerpts_verbatim",  # which excerpts may ship at all
         ),
     ),
 )

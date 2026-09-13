@@ -1,9 +1,9 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "slug": "isotretinoin-depression",
   "query": "isotretinoin and depression",
-  "generated_at": "2026-09-13T00:06:03.867983+00:00",
-  "source_pin": "9878166052f2cd8f8f13f94a755d1ef1a567903e0cfd738c409e3a5c1948fab2",
+  "generated_at": "2026-09-13T06:31:57.003452+00:00",
+  "source_pin": "3cb12fa61a694167d06d5c0ca738645b67acef0df071bc468deae6625e1ef876",
   "stages": [
     {
       "name": "retrieve",
@@ -194,603 +194,1111 @@
   "papers": {
     "10.7759/cureus.113976": {
       "title": "Lupus Miliaris Disseminatus Faciei as a Diagnostic and Therapeutic Challenge in Facial Dermatoses.",
+      "authors": [
+        "Ahmed Alshbiti",
+        "Syrine Hamada",
+        "Benzekri Laila"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.113976",
       "pmid": "42699123",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.3390/jcm15166447": {
       "title": "Psychodermatology Profiles in Acne Vulgaris: Quality of Life, Stress, Insomnia, and Depressive Symptoms in a Cross-Sectional Cohort.",
+      "authors": [
+        "Roxana Manuela Fericean",
+        "Ana-Olivia Toma",
+        "Iulia Georgiana Bogdan",
+        "Horia Silviu Branea"
+      ],
       "journal": "Journal of clinical medicine",
       "year": 2026,
       "doi": "10.3390/jcm15166447",
       "pmid": "42652851",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1093/ced/llag231": {
       "title": "Acne, Mental Health, and Isotretinoin: Disentangling Disease Burden, Treatment Effects, and Psychiatric Risk.",
+      "authors": [
+        "Rafael Tonella Vezzoli"
+      ],
       "journal": "Clinical and experimental dermatology",
       "year": 2026,
       "doi": "10.1093/ced/llag231",
       "pmid": "42217205",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1002/hup.70036": {
       "title": "Evaluation of Depression, Anxiety, and Sleep Quality in Patients With Acne Vulgaris Receiving Isotretinoin Treatment.",
+      "authors": [
+        "Candan Celik",
+        "Mehmet Semih Celik"
+      ],
       "journal": "Human psychopharmacology",
       "year": 2026,
       "doi": "10.1002/hup.70036",
       "pmid": "41795820",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1097/MD.0000000000047076": {
       "title": "Drug-induced risk of depression: A 20-year real-world pharmacovigilance analysis based on the FAERS database.",
+      "authors": [
+        "Xinping Xiang",
+        "Li Yin",
+        "Chunyan Deng",
+        "Qiuxia Feng"
+      ],
       "journal": "Medicine",
       "year": 2026,
       "doi": "10.1097/MD.0000000000047076",
       "pmid": "41517750",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1093/ced/llaf523": {
       "title": "The history, development and current status of isotretinoin: a review article.",
+      "authors": [
+        "Attam Khan",
+        "Corniche Khan",
+        "Saim Ahmed"
+      ],
       "journal": "Clinical and experimental dermatology",
       "year": 2026,
       "doi": "10.1093/ced/llaf523",
       "pmid": "41378746",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1038/s41598-025-30499-z": {
       "title": "Efficacy, psychological and physical adverse effects of isotretinoin in the treatment of acne: a cross-sectional study from Syria.",
+      "authors": [
+        "Aya Barakat",
+        "Raghad Merai",
+        "Alaa Alhaboul",
+        "Musab Murad",
+        "Sophie Barguil"
+      ],
       "journal": "Scientific reports",
       "year": 2025,
       "doi": "10.1038/s41598-025-30499-z",
       "pmid": "41298831",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1038/s41398-025-03750-4": {
       "title": "Chronic administration of isotretinoin induces depressive- and anxiety-like behaviors by altering the neuroactive ligand-receptor interaction pathway in adolescent mice.",
+      "authors": [
+        "Yi Ren",
+        "Zhe Ren",
+        "Shuang Zhao",
+        "Wentao Wu",
+        "Jiaolin Wang",
+        "Fei He",
+        "Qi Zhong",
+        "Hanping Zhang",
+        "Jianjun Chen",
+        "Ke Xu",
+        "Peng Xie"
+      ],
       "journal": "Translational psychiatry",
       "year": 2025,
       "doi": "10.1038/s41398-025-03750-4",
       "pmid": "41266337",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3389/fmed.2025.1559972": {
       "title": "Mining and analysis of adverse event signals of isotretinoin based on the real-world data of FAERS database.",
+      "authors": [
+        "Liu Yang",
+        "Hanzhang Xie",
+        "Ying Jia",
+        "Bingnan Cui",
+        "Zhanshuo Xiao"
+      ],
       "journal": "Frontiers in medicine",
       "year": 2025,
       "doi": "10.3389/fmed.2025.1559972",
       "pmid": "41103707",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3390/ph18091252": {
       "title": "Real-World Evidence of Neuropsychiatric Adverse Reactions to Isotretinoin: Insights from EudraVigilance (2005-2025).",
+      "authors": [
+        "Denisa Viola Szilagyi",
+        "Delia Mirela Tit",
+        "Claudia Teodora Judea-Pusta",
+        "Andrei-Flavius Radu",
+        "Gabriela S Bungau",
+        "Ada Radu",
+        "Laura Maria Endres",
+        "Ruxandra-Cristina Marin"
+      ],
       "journal": "Pharmaceuticals (Basel, Switzerland)",
       "year": 2025,
       "doi": "10.3390/ph18091252",
       "pmid": "41011124",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1002/lsm.70056": {
       "title": "Ablative Fractional CO",
+      "authors": [
+        "Patcharapong Rujirawan",
+        "Kridipop Charoenchaipiyakul",
+        "Saran Krithin",
+        "Chanudda Washrawirul",
+        "Chanat Kumtornrut"
+      ],
       "journal": "Lasers in surgery and medicine",
       "year": 2025,
       "doi": "10.1002/lsm.70056",
       "pmid": "40820662",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1192/bjp.2025.75": {
       "title": "Isotretinoin use, mood changes and suicidality. What is the link? Commentary, Duan and Chen.",
+      "authors": [
+        "Yinan Duan",
+        "Runsen Chen"
+      ],
       "journal": "The British journal of psychiatry : the journal of mental science",
       "year": 2025,
       "doi": "10.1192/bjp.2025.75",
       "pmid": "40692439",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1208/s12249-025-03106-7": {
       "title": "Isotretinoin-Loaded Topical Lipid Liquid Crystal for the Treatment of Acne: In-Vitro and In-Vivo Evaluations.",
+      "authors": [
+        "Armita Sedighidarijani",
+        "Shiva Golmohammadzadeh",
+        "Hossein Kamali",
+        "Bahman Khameneh",
+        "Elham Khodaverdi",
+        "Ali Nokhodchi"
+      ],
       "journal": "AAPS PharmSciTech",
       "year": 2025,
       "doi": "10.1208/s12249-025-03106-7",
       "pmid": "40301234",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1002/hsr2.70684": {
       "title": "A Double-Blind Randomized Study of Two Doses of Oral Isotretinoin in the Treatment of Recalcitrant Facial Flat Warts: Impact on Quality of Life, Anxiety, and Depression.",
+      "authors": [
+        "María Guadalupe Olguín-García",
+        "María Luisa Peralta-Pedrero",
+        "Martha Alejandra Morales-Sánchez",
+        "Elisa Vega-Memije",
+        "Víctor Manuel Bautista-de Lucio"
+      ],
       "journal": "Health science reports",
       "year": 2025,
       "doi": "10.1002/hsr2.70684",
       "pmid": "40260029",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3390/jcm14061801": {
       "title": "Isotretinoin Concerns in Switzerland: A Student-Based Transversal Study.",
+      "authors": [
+        "Anna-Lena U Jakobi",
+        "Andreas J Bircher",
+        "Alberto Pagnamenta",
+        "Isabella Terrani"
+      ],
       "journal": "Journal of clinical medicine",
       "year": 2025,
       "doi": "10.3390/jcm14061801",
       "pmid": "40142609",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1007/s00403-025-04123-z": {
       "title": "Severity of acne vulgaris predicts maladaptive psychosocial perceptions and neuropsychiatric disorders: a case-control study.",
+      "authors": [
+        "Brad R Woodie",
+        "Isaiah N Holt",
+        "Justin A Freking",
+        "Heather C W Harrison",
+        "Gabrielle M Rivin",
+        "Alan B Fleischer"
+      ],
       "journal": "Archives of dermatological research",
       "year": 2025,
       "doi": "10.1007/s00403-025-04123-z",
       "pmid": "40105976",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1111/jocd.70108": {
       "title": "Systemic Anti-Inflammatory Effects of Isotretinoin: Evaluation of Red Cell Distribution Width to Lymphocyte and Platelet Ratios as New Hematological Markers and Clinical Outcomes in Acne Vulgaris.",
+      "authors": [
+        "Abdullah Demirbas",
+        "Gozde Ulutaş Demirbas",
+        "Esin Diremsizoglu",
+        "Gizem Islamoglu"
+      ],
       "journal": "Journal of cosmetic dermatology",
       "year": 2025,
       "doi": "10.1111/jocd.70108",
       "pmid": "40062686",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.jaad.2025.02.072": {
       "title": "Reported psychiatric adverse events among isotretinoin users: Monitoring priorities from a 20-year FDA Adverse Event Reporting System database study.",
+      "authors": [
+        "Wenjia Nie",
+        "Xiaopeng Wu",
+        "Yuting Xia",
+        "Liyun Zheng",
+        "Hengcheng Lu"
+      ],
       "journal": "Journal of the American Academy of Dermatology",
       "year": 2025,
       "doi": "10.1016/j.jaad.2025.02.072",
       "pmid": "40024390",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1016/j.jaad.2025.02.048": {
       "title": "This Month in JAAD Reviews: May 2025-Suicide and Dermatology.",
+      "authors": [
+        "Shari R Lipner"
+      ],
       "journal": "Journal of the American Academy of Dermatology",
       "year": 2025,
       "doi": "10.1016/j.jaad.2025.02.048",
       "pmid": "40015569",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1007/s00403-025-03994-6": {
       "title": "Effect of isotretinoin treatment on sleep quality in acne vulgaris patients.",
+      "authors": [
+        "Mehmet Semih Celik",
+        "Candan Celik",
+        "Nagehan Cepik"
+      ],
       "journal": "Archives of dermatological research",
       "year": 2025,
       "doi": "10.1007/s00403-025-03994-6",
       "pmid": "39951126",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1093/asj/sjae150": {
       "title": "The Role of Fractional Radiofrequency in Long-term Acne Remission and Reduction of Acne Scar Load.",
+      "authors": [
+        "Fadi Hamadani",
+        "Neil M Vranis"
+      ],
       "journal": "Aesthetic surgery journal",
       "year": 2025,
       "doi": "10.1093/asj/sjae150",
       "pmid": "39817790",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1007/s00403-024-03743-1": {
       "title": "Psychiatric comorbidities, inflammatory bowel disease, and urticaria in acne vulgaris patients undergoing isotretinoin treatment: a multicenter cohort study from the TriNetX database.",
+      "authors": [
+        "Kritin K Verma",
+        "Ryan S Koch",
+        "Daniel P Friedmann",
+        "Michelle B Tarbox",
+        "Stephen K Tyring"
+      ],
       "journal": "Archives of dermatological research",
       "year": 2025,
       "doi": "10.1007/s00403-024-03743-1",
       "pmid": "39775941",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1093/ced/llae395": {
       "title": "Bibliometric analysis of studies investigating the association between isotretinoin use and depression and suicide.",
+      "authors": [
+        "Sezin Ünlü Açıkel",
+        "Açıkel Sadettin Burak"
+      ],
       "journal": "Clinical and experimental dermatology",
       "year": 2025,
       "doi": "10.1093/ced/llae395",
       "pmid": "39761209",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1159/000542626": {
       "title": "The Risk of Hospital Admission for an Acute-Onset Psychiatric Disorder in Adolescents and Adults Treated with Isotretinoin: A French, Nationwide, Population-Based, Case-Time-Control Study.",
+      "authors": [
+        "Catherine Droitcourt",
+        "Sandrine Kerbrat",
+        "Maxime Raby",
+        "Claire Laurent",
+        "David Travers",
+        "Frédéric Balusson",
+        "Emmanuel Oger",
+        "Alain Dupuy"
+      ],
       "journal": "Dermatology (Basel, Switzerland)",
       "year": 2025,
       "doi": "10.1159/000542626",
       "pmid": "39709951",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.70502": {
       "title": "Isotretinoin and Suicide: Data Mining of the United States Food and Drug Administration Adverse Event Reporting System Database.",
+      "authors": [
+        "Ravindra K Ganjikunta",
+        "Rupeshkumar B Naik",
+        "Chandrasekhar Vallepalli",
+        "Jegadeeshkrishnan M"
+      ],
       "journal": "Cureus",
       "year": 2024,
       "doi": "10.7759/cureus.70502",
       "pmid": "39479132",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1007/s10103-024-04196-8": {
       "title": "Emerging lasers and light-based therapies in the management of acne: a review.",
+      "authors": [
+        "Philippe Jean-Pierre",
+        "Lea Tordjman",
+        "Arjun Ghodasara",
+        "Chika Nwosu",
+        "Keyvan Nouri"
+      ],
       "journal": "Lasers in medical science",
       "year": 2024,
       "doi": "10.1007/s10103-024-04196-8",
       "pmid": "39340675",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1007/s00403-024-03293-6": {
       "title": "Disproportionality analysis of psychiatric morbidities associated with isotretinoin using VigiBase.",
+      "authors": [
+        "Eric Xia",
+        "Priya Manjaly",
+        "Sophia Ly",
+        "Kanika Kamal",
+        "Nicholas Theodosakis",
+        "Arash Mostaghimi"
+      ],
       "journal": "Archives of dermatological research",
       "year": 2024,
       "doi": "10.1007/s00403-024-03293-6",
       "pmid": "39180584",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.5152/pcp.2024.23718": {
       "title": "The Role of Serum Lipids in Predicting Suicidal Ideation in Isotretinoin Therapy for Acne.",
+      "authors": [
+        "Neşe Göçer Gürok",
+        "Betül Demir",
+        "Murad Atmaca"
+      ],
       "journal": "Psychiatry and clinical psychopharmacology",
       "year": 2024,
       "doi": "10.5152/pcp.2024.23718",
       "pmid": "39165891",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1093/ced/llae287": {
       "title": "Evaluating the relationship between depression, suicidal thoughts and ulcerative colitis in patients with acne on isotretinoin: a case-control study.",
+      "authors": [
+        "Kritin K Verma",
+        "Josephine Chiu",
+        "Joshua Connor",
+        "Aditi K Khareedhi",
+        "Smriti Panchal",
+        "Maitreyi Dhavala",
+        "Hayder Alamar",
+        "Cynthia Ni",
+        "Jexy A Nepangue",
+        "Michelle B Tarbox",
+        "Daniel P Friedmann"
+      ],
       "journal": "Clinical and experimental dermatology",
       "year": 2024,
       "doi": "10.1093/ced/llae287",
       "pmid": "39041836",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1097/ASW.0000000000000187": {
       "title": "Isotretinoin-Induced Hypersomnia: A Cross-sectional Study and Literature Review.",
+      "authors": [
+        "Ahmed Shawky",
+        "Mohamed Elsheikh",
+        "Emad M Elrewiny",
+        "Mohamed Adwi",
+        "Mahmoud A Rageh"
+      ],
       "journal": "Advances in skin & wound care",
       "year": 2024,
       "doi": "10.1097/ASW.0000000000000187",
       "pmid": "39037104",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1111/jocd.16433": {
       "title": "Correlation between depression scores and serum NF-ĸB/NLRP3 axis, biotinidase, and HMGB1 after treatment with isotretinoin in patients with acne vulgaris.",
+      "authors": [
+        "Ammena Y Binsaleh",
+        "Lahin Saad Ali",
+        "Mostafa M Bahaa",
+        "Thanaa A Elmasry",
+        "Walaa A Negm",
+        "Amir O Hamouda",
+        "Muhammed M Salahuddin",
+        "Eman Wahsh",
+        "Marwa Ahmed El-Samongy",
+        "Nawal Alsubaie",
+        "Eman El-Khateeb",
+        "Mohamed Yasser",
+        "Nashwa Eltantawy"
+      ],
       "journal": "Journal of cosmetic dermatology",
       "year": 2024,
       "doi": "10.1111/jocd.16433",
       "pmid": "38923374",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1016/j.pdpdt.2024.104234": {
       "title": "Successful treatment of a lactating women with severe acne through the combination of fire needle and photodynamic therapy: A case report.",
+      "authors": [
+        "Lei Tang",
+        "Xun Zhou",
+        "Ge Su"
+      ],
       "journal": "Photodiagnosis and photodynamic therapy",
       "year": 2024,
       "doi": "10.1016/j.pdpdt.2024.104234",
       "pmid": "38848882",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1080/15569527.2024.2340435": {
       "title": "Evaluation of isotretinoin effects on depression, sleep apnea and sleep quality.",
+      "authors": [
+        "Ozge Mine Orenay",
+        "Berkay Temel",
+        "Arcan Kivanc Capci",
+        "Zulal Inci Bal",
+        "Nermin Karaosmanoglu"
+      ],
       "journal": "Cutaneous and ocular toxicology",
       "year": 2024,
       "doi": "10.1080/15569527.2024.2340435",
       "pmid": "38608451",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1111/pde.15595": {
       "title": "The occurrence of mental health symptoms in isotretinoin-treated adolescents.",
+      "authors": [
+        "Keith Miller",
+        "Alastair McKean",
+        "Jennifer Hand",
+        "Sandra Rackley",
+        "Jonathan G Leung",
+        "Allison LeMahieu",
+        "Jennifer Geske",
+        "J Michael Bostwick"
+      ],
       "journal": "Pediatric dermatology",
       "year": 2024,
       "doi": "10.1111/pde.15595",
       "pmid": "38500340",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1097/MS9.0000000000001726": {
       "title": "Acute psychosis and behavioural changes with seizure-like hyperactive psychomotor activity secondary to isotretinoin initiation in a healthy young male: case report.",
+      "authors": [
+        "Rawan Albalawi",
+        "Hamoud Alsahli",
+        "Naif Almutairi",
+        "Moustafa Alhashemi"
+      ],
       "journal": "Annals of medicine and surgery (2012)",
       "year": 2024,
       "doi": "10.1097/MS9.0000000000001726",
       "pmid": "38463077",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.2147/PPA.S442436": {
       "title": "Practices, Efficacy, and Reported Side Effects Associated with Isotretinoin Treatment in Palestine.",
+      "authors": [
+        "Abdallah Damin Abukhalil",
+        "Mai Yousef",
+        "Marwa Ammar",
+        "Weam Jaghama",
+        "Ni'meh Al-Shami",
+        "Hani A Naseef",
+        "Abdullah K Rabba"
+      ],
       "journal": "Patient preference and adherence",
       "year": 2024,
       "doi": "10.2147/PPA.S442436",
       "pmid": "38414983",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/3.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.abd.2023.09.001": {
       "title": "Acne treatment challenges - Recommendations of Latin American expert consensus.",
+      "authors": [
+        "Marco Rocha",
+        "Franz Barnes",
+        "Jemena Calderón",
+        "Leonel Fierro-Arias",
+        "Carlos Eduardo Montealegre Gomez",
+        "Carla Munoz",
+        "Obregón Jannell",
+        "Patricia Troieli"
+      ],
       "journal": "Anais brasileiros de dermatologia",
       "year": 2024,
       "doi": "10.1016/j.abd.2023.09.001",
       "pmid": "38402012",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1016/j.jdin.2023.10.008": {
       "title": "Portrayal of mental health effects of isotretinoin on TikTok.",
+      "authors": [
+        "Madison Hackley",
+        "Dalia Al-Bataineh",
+        "Jules B Lipoff"
+      ],
       "journal": "JAAD international",
       "year": 2024,
       "doi": "10.1016/j.jdin.2023.10.008",
       "pmid": "38328516",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.3389/fmed.2023.1340068": {
       "title": "",
+      "authors": [
+        "Lili Liang",
+        "Xinyue Qi",
+        "Xiaoke Jiang",
+        "Tingtao Chen",
+        "Lina Dong"
+      ],
       "journal": "Frontiers in medicine",
       "year": 2023,
       "doi": "10.3389/fmed.2023.1340068",
       "pmid": "38264057",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1111/ijd.16997": {
       "title": "No association between isotretinoin and impulsivity in patients with moderate-to-severe acne vulgaris.",
+      "authors": [
+        "Çağrı Öğüt",
+        "Neslihan D Öğüt"
+      ],
       "journal": "International journal of dermatology",
       "year": 2024,
       "doi": "10.1111/ijd.16997",
       "pmid": "38140757",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.50612": {
       "title": "The Psychological Impact of Isotretinoin Therapy on Acne Vulgaris Patients.",
+      "authors": [
+        "Awadh Alamri",
+        "Randa Khafaji",
+        "Atheel Balkhy",
+        "Sahal Samarkandy",
+        "Ali Alraddadi"
+      ],
       "journal": "Cureus",
       "year": 2023,
       "doi": "10.7759/cureus.50612",
       "pmid": "38107219",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1001/jamadermatol.2023.4579": {
       "title": "Risk of Suicide and Psychiatric Disorders Among Isotretinoin Users: A Meta-Analysis.",
+      "authors": [
+        "Nicole Kye Wen Tan",
+        "Adelina Tang",
+        "Neil Chen Yi Lun MacAlevey",
+        "Benjamin Kye Jyn Tan",
+        "Hazel H Oon"
+      ],
       "journal": "JAMA dermatology",
       "year": 2024,
       "doi": "10.1001/jamadermatol.2023.4579",
       "pmid": "38019562",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3390/cells12222600": {
       "title": "Acne Transcriptomics: Fundamentals of Acne Pathogenesis and Isotretinoin Treatment.",
+      "authors": [
+        "Bodo C Melnik"
+      ],
       "journal": "Cells",
       "year": 2023,
       "doi": "10.3390/cells12222600",
       "pmid": "37998335",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.43867": {
       "title": "The Controversies Surrounding Acne and Suicide: Essential Knowledge for Clinicians.",
+      "authors": [
+        "Nihit Gupta",
+        "Mayank Gupta"
+      ],
       "journal": "Cureus",
       "year": 2023,
       "doi": "10.7759/cureus.43867",
       "pmid": "37736468",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.jaim.2023.100761": {
       "title": "Exploration of diacerein as a neuroprotective adjuvant to Adenium obesum: An in-vivo study.",
+      "authors": [
+        "Neeraj Kumar Sharma",
+        "Kislaya Mishra"
+      ],
       "journal": "Journal of Ayurveda and integrative medicine",
       "year": 2023,
       "doi": "10.1016/j.jaim.2023.100761",
       "pmid": "37506605",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.7759/cureus.40388": {
       "title": "An Assessment of the Knowledge of Oral Isotretinoin (Roaccutane) Treatment Among Pharmacy Students in Saudi Arabia.",
+      "authors": [
+        "Azizah M Malebari",
+        "Hussain T Bakhsh",
+        "Renad M Musairi",
+        "Jumana O Alghamdi",
+        "Albatoul A Alhaddad"
+      ],
       "journal": "Cureus",
       "year": 2023,
       "doi": "10.7759/cureus.40388",
       "pmid": "37456447",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1080/15569527.2023.2227889": {
       "title": "Oral isotretinoin in the treatment of juvenile acne and psychiatric adverse effects - a systematic review.",
+      "authors": [
+        "Tânia Fernandes",
+        "Sofia Magina"
+      ],
       "journal": "Cutaneous and ocular toxicology",
       "year": 2023,
       "doi": "10.1080/15569527.2023.2227889",
       "pmid": "37343232",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1016/j.jaad.2023.04.049": {
       "title": "Reply to comment on: \"Isotretinoin and the risk of psychiatric disturbances - A global study shedding new light on a debatable story\".",
+      "authors": [
+        "Khalaf Kridin",
+        "Ralf J Ludwig"
+      ],
       "journal": "Journal of the American Academy of Dermatology",
       "year": 2023,
       "doi": "10.1016/j.jaad.2023.04.049",
       "pmid": "37146764",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1111/pde.15324": {
       "title": "Mood changes and clinical decision making in adolescent patients on isotretinoin therapy for acne vulgaris.",
+      "authors": [
+        "Kelsey Gradwohl",
+        "Michelle Verghese",
+        "Adena E Rosenblatt"
+      ],
       "journal": "Pediatric dermatology",
       "year": 2023,
       "doi": "10.1111/pde.15324",
       "pmid": "37037198",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.21037/gs-22-482": {
       "title": "Papillary thyroid cancer in black thyroid: a case report and literature review.",
+      "authors": [
+        "Min Jhi Kim",
+        "Jeongwan Kang",
+        "Bup-Woo Kim",
+        "Cheong Soo Park",
+        "Hee Jun Kim"
+      ],
       "journal": "Gland surgery",
       "year": 2023,
       "doi": "10.21037/gs-22-482",
       "pmid": "36915821",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.jaad.2023.01.038": {
       "title": "Reply to: \"Interpreting with caution the lack of association between isotretinoin, depression, and suicide\".",
+      "authors": [
+        "Khalaf Kridin",
+        "Ralf J Ludwig"
+      ],
       "journal": "Journal of the American Academy of Dermatology",
       "year": 2023,
       "doi": "10.1016/j.jaad.2023.01.038",
       "pmid": "36841334",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.33658": {
       "title": "Severe Insomnia Induced by Isotretinoin Use for the Management of Acne Vulgaris: A Rare Side Effect.",
+      "authors": [
+        "Sultan H Assiri",
+        "Ashwaq K Alosaimi",
+        "Emad A Alharbi"
+      ],
       "journal": "Cureus",
       "year": 2023,
       "doi": "10.7759/cureus.33658",
       "pmid": "36788925",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/3.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.jaad.2022.12.054": {
       "title": "Interpreting with caution of the lack of association between isotretinoin, depression, and suicide.",
+      "authors": [
+        "Chee Hoou Loh",
+        "Yiong Huak Chan",
+        "Ellie Choi"
+      ],
       "journal": "Journal of the American Academy of Dermatology",
       "year": 2023,
       "doi": "10.1016/j.jaad.2022.12.054",
       "pmid": "36780952",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.5603/GP.a2022.0154": {
       "title": "Vulvar sebaceous hyperplasia - a problematic dermatosis of the vulva.",
+      "authors": [
+        "Konrad Gorski",
+        "Lidia Korczynska",
+        "Beata Spiewankiewicz",
+        "Krystyna Swiderska",
+        "Monika Baczkowska",
+        "Artur Skowyra",
+        "Michal Ciebiera"
+      ],
       "journal": "Ginekologia polska",
       "year": 2023,
       "doi": "10.5603/GP.a2022.0154",
       "pmid": "36597744",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1016/j.jaad.2022.10.031": {
       "title": "Isotretinoin and the risk of psychiatric disturbances: A global study shedding new light on a debatable story.",
+      "authors": [
+        "Khalaf Kridin",
+        "Ralf J Ludwig"
+      ],
       "journal": "Journal of the American Academy of Dermatology",
       "year": 2023,
       "doi": "10.1016/j.jaad.2022.10.031",
       "pmid": "36273659",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "35791482": {
       "title": "Development and evaluation of herbal formulation AKIGTU01 and AKIGCL03 against acne producing microbes.",
+      "authors": [
+        "- Abdullah",
+        "M Hashim Zuberi",
+        "Urooj Haroon",
+        "Ayesha Tajammul",
+        "Arman Tabassum",
+        "Amina Sultana"
+      ],
       "journal": "Pakistan journal of pharmaceutical sciences",
       "year": 2022,
       "doi": null,
       "pmid": "35791482",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.47176/mjiri.35.136": {
       "title": "Varicella-Zoster Scar Treatments: A Tertiary Review.",
+      "authors": [
+        "Arash Pour Mohammad",
+        "Mohammadreza Ghassemi"
+      ],
       "journal": "Medical journal of the Islamic Republic of Iran",
       "year": 2021,
       "doi": "10.47176/mjiri.35.136",
       "pmid": "35321363",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/3.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.3928/02793695-20220113-01": {
       "title": "Isotretinoin: Risk or Benefit to Mental Health in Youth?",
+      "authors": [
+        "Erin Ellington"
+      ],
       "journal": "Journal of psychosocial nursing and mental health services",
       "year": 2022,
       "doi": "10.3928/02793695-20220113-01",
       "pmid": "35103512",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1007/s13311-021-01168-6": {
       "title": "Chronic Administration of 13-cis-retinoic Acid Induces Depression-Like Behavior by Altering the Activity of Dentate Granule Cells.",
+      "authors": [
+        "Xiao-Hong Su",
+        "Wei-Peng Li",
+        "Yi-Jie Wang",
+        "Jia Liu",
+        "Jun-Yu Liu",
+        "Ying Jiang",
+        "Fu-Hua Peng"
+      ],
       "journal": "Neurotherapeutics : the journal of the American Society for Experimental NeuroTherapeutics",
       "year": 2022,
       "doi": "10.1007/s13311-021-01168-6",
       "pmid": "34893965",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1111/ced.15039": {
       "title": "First use of the Adolescent Depression Rating Scale (ADRS) in the management of young people with severe acne treated with isotretinoin: a pilot study of an active monitoring of depressive disorders by dermatologists.",
+      "authors": [
+        "L Hefez",
+        "J Micallef",
+        "A Revah-Levy",
+        "B Falissard",
+        "E Jouve",
+        "B Dreno",
+        "O Chosidow"
+      ],
       "journal": "Clinical and experimental dermatology",
       "year": 2022,
       "doi": "10.1111/ced.15039",
       "pmid": "34859487",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     }
   },
   "findings": []

@@ -1,9 +1,9 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "slug": "statins-rhabdomyolysis",
   "query": "statins and rhabdomyolysis",
-  "generated_at": "2026-09-13T00:05:56.045959+00:00",
-  "source_pin": "9878166052f2cd8f8f13f94a755d1ef1a567903e0cfd738c409e3a5c1948fab2",
+  "generated_at": "2026-09-13T06:31:46.753722+00:00",
+  "source_pin": "3cb12fa61a694167d06d5c0ca738645b67acef0df071bc468deae6625e1ef876",
   "stages": [
     {
       "name": "retrieve",
@@ -410,573 +410,1166 @@
   "papers": {
     "10.1248/bpb.b25-00680": {
       "title": "Involvement of Protein Kinase C Delta and Monocarboxylate Transporter 4 in the Development of Statin-Induced Cytotoxicity in a Rhabdomyosarcoma-Derived Cell Line.",
+      "authors": [
+        "Keisuke Okamoto",
+        "Toya Matsui",
+        "Yurika Kikutani",
+        "Hinata Ueda",
+        "Ayako Furugen",
+        "Katsuya Narumi",
+        "Masaki Kobayashi"
+      ],
       "journal": "Biological & pharmaceutical bulletin",
       "year": 2026,
       "doi": "10.1248/bpb.b25-00680",
       "pmid": "42702544",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.31083/RCM48237": {
       "title": "A New Option for the Management of Dyslipidemias: Advances in Research on the Small Interfering RNA Drug Inclisiran.",
+      "authors": [
+        "Xuebing Wu",
+        "Jing Zhang"
+      ],
       "journal": "Reviews in cardiovascular medicine",
       "year": 2026,
       "doi": "10.31083/RCM48237",
       "pmid": "42694622",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3389/fphar.2026.1895524": {
       "title": "Early post-marketing safety profile of resmetirom in FAERS: an exploratory assessment of statin co-reporting.",
+      "authors": [
+        "Yongjian Liu",
+        "Jiaru Chen",
+        "Hao Zhong",
+        "Yige Yu",
+        "Shuzhen Liu",
+        "Yingyu Yu"
+      ],
       "journal": "Frontiers in pharmacology",
       "year": 2026,
       "doi": "10.3389/fphar.2026.1895524",
       "pmid": "42694066",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.7759/cureus.113239": {
       "title": "Diagnostic Approach to Seronegative Autoimmune-Mediated Rhabdomyolysis: A Case Report.",
+      "authors": [
+        "Cyrus Behzadi",
+        "Nathaniel Neavling",
+        "Rahul Kurapati"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.113239",
       "pmid": "42633337",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.4103/ijp.ijp_96_26": {
       "title": "A rare rosuvastatin-clarithromycin interaction presenting with acute liver injury and delayed rhabdomyolysis.",
+      "authors": [
+        "Nithin Tumkur Prasad"
+      ],
       "journal": "Indian journal of pharmacology",
       "year": 2026,
       "doi": "10.4103/ijp.ijp_96_26",
       "pmid": "42583985",
       "license": "cc_by_nc_sa",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1093/omcr/omag144": {
       "title": "Rifampin-induced fluvastatin toxicity: a case report and review of literature.",
+      "authors": [
+        "Ahmed Farghali",
+        "Hesham Mahmoud",
+        "Muhammad Salem"
+      ],
       "journal": "Oxford medical case reports",
       "year": 2026,
       "doi": "10.1093/omcr/omag144",
       "pmid": "42549153",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.111130": {
       "title": "Delayed-Onset Severe Statin-Induced Rhabdomyolysis Due to Atorvastatin-Ticagrelor Interaction in a Patient With Acute Coronary Syndrome: A Case Report.",
+      "authors": [
+        "Arwa Fareah Ansar",
+        "S M Shariar Islam",
+        "Ishma Aijazi",
+        "Jamila Bin Adi"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.111130",
       "pmid": "42473504",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.ejphar.2026.179129": {
       "title": "The impact of phytochemicals on statin efficacy and safety: A review.",
+      "authors": [
+        "Pooya Vatankhah",
+        "Vahab Alamdari-Palangi",
+        "Mehdi Kian",
+        "Fatemeh Hosseinpour-Soleimani",
+        "Amir Savardshtaki",
+        "Amir Tajbakhsh",
+        "Mohammad Hashem Hashempur"
+      ],
       "journal": "European journal of pharmacology",
       "year": 2026,
       "doi": "10.1016/j.ejphar.2026.179129",
       "pmid": "42456875",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.3389/fphar.2026.1853932": {
       "title": "Pharmacist-led management of suspected drug-provoked seizures and sequential antiseizure medication adverse reactions: a case report.",
+      "authors": [
+        "Mimi Wang",
+        "You Wu",
+        "Xilin Xin",
+        "Zhangxuan Shou",
+        "Jueyi Pan"
+      ],
       "journal": "Frontiers in pharmacology",
       "year": 2026,
       "doi": "10.3389/fphar.2026.1853932",
       "pmid": "42445248",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3389/fphar.2026.1852621": {
       "title": "Muscle toxicity reports in FAERS: a disproportionality analysis with focus on rhabdomyolysis and cross-database assessment.",
+      "authors": [
+        "Lei Zhang",
+        "Yuqi Wang",
+        "Fang Wang",
+        "Kaiyun Ji",
+        "Lili Yang",
+        "Jia Li"
+      ],
       "journal": "Frontiers in pharmacology",
       "year": 2026,
       "doi": "10.3389/fphar.2026.1852621",
       "pmid": "42440952",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1111/bcpt.70271": {
       "title": "Using Pharmacovigilance Data for Signal Detection of Drug Interactions for Rosuvastatin.",
+      "authors": [
+        "Ronja Levomäki",
+        "Päivi Hirvensalo",
+        "Aleksi Tornio",
+        "Anne M Filppula"
+      ],
       "journal": "Basic & clinical pharmacology & toxicology",
       "year": 2026,
       "doi": "10.1111/bcpt.70271",
       "pmid": "42396714",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1007/s00280-026-04913-w": {
       "title": "CDK4/6 inhibitor-statin interaction and rhabdomyolysis in breast cancer treatment: a case-based systematic review.",
+      "authors": [
+        "Rafael Batista João",
+        "Leonardo Ribeiro Soares",
+        "Paulo César Ragazzo",
+        "Ruffo Freitas-Junior"
+      ],
       "journal": "Cancer chemotherapy and pharmacology",
       "year": 2026,
       "doi": "10.1007/s00280-026-04913-w",
       "pmid": "42380684",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.21873/invivo.14391": {
       "title": "Data Mining of the Japanese Adverse Drug Event Report Database and Animal Experiments for Assessment of Risks Associated With Pemafibrate.",
+      "authors": [
+        "Shinji Kobuchi",
+        "Misao Nishida",
+        "Moka Hayakawa",
+        "Yoriko Maekawa",
+        "Arisa Ohata",
+        "Saki Chikami",
+        "Asa Ipponmatsu",
+        "Hanami Ito",
+        "Akane Moriwaki",
+        "Ryo Inose",
+        "Yuichi Muraki",
+        "Toshiyuki Sakaeda"
+      ],
       "journal": "In vivo (Athens, Greece)",
       "year": 2026,
       "doi": "10.21873/invivo.14391",
       "pmid": "42379788",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3390/medicina62061134": {
       "title": "Statin-Associated Muscle Symptoms and Myotoxicity: A Clinically Oriented Narrative Review with a Practical Prevention, Evaluation, and Management Algorithm.",
+      "authors": [
+        "Francisco Epelde"
+      ],
       "journal": "Medicina (Kaunas, Lithuania)",
       "year": 2026,
       "doi": "10.3390/medicina62061134",
       "pmid": "42356146",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1007/s11606-026-10563-8": {
       "title": "Statin-Related Myotoxicity: A Narrative Review and Practical Approach for General Internists.",
+      "authors": [
+        "Isaac Ks Ng",
+        "Kevin Sh Teo",
+        "Hui Yang",
+        "Wilson Gw Goh",
+        "Christopher Thong",
+        "Li Feng Tan",
+        "Desmond B Teo",
+        "Anselm Mak"
+      ],
       "journal": "Journal of general internal medicine",
       "year": 2026,
       "doi": "10.1007/s11606-026-10563-8",
       "pmid": "42343053",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1002/clc.70369": {
       "title": "Moderate Intensity Statins Plus Ezetimibe Combination Therapy Versus High Intensity Statins Monotherapy After Percutaneous Coronary Intervention: A Systematic Review and Meta-Analysis.",
+      "authors": [
+        "Emad Uddin Sajid",
+        "Muhammad Hasnain Azeem",
+        "Alishba Fatima",
+        "Syeda Masooma Jafri",
+        "Danish Hassan",
+        "Taha Ibrahim",
+        "Kashish Zehra Manjee",
+        "Syed Rayyan Ahmed",
+        "Tooba Ali",
+        "Rida Shakeel",
+        "Muhammad Usman",
+        "Raghabendra Kumar Mahato",
+        "Danish Bawa"
+      ],
       "journal": "Clinical cardiology",
       "year": 2026,
       "doi": "10.1002/clc.70369",
       "pmid": "42296115",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.7759/cureus.107939": {
       "title": "Statin-Associated Severe Rhabdomyolysis With Mixed Neuromuscular Involvement Mimicking Guillain‑Barré Syndrome: A Case Report.",
+      "authors": [
+        "Abhijit Chatterjee",
+        "Subhayan Bhattacharya",
+        "Jayanta Datta"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.107939",
       "pmid": "42220835",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1139/cjpp-2025-0288": {
       "title": "Major adverse events related to atorvastatin calcium hydrocarbons: pharmacovigilance study in the FAERS database.",
+      "authors": [
+        "Kun Yuan",
+        "Zi-Tong Huang",
+        "Ri-Lang Liu",
+        "Zi-Wen Liu",
+        "Jie Lv",
+        "Can-Can Li",
+        "Qian Xu"
+      ],
       "journal": "Canadian journal of physiology and pharmacology",
       "year": 2026,
       "doi": "10.1139/cjpp-2025-0288",
       "pmid": "42091231",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1002/bcp.70581": {
       "title": "Patients on statins with elevated transaminases: Frequency of follow-up creatine kinase testing and gastroenterology referral.",
+      "authors": [
+        "Faris Shweikeh",
+        "Anas Kartoumah",
+        "Rajshri Joshi",
+        "Anjali Nadihaan",
+        "Mohammed Mouchli",
+        "Inderprit Singh"
+      ],
       "journal": "British journal of clinical pharmacology",
       "year": 2026,
       "doi": "10.1002/bcp.70581",
       "pmid": "42070773",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.105830": {
       "title": "Statin-Associated Immune-Mediated Necrotizing Myopathy: An Underrecognised Cause of Progressive Muscle Weakness in Primary Care.",
+      "authors": [
+        "Jee Tat Ong",
+        "Teh Rohaila Jamil",
+        "Say Yee Loo"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.105830",
       "pmid": "42037837",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1007/s10557-026-07871-w": {
       "title": "Possible clinical drug interactions between ticagrelor and concomitant medications: for adverse drug event monitoring in real-world.",
+      "authors": [
+        "Tianya Liu",
+        "Zhuang Chen",
+        "Rui Wang",
+        "Xiaomei Xu",
+        "Fang Gao",
+        "Jie Zu",
+        "Zhiping Wang",
+        "Yiming Tian"
+      ],
       "journal": "Cardiovascular drugs and therapy",
       "year": 2026,
       "doi": "10.1007/s10557-026-07871-w",
       "pmid": "42012764",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.105135": {
       "title": "Anti-3-Hydroxy-3-Methylglutaryl-Coenzyme A (HMG-CoA) Reductase Negative Statin-Induced Necrotizing Myopathy: A Challenging Case.",
+      "authors": [
+        "Alexander S Kaiteris",
+        "Rahul Tripathi",
+        "George Ayob",
+        "Brandon Ng"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.105135",
       "pmid": "41994779",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.105252": {
       "title": "Autoimmune Myositis Presenting With Fulminant Rhabdomyolysis and Dialysis-Dependent Acute Kidney Injury in the Context of Nitrofurantoin Exposure and Chronic Statin Use: A Case Report.",
+      "authors": [
+        "Saw Danny Lynn",
+        "Kaung Pyae Sone",
+        "Kyan Thein",
+        "Zin Zin Htike"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.105252",
       "pmid": "41988628",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1007/s00210-026-05302-z": {
       "title": "Adverse event profiles of fenofibrate and gemfibrozil: a retrospective comparative study and literature synthesis.",
+      "authors": [
+        "Jing Song",
+        "Chong-Yang Dou",
+        "Xiao-Min Chen",
+        "Jie Hu",
+        "Feng Xu",
+        "Liu-Cheng Li",
+        "Jiang Li",
+        "Qiu Jiang",
+        "Wei Zheng"
+      ],
       "journal": "Naunyn-Schmiedeberg's archives of pharmacology",
       "year": 2026,
       "doi": "10.1007/s00210-026-05302-z",
       "pmid": "41984191",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.2174/0127724328440604260225063619": {
       "title": "Emerging Pharmacological Therapies in the Management of Hyperlipidemia.",
+      "authors": [
+        "Nikhil Sharma",
+        "Supriya Roy"
+      ],
       "journal": "Current reviews in clinical and experimental pharmacology",
       "year": 2026,
       "doi": "10.2174/0127724328440604260225063619",
       "pmid": "41935388",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.104091": {
       "title": "Rifaximin-Induced Rhabdomyolysis.",
+      "authors": [
+        "Samuel Acheampong",
+        "Chidimma Udoyeh",
+        "Prince Darko",
+        "Eunice K Omeludike"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.104091",
       "pmid": "41890483",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1136/ejhpharm-2025-004800": {
       "title": "Analysis of a serious adverse reaction of rhabdomyolysis precipitated by a possible interaction of methylprednisolone with atorvastatin: a case report.",
+      "authors": [
+        "Jiajia Liu",
+        "Min Mao",
+        "Meiyu Cai",
+        "Zanzhang Yang"
+      ],
       "journal": "European journal of hospital pharmacy : science and practice",
       "year": 2026,
       "doi": "10.1136/ejhpharm-2025-004800",
       "pmid": "41887741",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.14789/ejmj.JMJ25-0061-CR": {
       "title": "The Myositis Overlap Conundrum: Differentiating Polymyositis from Inclusion Body Myositis.",
+      "authors": [
+        "Moe Hein",
+        "Win Lae Lae Aung",
+        "Eaindra Myat Thu",
+        "Abm Ashraful Huda"
+      ],
       "journal": "Juntendo medical journal",
       "year": 2026,
       "doi": "10.14789/ejmj.JMJ25-0061-CR",
       "pmid": "41859227",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.103340": {
       "title": "The Impact of Muscle Fatigue on McArdle Disease: A Case Report.",
+      "authors": [
+        "Leandro Valente",
+        "Gabrielle Santos",
+        "Ricardo Velho",
+        "José Filipe Santos",
+        "Odete Duarte",
+        "Lurdes Correia"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.103340",
       "pmid": "41835783",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3390/jcm15052070": {
       "title": "Metabolic Myopathies and HyperCKemia in Adulthood: A Clinical Approach to Diagnosis and Management.",
+      "authors": [
+        "Loai A Shakerdi"
+      ],
       "journal": "Journal of clinical medicine",
       "year": 2026,
       "doi": "10.3390/jcm15052070",
       "pmid": "41827485",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1016/j.atherosclerosis.2026.120659": {
       "title": "Statin-associated symptoms and statin intolerance in children with familial hypercholesterolemia: Insights from 15 years of clinical practice.",
+      "authors": [
+        "Sibbeliene E van den Bosch",
+        "Fianna C Kowsoleea",
+        "Willemijn E Corpeleijn",
+        "Sophie A Huisman",
+        "Astra I E Kowsoleea",
+        "Albert Wiegman",
+        "Barbara A Hutten"
+      ],
       "journal": "Atherosclerosis",
       "year": 2026,
       "doi": "10.1016/j.atherosclerosis.2026.120659",
       "pmid": "41819627",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.5005/jp-journals-10018-1488": {
       "title": "A Case Report of Statin-induced Myopathy, Rhabdomyolysis and Liver Injury (SILI): A Rare but Potentially Life-threatening Adverse Effect.",
+      "authors": [
+        "Kiran Kuraning",
+        "K M Ganesh",
+        "Padmakumar V Arayamparambil",
+        "Garud Chandan",
+        "Pooja P Sarada"
+      ],
       "journal": "Euroasian journal of hepato-gastroenterology",
       "year": 2025,
       "doi": "10.5005/jp-journals-10018-1488",
       "pmid": "41757155",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1177/00185787261426980": {
       "title": "Probable Tirzepatide-Induced Rhabdomyolysis in an HIV-Positive Patient.",
+      "authors": [
+        "Drew A Wells",
+        "Kaulin Duncan",
+        "Sami Sakaan"
+      ],
       "journal": "Hospital pharmacy",
       "year": 2026,
       "doi": "10.1177/00185787261426980",
       "pmid": "41756106",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.102027": {
       "title": "A Case of Statin-Induced Rhabdomyolysis After Seven Years of Statin Therapy.",
+      "authors": [
+        "Claudia R Silver",
+        "Bryce Somer"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.102027",
       "pmid": "41728554",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1212/CPJ.0000000000200573": {
       "title": "Statins in Genetic Myopathies: A Retrospective Analysis of Safety and Tolerability.",
+      "authors": [
+        "Brendan Nicholas Putko",
+        "Margherita Milone",
+        "Teerin Liewluck"
+      ],
       "journal": "Neurology. Clinical practice",
       "year": 2026,
       "doi": "10.1212/CPJ.0000000000200573",
       "pmid": "41726791",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.7759/cureus.101392": {
       "title": "A Rare Case of Anti-HMGCR-Positive Immune-Mediated Necrotizing Myopathy Associated With Statin Use.",
+      "authors": [
+        "Menkeoma Laura Okoli",
+        "Iganiru Chukwuebuka Okoli",
+        "Raymond T Anasobi",
+        "Abuoma Chisom Okoli",
+        "Anulika Francisca Madueke",
+        "Ibuchim Chinemerem Okoli"
+      ],
       "journal": "Cureus",
       "year": 2026,
       "doi": "10.7759/cureus.101392",
       "pmid": "41685015",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.12890/2026_006098": {
       "title": "Dermatomyositis Mimicking Statin-Induced Myopathy in A 62-Year-Old Woman.",
+      "authors": [
+        "Itzamar Pastrana-Echevarria",
+        "Merab Rivera-Serrano",
+        "Karina Cancel-Artau",
+        "Stephen Bury-Fiol"
+      ],
       "journal": "European journal of case reports in internal medicine",
       "year": 2026,
       "doi": "10.12890/2026_006098",
       "pmid": "41668831",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.3389/fphar.2025.1736657": {
       "title": "Differential musculoskeletal outcome reporting in patients receiving bempedoic acid or atorvastatin: a disproportionality analysis using the EudraVigilance database.",
+      "authors": [
+        "Gianluca Gazzaniga",
+        "Antonio Romio",
+        "Chiara Galuppi",
+        "Elena Gentile",
+        "Filomena Valentino",
+        "Luca De Toni",
+        "Michela Foschiatti",
+        "Michele Gringeri",
+        "Stefano D'Onghia",
+        "Danilo Menichelli",
+        "Daniele Pastori",
+        "Marco Scatigna",
+        "Diego Maria Michele Fornasari",
+        "Stefano Grosdani",
+        "Arianna Pani"
+      ],
       "journal": "Frontiers in pharmacology",
       "year": 2025,
       "doi": "10.3389/fphar.2025.1736657",
       "pmid": "41657777",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1159/000549898": {
       "title": "Inclisiran in Chronic Kidney Disease Patients: A Real-World Experience.",
+      "authors": [
+        "Andrea Dello Strologo",
+        "Aldo Franculli",
+        "Pasquale Saporito",
+        "Natascia Miani",
+        "Antonio Bellasi",
+        "Paolo Lido",
+        "Luca Di Lullo",
+        "Claudio Ronco",
+        "Paola Peverini"
+      ],
       "journal": "Cardiorenal medicine",
       "year": 2026,
       "doi": "10.1159/000549898",
       "pmid": "41637232",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/j.ijantimicag.2026.107721": {
       "title": "Real-world daptomycin use with a focus on muscle toxicity: A multicentric retrospective study.",
+      "authors": [
+        "C Airaud",
+        "E Demay",
+        "V Dias Meireles",
+        "David Luque Paz",
+        "Pierre Tattevin",
+        "P Lazaro",
+        "M Lahouati",
+        "A Bacle"
+      ],
       "journal": "International journal of antimicrobial agents",
       "year": 2026,
       "doi": "10.1016/j.ijantimicag.2026.107721",
       "pmid": "41580055",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1111/cts.70472": {
       "title": "Intrinsic Factors Influencing Simvastatin and Simvastatin Acid Pharmacokinetics: Age-Related Studies in Thai Adults and Cross-Population Comparisons.",
+      "authors": [
+        "Thanate Srimatimanon",
+        "Udomsak Udomnilobol",
+        "Pajaree Chariyavilaskul",
+        "Sarawut Siwamogsatham",
+        "Kearkiat Praditpornsilpa",
+        "Yongkasem Vorasettakarnkij",
+        "Aisawan Petchlorlian",
+        "Natchaya Vanwong",
+        "Jittima Piriyapongsa",
+        "Pavita Tipsombatboon",
+        "Varalee Yodsurang",
+        "Thomayant Prueksaritanont"
+      ],
       "journal": "Clinical and translational science",
       "year": 2026,
       "doi": "10.1111/cts.70472",
       "pmid": "41568406",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.1111/joim.70062": {
       "title": "Risk of rhabdomyolysis with concomitant use of statins and SGLT2 inhibitors: A population-based cohort study.",
+      "authors": [
+        "Kamal Awad",
+        "Ahmed K Mahmoud",
+        "Hesham Sheashaa",
+        "Mohammed Tiseer Abbas",
+        "Milagros Pereyra Pietri",
+        "Isabel G Scalia",
+        "Fatmaelzahraa Abdelfattah",
+        "Mahshad Razaghi",
+        "Hana Mousa",
+        "Ramzi Ibrahim",
+        "Juan M Farina",
+        "Steven J Lester",
+        "Chadi Ayoub",
+        "Reza Arsanjani"
+      ],
       "journal": "Journal of internal medicine",
       "year": 2026,
       "doi": "10.1111/joim.70062",
       "pmid": "41424321",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1172/JCI194490": {
       "title": "Structural basis for simvastatin-induced skeletal muscle weakness associated with type 1 ryanodine receptor T4709M mutation.",
+      "authors": [
+        "Gunnar Weninger",
+        "Haikel Dridi",
+        "Steven Reiken",
+        "Qi Yuan",
+        "Nan Zhao",
+        "Linda Groom",
+        "Jennifer Leigh",
+        "Yang Liu",
+        "Carl Tchagou",
+        "Jiayi Kang",
+        "Alexander Chang",
+        "Estefania Luna-Figueroa",
+        "Marco C Miotto",
+        "Anetta Wronska",
+        "Robert T Dirksen",
+        "Andrew R Marks"
+      ],
       "journal": "The Journal of clinical investigation",
       "year": 2025,
       "doi": "10.1172/JCI194490",
       "pmid": "41392983",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1186/s43044-025-00708-1": {
       "title": "Consistency over intensity: atorvastatin 40 mg plus ezetimibe 10 mg versus atorvastatin 80 mg in ACS patients: a comparative study of efficacy, tolerability, and cardiovascular outcomes.",
+      "authors": [
+        "Ahmad Samir",
+        "Kareem Mahmoud",
+        "Mohamed Ashraf",
+        "Hossam Elhossary",
+        "Hesham Salah Eldin Taha"
+      ],
       "journal": "The Egyptian heart journal : (EHJ) : official bulletin of the Egyptian Society of Cardiology",
       "year": 2025,
       "doi": "10.1186/s43044-025-00708-1",
       "pmid": "41385062",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.2147/JPR.S547736": {
       "title": "Gabapentinoids-Induced Rhabdomyolysis/Myopathy: Clinical Characteristics, Management, Outcomes, and Critical Safety Alerts.",
+      "authors": [
+        "Miao Liu",
+        "Minghui Long",
+        "Xingchen Zhou"
+      ],
       "journal": "Journal of pain research",
       "year": 2025,
       "doi": "10.2147/JPR.S547736",
       "pmid": "41368596",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.95693": {
       "title": "Severe Rhabdomyolysis in an Elderly Patient With Diabetes and Vascular Disease: Interplay of Statin Therapy, Sodium-Glucose Cotransporter-2 (SGLT2) Inhibition, and Thiazide-Induced Hypokalemia.",
+      "authors": [
+        "Darpan Kothia",
+        "Bola Habeb",
+        "Felix Ermolenko"
+      ],
       "journal": "Cureus",
       "year": 2025,
       "doi": "10.7759/cureus.95693",
       "pmid": "41322739",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.7759/cureus.95084": {
       "title": "Wallenberg Syndrome After Leg Day Training: A Case Report.",
+      "authors": [
+        "André Pereira",
+        "Cristina Silva",
+        "Filipa Gonçalves",
+        "Sara Freitas",
+        "Glória Alves"
+      ],
       "journal": "Cureus",
       "year": 2025,
       "doi": "10.7759/cureus.95084",
       "pmid": "41281093",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1038/s41467-025-66522-0": {
       "title": "Cryo-electron microscopy reveals sequential binding and activation of Ryanodine Receptors by statin triplets.",
+      "authors": [
+        "Steven Molinarolo",
+        "Carmen R Valdivia",
+        "Héctor H Valdivia",
+        "Filip Van Petegem"
+      ],
       "journal": "Nature communications",
       "year": 2025,
       "doi": "10.1038/s41467-025-66522-0",
       "pmid": "41266329",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": false
     },
     "10.7754/Clin.Lab.2025.250338": {
       "title": "Three Case Reports Highlighting the Critical Role of Laboratory-Clinical Communication in Enhancing Diagnostic Accuracy.",
+      "authors": [
+        "Jiehua Han",
+        "YinJia Lou"
+      ],
       "journal": "Clinical laboratory",
       "year": 2025,
       "doi": "10.7754/Clin.Lab.2025.250338",
       "pmid": "41221741",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.12659/AJCR.948601": {
       "title": "Delayed-Onset Rhabdomyolysis of Bilateral Lower Extremities Following Statin Therapy in a 63-Year-Old Woman: A Case Report.",
+      "authors": [
+        "Martin Nguyen",
+        "Olivia N Nicoloudakis",
+        "Patrick M Farry Ii",
+        "Esabelle D Gervasio",
+        "Sevar Yaldo",
+        "Michael Iannetti"
+      ],
       "journal": "The American journal of case reports",
       "year": 2025,
       "doi": "10.12659/AJCR.948601",
       "pmid": "41215490",
       "license": "cc_by_nc_nd",
+      "license_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.23736/S2724-5683.25.06968-6": {
       "title": "First case report of inclisiran therapy in a heart transplant patient.",
+      "authors": [
+        "Andrea Solano",
+        "Ovidio DE Filippo",
+        "Claudia Raineri",
+        "Fabrizio D'Ascenzo",
+        "Gaetano M DE Ferrari"
+      ],
       "journal": "Minerva cardiology and angiology",
       "year": 2025,
       "doi": "10.23736/S2724-5683.25.06968-6",
       "pmid": "41182102",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.2147/JEP.S555519": {
       "title": "Effects of ",
+      "authors": [
+        "Abdulatef Mohammed Mohammed Abbas",
+        "Safia Abdulatef Abdulruhman Alrezami",
+        "Butheina Abdulwalli Al-Amrani"
+      ],
       "journal": "Journal of experimental pharmacology",
       "year": 2025,
       "doi": "10.2147/JEP.S555519",
       "pmid": "41181639",
       "license": "cc_by_nc",
+      "license_url": "https://creativecommons.org/licenses/by-nc/4.0/",
       "license_tier": "non_commercial",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1097/MD.0000000000045189": {
       "title": "Combination of atorvastatin and ticagrelor associated with rhabdomyolysis: A case report.",
+      "authors": [
+        "Bin Li",
+        "Ling Zhao"
+      ],
       "journal": "Medicine",
       "year": 2025,
       "doi": "10.1097/MD.0000000000045189",
       "pmid": "41088598",
       "license": "cc_by",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
       "license_tier": "open",
-      "extraction_allowed": true
+      "extraction_allowed": true,
+      "excerpted": true
     },
     "10.1016/S0140-6736(25)01039-6": {
       "title": "Effect of repurposed simvastatin on disability progression in secondary progressive multiple sclerosis (MS-STAT2): a phase 3, randomised, double-blind, placebo-controlled trial.",
+      "authors": [
+        "Jeremy Chataway",
+        "Thomas Williams",
+        "James Blackstone",
+        "Nevin John",
+        "Marie Braisher",
+        "Floriana De Angelis",
+        "Alessia Bianchi",
+        "Alberto Calvi",
+        "Anisha Doshi",
+        "Sean Apap Mangion",
+        "Charles Wade",
+        "Ekaterina Bordea",
+        "Rachel Merry",
+        "Gil Barton",
+        "Dawn Lyle",
+        "Elisabeth Jarman",
+        "Don Mahad",
+        "Abdullah Shehu",
+        "Tarunya Arun",
+        "Gavin McDonnell",
+        "Ruth Geraldes",
+        "Matthew Craner",
+        "Charles Hillier",
+        "Jeban Ganesalingam",
+        "Leonora Fisniku",
+        "Jeremy Hobart",
+        "Cord Spilker",
+        "Neil P Robertson",
+        "Seema Kalra",
+        "Stefano Pluchino",
+        "Sreedharan Harikrishnan",
+        "Miriam Mattoscio",
+        "Timothy Harrower",
+        "Carolyn Young",
+        "Martin Lee",
+        "Suresh Kumar Chhetri",
+        "Fayyaz Ahmed",
+        "David Rog",
+        "Eli Silber",
+        "Paul Gallagher",
+        "Martin Duddy",
+        "Agne Straukiene",
+        "Richard Nicholas",
+        "Claire Rice",
+        "Susan Tebbs",
+        "Annie Hawton",
+        "Rachael Hunter",
+        "Gavin Giovannoni",
+        "Olga Ciccarelli",
+        "Judy Beveridge",
+        "Stuart Nixon",
+        "Alan J Thompson",
+        "John Greenwood",
+        "Owen R Pearson",
+        "Nikos Evangelou",
+        "Basil Sharrack",
+        "Ian Galea",
+        "Emma Gray",
+        "Sue Pavitt",
+        "Siddharthan Chandran",
+        "Helen L Ford",
+        "Chris Frost",
+        "Jennifer M Nicholas",
+        "MS-STAT2 Investigators"
+      ],
       "journal": "Lancet (London, England)",
       "year": 2025,
       "doi": "10.1016/S0140-6736(25)01039-6",
       "pmid": "41045938",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1159/000548628": {
       "title": "Safety and Efficacy of Moderate- vs. High-Intensity Statin Therapy after Nontraumatic Intracerebral Hemorrhage: A Real-World Evidence Analysis.",
+      "authors": [
+        "Majd Abualrob",
+        "Rand Abdellatif",
+        "Abdullah Hussein"
+      ],
       "journal": "Cerebrovascular diseases (Basel, Switzerland)",
       "year": 2026,
       "doi": "10.1159/000548628",
       "pmid": "41037507",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.1016/j.jacl.2025.08.015": {
       "title": "Statin use in transthyretin amyloid cardiomyopathy: Assessing tolerability and drug interaction risks with tafamidis.",
+      "authors": [
+        "Azita H Talasaz",
+        "Margaret O Cuomo",
+        "Mathew S Maurer"
+      ],
       "journal": "Journal of clinical lipidology",
       "year": 2025,
       "doi": "10.1016/j.jacl.2025.08.015",
       "pmid": "40973549",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     },
     "10.59556/japi.73.1062": {
       "title": "Rhabdomyolysis Related to High-dose Atorvastatin: A Case Report.",
+      "authors": [
+        "Mrutyunjaya Behera",
+        "Priyadarsi Tripathy"
+      ],
       "journal": "The Journal of the Association of Physicians of India",
       "year": 2025,
       "doi": "10.59556/japi.73.1062",
       "pmid": "40955993",
       "license": null,
+      "license_url": null,
       "license_tier": "unknown",
-      "extraction_allowed": false
+      "extraction_allowed": false,
+      "excerpted": false
     }
   },
   "findings": []

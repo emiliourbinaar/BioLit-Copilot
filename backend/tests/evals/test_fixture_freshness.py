@@ -2,6 +2,7 @@ import pathlib
 
 import pytest
 
+from biolit.domain.licensing import license_token_from_url
 from biolit_evals.fixture_export import FEATURED
 from biolit_evals.fixture_findings import FINDINGS, anchor_resolves
 from biolit_evals.fixture_models import SCHEMA_VERSION, FixtureRun
@@ -72,6 +73,27 @@ def test_every_committed_fixture_balances_and_can_attribute_everything_it_cites(
         assert stage.n_in - dropped == stage.n_out, (
             f"{slug}: stage {stage.name!r} ledger does not balance: "
             f"{stage.n_in} - {dropped} = {stage.n_in - dropped}, but n_out={stage.n_out}"
+        )
+
+
+@pytest.mark.parametrize("slug", sorted(FEATURED))
+def test_every_excerpt_in_a_committed_fixture_is_licensed_and_links_its_own_deed(slug: str):
+    """The on-disk counterpart of the generator's attribution refusals, for the same reason
+    the ledger is re-checked above: only reading the artifact proves what was published.
+
+    The deed must spell the SAME licence as the token the gate tiered on. A deed URL that
+    disagreed with `license` would publish one set of terms beside a gate decision made on
+    another.
+    """
+    run = FixtureRun.model_validate_json((FIXTURES / f"{slug}.json").read_text(encoding="utf-8"))
+
+    excerpted = {pid: stub for pid, stub in run.papers.items() if stub.excerpted}
+    assert excerpted, f"{slug}: the answer quotes no paper, so nothing here is checked"
+    for paper_id, stub in excerpted.items():
+        assert stub.extraction_allowed, f"{slug}: the answer quotes refused paper {paper_id}"
+        assert stub.license_url, f"{slug}: {paper_id} is quoted with no licence deed"
+        assert license_token_from_url(stub.license_url) == stub.license, (
+            f"{slug}: {paper_id}'s deed {stub.license_url} is not its licence {stub.license}"
         )
 
 

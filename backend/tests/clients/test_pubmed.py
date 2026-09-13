@@ -41,6 +41,21 @@ async def test_efetch_classifies_from_the_permissions_block(settings):
 
 
 @respx.mock
+async def test_the_publishers_licence_url_is_kept_because_the_token_drops_its_version(settings):
+    """`cc_by` names a tier; attribution must link the licence actually granted, and only
+    the publisher's URL says which version that is."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_pmc_oa.xml"))
+    )
+    respx.get(EFETCH, params__contains={"db": "pmc"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pmc_efetch_cc_by.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["11111111"])
+    assert papers[0].raw["license_url"] == "https://creativecommons.org/licenses/by/4.0/"
+
+
+@respx.mock
 async def test_a_restricted_stub_is_refused_not_permitted(settings):
     """The PMC1401093 shape. The dangerous failure here is over-permitting, so this pins
     the refusal rather than merely pinning that something was returned."""
@@ -150,6 +165,22 @@ async def test_efetch_no_pmc_is_abstract_only(settings):
     # Unstructured abstract (single unlabelled AbstractText) must pass through
     # unchanged: plain text, no label prefix, no whitespace changes.
     assert paper.abstract == "Open abstract."
+
+
+@respx.mock
+async def test_a_group_author_is_a_creator_and_is_not_dropped(settings):
+    """Attribution names the creators, and a `<CollectiveName>` author IS one -- a study group
+    or consortium. Reading only LastName/ForeName silently omitted them from every citation."""
+    respx.get(EFETCH, params__contains={"db": "pubmed"}).mock(
+        return_value=httpx.Response(200, text=_cassette("pubmed_efetch_collective_author.xml"))
+    )
+    async with httpx.AsyncClient() as http:
+        papers = await PubMedClient(http, settings).efetch(["44444444"])
+    assert [author.name for author in papers[0].authors] == [
+        "Jane Doe",
+        "Example Trial Study Group",
+        "Roe",
+    ]
 
 
 @respx.mock

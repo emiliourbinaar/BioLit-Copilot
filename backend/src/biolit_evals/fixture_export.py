@@ -17,6 +17,7 @@ from pathlib import Path
 
 from biolit.canon.mesh_actions import PharmacologicalActions
 from biolit.canon.mesh_tree import MeshTree
+from biolit.domain.licensing import license_deed_url
 from biolit.domain.paper import Paper
 from biolit.query.concepts import QueryConcepts
 from biolit.query.ranking import relevance_score
@@ -69,16 +70,21 @@ def project_run(
     generated_at: str,
 ) -> FixtureRun:
     """Sanitised projection. Abstracts cannot survive it, because the schema has no field."""
+    in_answer = {pid for cluster in state.clusters for pid in cluster.paper_ids}
+    quoting = {pid for pid, record in state.extracted_records.items() if record.key_findings}
     papers = {
         paper.id: PaperStub(
             title=paper.title,
+            authors=[author.name for author in paper.authors],
             journal=paper.journal,
             year=paper.year,
             doi=paper.doi,
             pmid=paper.pmid,
             license=paper.license,
+            license_url=license_deed_url(paper.raw.get("license_url")),
             license_tier=str(paper.license_tier),
             extraction_allowed=paper.extraction_allowed,
+            excerpted=paper.id in in_answer and paper.id in quoting,
         )
         for paper in state.candidate_papers
     }
@@ -116,7 +122,47 @@ def project_run(
     _assert_no_papers_collapsed(run, state, slug=slug)
     _assert_no_leaked_text(run, state.candidate_papers, slug=slug)
     _assert_findings_resolve(run, slug=slug)
+    _assert_excerpts_attributable(run, slug=slug)
+    _assert_excerpts_verbatim(state, slug=slug)
     return run
+
+
+def _assert_excerpts_verbatim(state: PipelineState, *, slug: str) -> None:
+    """Every quoted sentence is its abstract's own text at the offsets the extractor recorded.
+
+    ND licences permit no adapted material, and the owner's ruling (2026-09-13) reads every
+    quoted paper that strictly: an excerpt differing from its source by one character is an
+    adaptation. Compared exactly -- no whitespace or Unicode normalisation -- because a
+    normalised comparison would pass exactly the alteration this exists to catch.
+    """
+    by_id = {paper.id: paper for paper in state.candidate_papers}
+    in_answer = {pid for cluster in state.clusters for pid in cluster.paper_ids}
+    for paper_id in sorted(in_answer):
+        record = state.extracted_records.get(paper_id)
+        abstract = by_id[paper_id].abstract or ""
+        for finding in record.key_findings if record else []:
+            if abstract[finding.start : finding.end] != finding.text:
+                raise RuntimeError(
+                    f"{slug}: a sentence quoted from {paper_id} is not verbatim from its "
+                    f"abstract at [{finding.start}:{finding.end}]: {finding.text!r}. "
+                    "Refusing to publish an altered excerpt."
+                )
+
+
+def _assert_excerpts_attributable(run: FixtureRun, *, slug: str) -> None:
+    """Every paper the answer quotes must carry what Creative Commons attribution requires.
+
+    Read under the strictest applicable reading (owner's ruling, 2026-09-13): the licence is
+    linked at the version granted, so a quoted paper whose deed cannot be named is refused
+    here rather than published with its terms unlinked.
+    """
+    for paper_id, stub in run.papers.items():
+        if stub.excerpted and not stub.license_url:
+            raise RuntimeError(
+                f"{slug}: the answer quotes {paper_id}, whose licence "
+                f"{stub.license!r} cannot be linked to a versioned Creative Commons deed. "
+                "Refusing to publish an excerpt without its licence."
+            )
 
 
 def _assert_findings_resolve(run: FixtureRun, *, slug: str) -> None:
