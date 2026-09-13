@@ -211,8 +211,12 @@ class PubMedClient:
         for author in article.findall(".//AuthorList/Author"):
             last = author.findtext("LastName")
             fore = author.findtext("ForeName")
+            collective = (author.findtext("CollectiveName") or "").strip()
             if last or fore:
                 authors.append(Author(name=" ".join(p for p in (fore, last) if p)))
+            elif collective:
+                # A study group or consortium is a creator too; attribution must name it.
+                authors.append(Author(name=collective))
 
         mesh = [
             el.text
@@ -248,7 +252,9 @@ class PubMedClient:
             license=token,
             license_tier=tier,
             extraction_allowed=extraction_allowed_for(tier),
-            raw={"pmid": pmid, "pmc_id": pmc_id},
+            # `license_url` is kept because `license` is a version-less token: attribution
+            # must link the licence version actually granted, which only this URL names.
+            raw={"pmid": pmid, "pmc_id": pmc_id, "license_url": raw_licence},
         )
 
     @staticmethod

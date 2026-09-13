@@ -22,7 +22,9 @@ from biolit.state.pipeline import StageReport
 
 #: Bumped when a field is added, removed or re-meant. The frontend reads this and refuses a
 #: fixture it does not understand rather than rendering a partial one.
-SCHEMA_VERSION = 1
+#: 2 (2026-09-13): `authors`, `license_url` and `excerpted` on PaperStub -- attribution names
+#: the creators and links the licence deed, which version 1 could not.
+SCHEMA_VERSION = 2
 
 
 class PaperStub(BaseModel):
@@ -37,13 +39,22 @@ class PaperStub(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str
+    #: Every creator PubMed lists, in its order, group authors included. Not truncated to
+    #: "et al.": attribution is read under its strictest reading here.
+    authors: list[str]
     journal: str | None = None
     year: int | None = None
     doi: str | None = None
     pmid: str | None = None
     license: str | None = None
+    #: The Creative Commons deed at the version the publisher granted, or None where the
+    #: publisher's URL does not name one. Never a guessed version.
+    license_url: str | None = None
     license_tier: str
     extraction_allowed: bool
+    #: True where `answer` quotes at least one sentence from this paper's abstract. A cluster
+    #: member printed as "(no finding sentence extracted)" is named but not excerpted.
+    excerpted: bool
 
 
 class FixtureCluster(BaseModel):

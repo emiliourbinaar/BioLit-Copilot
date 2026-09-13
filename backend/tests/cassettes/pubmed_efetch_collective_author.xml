@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID>44444444</PMID>
+      <Article>
+        <Journal><Title>Journal of Tests</Title>
+          <JournalIssue><PubDate><Year>2024</Year></PubDate></JournalIssue>
+        </Journal>
+        <ArticleTitle>A consortium paper</ArticleTitle>
+        <Abstract><AbstractText>Consortium abstract.</AbstractText></Abstract>
+        <AuthorList CompleteYN="Y">
+          <Author ValidYN="Y"><LastName>Doe</LastName><ForeName>Jane</ForeName><Initials>J</Initials></Author>
+          <Author ValidYN="Y"><CollectiveName>Example Trial Study Group</CollectiveName></Author>
+          <Author ValidYN="Y"><LastName>Roe</LastName><Initials>R</Initials></Author>
+        </AuthorList>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">44444444</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>
