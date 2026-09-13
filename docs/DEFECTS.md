@@ -19,9 +19,78 @@ the first found by a GUARD rather than by reading** — six code reviews passed 
 without seeing it, because it is invisible in any single module and only shows up in
 generated data. **DEF-0008 is the first in the retrieval client, and the first found by
 rendering data for a human to read** — an attribution list printed DOIs from the wrong journals
-and the wrong decades. It is also DEF-0007's actual cause.
+and the wrong decades. It is also DEF-0007's actual cause. **DEF-0009 is the second of each** —
+in the same client, and found the same way: an attribution list that printed a title stopping
+mid-phrase.
 
 ---
+
+## DEF-0009 — The PubMed client truncates a paper's title at its first inline tag: an italic or subscript word and everything after it are dropped, and a title that begins with one is empty
+
+- **Date:** 2026-09-13
+- **Component:** `biolit.clients.pubmed` — `PubMedClient._parse_article` (`ArticleTitle`)
+- **Status:** **FIXED 2026-09-13** (`acdd2bd`). The title is read with `itertext`, as
+  `_parse_abstract` already reads abstract sections, and a cassette whose `ArticleTitle` carries
+  `<i>` and `<sub>` pins it; `_parse_article` is in the fixture pin by AST subtree, so the four
+  evidence-viewer fixtures were regenerated with it. The stored corpora below keep their
+  truncated titles: no eval figure reads a title (see *What is NOT claimed*), so none is
+  re-run for this.
+- **Severity:** **Data integrity, pipeline-wide.** Every `Paper` the client has built carried the
+  truncated title — it is not specific to the evidence viewer, where it merely became visible.
+  Its one public consequence is attribution: a Creative Commons attribution names the work, and
+  four quoted papers were attributed under an incomplete title.
+
+### What was observed
+
+PubMed marks up titles inline — `<i>in vitro</i>`, `<i>Lactobacillus plantarum</i>`,
+`CO<sub>2</sub>`. `_parse_article` read the title with
+`article.findtext(".//Article/ArticleTitle")`, and `findtext` returns only an element's text
+**before its first child element**. So *"Biomarker selection and reporting architecture in human
+proximal tubular `<i>in vitro</i>` models of cisplatin-induced nephrotoxicity: a systematic
+review."* was stored as *"Biomarker selection and reporting architecture in human proximal
+tubular "*, and a title opening with an italic genus name was stored as the empty string.
+
+Found 2026-09-13 by screenshot, reviewing the evidence viewer's new attribution block: two
+cisplatin entries ended mid-phrase ("…in human proximal tubular", "…Nephrotoxicity Attenuation
+by").
+
+### Measured
+
+Fixtures: the committed fixtures before (`35de93d`) and after (`acdd2bd`) the fix, same
+retrieval. Stored corpora: each paper's stored title against PubMed's own `ArticleTitle`,
+re-fetched 2026-09-13 and read with `itertext`. **In every corpus, every title that differs is
+exactly what `findtext` returns** — the truncation is this mechanism and nothing else.
+
+| Corpus | Distinct papers | Title truncated | Of which empty | Note |
+|---|---|---|---|---|
+| evidence-viewer fixtures (4 runs) | 236 | **11** | **3** | **4 of the 11 are quoted** in a published answer |
+| frozen-8 (`data/synth/states`) | 473 | 14 | 3 | |
+| screen-25 (`data/relevance2/states`) | 979 of 980 refetched | 45 | 3 | one PMID has no PubMed record |
+| scale-3 (`data/relevance2/scale`) | 449 | 53 | 8 | |
+
+### Why nothing caught it, which is the transferable part
+
+Two reasons, and both are DEF-0008's again. **Every cassette held a plain title**, so the
+suite never exercised the markup that breaks `findtext` — the same gap that once let
+`_parse_abstract` read only a structured abstract's first section, fixed there with `itertext`
+and never carried across to the title two lines above it. And **nothing consumed a title**:
+`Paper.title` is parsed, stored and carried, but no stage, metric or annotation packet reads it,
+so no downstream number could look wrong. It became visible only when a page rendered titles for
+a person to read.
+
+### What is NOT claimed
+
+- **No eval number is affected, checked rather than assumed.** Across `backend/src`, the only
+  reader of `Paper.title` is the fixture projection (`fixture_export.project_run`). The
+  relevance-label, acronym-census, annotation and screen exporters and gates
+  (`relevance_export`, `relevance_gates`, `relevance_screen`, `acronym_export`, `acronym_gates`,
+  `annotation_export`, `outcome_census`, `end_to_end`, `identifier_audit`) never read it, and no
+  file in `backend/evals/gold` carries a title — so no cluster label, census count or annotation
+  input was computed from, or shown with, a truncated title. The BC5CDR gold text that does
+  include titles is parsed from PubTator files, not by this client.
+- Not a licensing defect: identifiers and licences are unaffected, and so is which papers the
+  gate allowed.
+- Not measured for bioRxiv, whose client reads titles from JSON, not XML.
 
 ## DEF-0008 — The PubMed client reads a paper's DOI and PMC id from its reference list: a cited paper's identifiers become the citing paper's own, including the one that decides its licence
 
