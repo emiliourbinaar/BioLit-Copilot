@@ -259,8 +259,13 @@ alternative (4) — a same-paragraph or N-token window — its first real motiva
 **Two shipped behaviours have no attributable evidence** (§5). Closing that needs a different
 instrument, not more queries.
 
-**`frontend/` is empty**, deliberately: the eval harness was the differentiating work and was
-never allowed to be crowded out.
+**`frontend/` was empty** when this was written, deliberately: the eval harness was the
+differentiating work and was never allowed to be crowded out.
+
+*Update 2026-09-13:* `frontend/` now holds the evidence viewer — a static site over four
+licence-checked runs, built after the harness rather than instead of it, and published at
+https://emiliourbinaar.github.io/BioLit-Copilot/. Building it surfaced three defects: DEF-0007 through a guard
+on the generated fixtures, and DEF-0008 and DEF-0009 by rendering data for a person to read.
 
 ---
 

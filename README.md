@@ -5,8 +5,9 @@ project: every layer is priced against a free baseline before it is allowed to s
 three of the mechanisms that looked most promising were rejected on their own numbers.
 
 **Status — Phases 1–5 closed; the pipeline runs end to end and answers the question it was
-asked.** `frontend/` is empty. What exists is the NER → canonicalization → clustering →
-extraction stack, each with its own eval harness and wired into a runnable CLI; a
+asked.** `frontend/` is the evidence viewer, a static site built from four licence-checked
+pipeline runs, published at **https://emiliourbinaar.github.io/BioLit-Copilot/**. What exists
+is the NER → canonicalization → clustering → extraction stack, each with its own eval harness and wired into a runnable CLI; a
 contradiction-detection harness whose 900-pair corpus and free baselines are built and whose
 paid arms were **retired by a pre-registered stop rule before they were ever called**; a
 deterministic Synthesis stage that ships because the LLM arm's *gate* was shown undecidable
