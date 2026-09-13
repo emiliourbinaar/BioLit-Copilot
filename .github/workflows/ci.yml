@@ -23,3 +23,51 @@ jobs:
         run: uv run pyright
       - name: Pytest
         run: uv run pytest -q
+
+  # The evidence viewer. `npm run build` is `astro check && astro build`, and the build itself
+  # refuses to finish if a fixture has the wrong schema version, a run note is no longer true
+  # of its fixture, or an excerpt cannot link its licence deed -- so a green build is a check,
+  # not only a compile. The whole repo is checked out: pages quote `docs/` at build time.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Vitest
+        run: npm test
+      - name: Check and build
+        run: npm run build
+      - name: Link check (every internal link resolves under the Pages base path)
+        run: npm run check:links
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  # Publishes to GitHub Pages only from master, and only when BOTH jobs pass: the backend job is
+  # where the fixture pin and the committed-fixture attribution checks run.
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
