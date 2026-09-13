@@ -5,56 +5,87 @@
  * pipeline's own output. If the raw MeSH ids look unfriendly, the fix belongs in
  * `synth/template.py`, where it is pinned and regenerates the fixtures.
  */
-import { citedPaperIds, licenceLabel, type FixtureRun } from "../lib/fixtures";
+import {
+  citedPaperIds,
+  creators,
+  deedLabel,
+  excerptedPaperIds,
+  type FixtureRun,
+} from "../lib/fixtures";
 
 interface Props {
   run: FixtureRun;
 }
 
 const { run } = Astro.props;
-const cited = citedPaperIds(run).map((id) => ({ id, paper: run.papers[id]! }));
+const named = citedPaperIds(run).length;
+const quoted = excerptedPaperIds(run).map((id) => ({ id, paper: run.papers[id]! }));
 ---
 
 <p class="caveat">
   <strong>This is the pipeline's output, unedited.</strong> The deterministic template
   (ADR-0019) heads each cluster with raw MeSH ids; the cluster list above names them. Every
-  quoted sentence in it comes from an abstract the licence gate allowed.
+  sentence in quotation marks is <strong>an excerpt from the abstract</strong> of the paper
+  stamped above it, copied verbatim: not paraphrased, shortened or joined. The generator refuses
+  to publish one that differs from its source by a single character.
 </p>
 
 <pre class="answer" tabindex="0" aria-label="Pipeline answer, verbatim">{run.answer}</pre>
 
-<div class="attribution">
-  <h3>Attribution for every quoted paper</h3>
+<section class="attribution" aria-labelledby="attribution-heading">
+  <h3 id="attribution-heading">Attribution for every quoted paper</h3>
   <p class="quiet">
-    Every licence the gate allows is Creative Commons, and every one requires attribution. The
-    pipeline does not assemble citations yet (the synthesis stage says so in the ledger), so
-    they are given here, one per quoted paper.
+    {
+      quoted.length === named
+        ? `The answer quotes all ${named} papers it names.`
+        : `The answer quotes ${quoted.length} of the ${named} papers it names; the rest print "(no finding sentence extracted)" and are not excerpted.`
+    }{" "}
+    Each quoted paper is listed below with its creators, its copyright
+    notice and its licence. The pipeline does not assemble citations yet (the synthesis stage
+    says so in the ledger), so this site supplies them.
+  </p>
+  <p class="terms">
+    Excerpts are reproduced <strong>verbatim and unmodified</strong>, with the rest of each abstract
+    omitted, under each paper's own Creative Commons licence, on a non-commercial portfolio site.
+    No endorsement by the authors or publishers is implied. The material is provided as is; each
+    licence, linked below, sets out its terms and disclaimer of warranties.
   </p>
   <ol class="cites">
     {
-      cited.map(({ id, paper }) => (
+      quoted.map(({ id, paper }) => (
         <li>
-          <span class="title">{paper.title}</span>{" "}
+          <span class="title">{paper.title}</span>
+          <span class="creators">{creators(paper.authors)}.</span>
           <span class="quiet">
             {paper.journal}
-            {paper.year ? `, ${paper.year}` : ""}.
-          </span>{" "}
-          <span class="licence">{licenceLabel(paper.license)}</span>{" "}
-          {paper.doi && <a href={`https://doi.org/${paper.doi}`}>doi:{paper.doi}</a>}
-          {paper.pmid && (
-            <>
-              {" "}
-              <a class="pmid" href={`https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`}>
-                PMID {paper.pmid}
-              </a>
-            </>
-          )}
-          {!paper.doi && !paper.pmid && <span class="mono">{id}</span>}
+            {paper.year ? `, ${paper.year}` : ""}.{" "}
+            {paper.copyright ?? "No copyright notice supplied with the article."}
+          </span>
+          <span class="terms-line">
+            Excerpt from the abstract, verbatim and unmodified. Licensed under{" "}
+            <a class="licence" href={paper.license_url!} rel="license">
+              {deedLabel(paper.license_url!)}
+            </a>
+            .
+          </span>
+          <span class="source">
+            Source:{" "}
+            {paper.doi && <a href={`https://doi.org/${paper.doi}`}>doi:{paper.doi}</a>}
+            {paper.pmid && (
+              <>
+                {paper.doi && " · "}
+                <a class="pmid" href={`https://pubmed.ncbi.nlm.nih.gov/${paper.pmid}/`}>
+                  PMID {paper.pmid}
+                </a>
+              </>
+            )}
+            {!paper.doi && !paper.pmid && <span class="mono">{id}</span>}
+          </span>
         </li>
       ))
     }
   </ol>
-</div>
+</section>
 
 <style>
   .answer {
@@ -80,11 +111,18 @@ const cited = citedPaperIds(run).map((id) => ({ id, paper: run.papers[id]! }));
     font-size: 0.98rem;
     max-width: var(--measure);
   }
+  .terms {
+    max-width: var(--measure);
+    font-size: 0.95rem;
+    border-left: 2px solid var(--hema);
+    padding-left: 0.9rem;
+    color: var(--ink-2);
+  }
   .cites {
     margin: 0.5rem 0 0;
     padding-left: 1.6rem;
     display: grid;
-    gap: 0.45rem;
+    gap: 1rem;
     font-size: 0.95rem;
     max-width: 58rem;
   }
@@ -92,8 +130,17 @@ const cited = citedPaperIds(run).map((id) => ({ id, paper: run.papers[id]! }));
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
   }
+  .cites li > span {
+    display: block;
+  }
+  .title {
+    font-weight: 600;
+  }
+  .terms-line,
+  .source {
+    font-size: 0.88rem;
+  }
   .licence {
-    font-size: 0.82rem;
     font-weight: 600;
     color: var(--hema);
     white-space: nowrap;

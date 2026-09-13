@@ -66,6 +66,12 @@ const base = import.meta.env.BASE_URL;
           A static site. Every page is built from a committed, licence-checked record of one
           pipeline run; nothing is queried live. Source and records on <a href={REPO_URL}>GitHub</a>.
         </p>
+        <p>
+          A non-commercial portfolio project. Quoted sentences are verbatim, unmodified excerpts
+          from the abstracts of papers published under Creative Commons licences; they remain the
+          work of their authors, and each is attributed, with its licence, beside the answer that
+          quotes it. No endorsement by any author or publisher is implied.
+        </p>
       </div>
     </footer>
   </body>
@@ -130,6 +136,9 @@ const base = import.meta.env.BASE_URL;
   }
   main {
     padding-bottom: 5rem;
+  }
+  .site-footer p + p {
+    margin-top: 0.6rem;
   }
   .site-footer {
     border-top: 1px solid var(--rule);

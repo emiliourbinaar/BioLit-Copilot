@@ -41,6 +41,7 @@ export type Doi = string | null;
 export type Pmid = string | null;
 export type License = string | null;
 export type LicenseUrl = string | null;
+export type Copyright = string | null;
 export type LicenseTier = string;
 export type ExtractionAllowed = boolean;
 export type Excerpted = boolean;
@@ -131,6 +132,7 @@ export interface PaperStub {
   pmid?: Pmid;
   license?: License;
   license_url?: LicenseUrl;
+  copyright?: Copyright;
   license_tier: LicenseTier;
   extraction_allowed: ExtractionAllowed;
   excerpted: Excerpted;

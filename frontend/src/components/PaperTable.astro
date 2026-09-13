@@ -4,7 +4,13 @@
  * abstract text anywhere in the data -- the fixture schema has no field for it -- and this
  * component must not invent one.
  */
-import { licenceLabel, stageByName, type FixtureRun, type PaperStub } from "../lib/fixtures";
+import {
+  deedLabel,
+  licenceLabel,
+  stageByName,
+  type FixtureRun,
+  type PaperStub,
+} from "../lib/fixtures";
 
 interface Props {
   run: FixtureRun;
@@ -72,7 +78,13 @@ const collapsed = stageByName(run, "licence_gate")?.dropped?.["duplicate_paper_i
                 <td>{paper.title}</td>
                 <td class="quiet">{paper.journal ?? ""}</td>
                 <td class="licence">
-                  {licenceLabel(paper.license)}
+                  {paper.license_url ? (
+                    <a href={paper.license_url} rel="license">
+                      {deedLabel(paper.license_url)}
+                    </a>
+                  ) : (
+                    licenceLabel(paper.license)
+                  )}
                   <span class="tier"> {paper.license_tier.replace("_", "-")}</span>
                 </td>
                 <td class="ident">

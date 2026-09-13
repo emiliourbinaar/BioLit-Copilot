@@ -208,6 +208,16 @@ export function licenceLabel(token: string | null | undefined): string {
   return `CC ${rest.join("-").toUpperCase()}`;
 }
 
+/**
+ * `https://creativecommons.org/licenses/by-nc-nd/4.0/` -> `CC BY-NC-ND 4.0`. Read from the deed
+ * URL alone, so the label cannot name a version other than the one the link opens.
+ */
+export function deedLabel(url: string): string {
+  const [kind, code, version, port] = new URL(url).pathname.split("/").filter(Boolean);
+  const name = kind === "publicdomain" && code === "zero" ? "CC0" : `CC ${code!.toUpperCase()}`;
+  return [name, version, port?.toUpperCase()].filter(Boolean).join(" ");
+}
+
 /** Every creator, in PubMed's order. Never shortened to "et al.": attribution names them all. */
 export function creators(authors: string[]): string {
   if (authors.length === 0) return "No authors listed in PubMed";

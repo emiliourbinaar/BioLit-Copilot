@@ -5,6 +5,7 @@ import {
   citedPaperIds,
   countOf,
   creators,
+  deedLabel,
   excerptedPaperIds,
   ledgerArithmetic,
   licenceLabel,
@@ -149,6 +150,21 @@ describe("assertExcerptsAttributable", () => {
     expect(() => assertExcerptsAttributable(RUNS)).not.toThrow();
     expect(() => assertExcerptsAttributable([withDeed(null)])).toThrow(id);
     expect(() => assertExcerptsAttributable([withDeed("https://example.org/licence")])).toThrow(id);
+  });
+});
+
+describe("deedLabel", () => {
+  it("names the licence at the version its deed grants, and only from the deed itself", () => {
+    expect(deedLabel("https://creativecommons.org/licenses/by-nc-nd/4.0/")).toBe("CC BY-NC-ND 4.0");
+    expect(deedLabel("https://creativecommons.org/licenses/by/2.5/")).toBe("CC BY 2.5");
+    expect(deedLabel("https://creativecommons.org/licenses/by/3.0/us/")).toBe("CC BY 3.0 US");
+    expect(deedLabel("https://creativecommons.org/publicdomain/zero/1.0/")).toBe("CC0 1.0");
+    for (const run of RUNS) {
+      for (const id of excerptedPaperIds(run)) {
+        const paper = run.papers[id]!;
+        expect(deedLabel(paper.license_url!).startsWith(licenceLabel(paper.license)), id).toBe(true);
+      }
+    }
   });
 });
 

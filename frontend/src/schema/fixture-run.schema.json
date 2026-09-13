@@ -182,6 +182,18 @@
           "default": null,
           "title": "License Url"
         },
+        "copyright": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Copyright"
+        },
         "license_tier": {
           "title": "License Tier",
           "type": "string"
