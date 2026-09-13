@@ -1,7 +1,7 @@
 # BioLit Copilot — Retrospective
 
 **What this document is.** The project's argument, end to end, in one place. Everything here
-is recorded somewhere else too — across 23 ADRs, 8 defect entries, a scope record and
+is recorded somewhere else too — across 23 ADRs, 9 defect entries, a scope record and
 `EVAL_REPORT.md` — but only in the order it happened to be discovered. This is the same
 material in the order it makes sense.
 
@@ -218,7 +218,7 @@ mistake is what makes them transferable.
 
 ## 7. Known defects
 
-All eight are recorded rather than quietly carried. Full entries in `DEFECTS.md`.
+All nine are recorded rather than quietly carried. Full entries in `DEFECTS.md`.
 
 | | What | Status |
 |---|---|---|
@@ -230,6 +230,7 @@ All eight are recorded rather than quietly carried. Full entries in `DEFECTS.md`
 | **DEF-0006** | `--json-out` serialises abstracts of papers the licence gate refused | Not fixed. 7 of 8 refused papers carried a verbatim abstract. The gate is correct; its *sufficiency argument* lapsed when a third consumer of `Paper` appeared |
 | **DEF-0007** | Two retrieved papers given the same `Paper.id` silently collapse into one record | **Accounting half fixed** — the collapse is now counted in the ledger, so it balances. **Rights half not fixed:** `entities_stage` is keyed on the same id and can put a refused paper's entity text into an allowed paper's record; latent, not closed, since DEF-0008's fix. The one observed collapse was caused by DEF-0008, not by a genuinely shared DOI |
 | **DEF-0008** | The PubMed client read each paper's DOI and PMC id from its **reference list**, so papers were licensed under a cited article's licence | ⛔ **Rights severity. Fixed** 2026-09-10: own identifiers only, a regression cassette with a real reference list, and the parser pinned by AST subtree. Audit: 98 of 236 fixture DOIs were a cited paper's; 15, 34 and 14 papers were wrongly allowed across the three corpora it built. Published figures restated with dated notes, conclusions unchanged; the affected fixture history was removed from the branch |
+| **DEF-0009** | The PubMed client truncated each title at its first inline tag (`<i>in vitro</i>`), leaving some titles empty | **Fixed** 2026-09-13: titles read whole, pinned by a cassette with inline markup. 11 of 236 fixture titles truncated, 3 empty, 4 of them quoted papers; 14, 45 and 53 papers across the three stored corpora. **No eval number affected** — no metric, label or annotation packet reads a title |
 
 ‡ ⚠️ *Corrected 2026-09-12 (DEF-0008).* First published as 52.3% / 64.7% / 10 of 27 for DEF-0001
 and 74% for DEF-0005, before papers licensed under a cited article's PMC id were removed. **The
@@ -289,6 +290,6 @@ committed.
 
 ---
 
-*Companion documents: `DECISIONS.md` (23 ADRs, newest first) · `DEFECTS.md` (8 entries) ·
+*Companion documents: `DECISIONS.md` (23 ADRs, newest first) · `DEFECTS.md` (9 entries) ·
 `SCOPE.md` (work deliberately not attempted) · `EVAL_REPORT.md` (every number and its
 methodology) · `ARCHITECTURE.md` (how the layers fit together).*
