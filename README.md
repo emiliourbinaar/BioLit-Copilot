@@ -20,9 +20,9 @@ class-level drug queries could not be validated at all: the attempt to build a c
 for it closed as a negative result about the instrument, because the mechanism fires exactly
 where the corpus is thinnest. 23 architecture decisions record what was measured and what was
 rejected, alongside a scope record (`docs/SCOPE.md`) for work deliberately not attempted and a
-defect log (`docs/DEFECTS.md`) with eight entries — four in entity linking, one in clustering,
-one in licence handling, one in paper identity, and one in the PubMed client that licensed papers
-under a cited article's licence — including a blind adjudication finding **52% of short
+defect log (`docs/DEFECTS.md`) with nine entries — four in entity linking, one in clustering,
+one in licence handling, one in paper identity, and two in the PubMed client: one that licensed
+papers under a cited article's licence, and one that truncated titles at their first inline tag — including a blind adjudication finding **52% of short
 acronym links wrong** (a census; **10 of 26 wrong on the pairs never disclosed to the
 annotator** — 10 of 27 as first published, corrected 2026-09-12 for DEF-0008 with the
 conclusion unchanged), in a layer whose aggregate F1 is 0.78.
