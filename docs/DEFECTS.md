@@ -141,10 +141,11 @@ Atrial Fibrillation`; none was labelled `answers`.
 rows, 44 pairs and 204 mentions adjudicated) — restating those would misdescribe the instrument;
 and figures that could not be recomputed because the thing measured is no longer in code
 (ADR-0020's rejected narrowing filter, "33 of 83" and "empty on 2 of 8"), each carrying a note
-saying so. **Not restated, flagged here:** DEF-0004's "ten flagged pairs, all `wrong`" (one of the
-ten, `BLM`, drew every mention from mis-licensed papers) and its 87 of 3,696 type-violation rate,
-Gate 4's lead and inversion counts, and DEF-0003's all-tied 4 → 2 of 8 — all on the same corpus,
-none recomputed.
+saying so. **Not restated, and measured rather than left uncertain:** DEF-0004's figures — 87 of
+3,696 becomes 80 of 3,501, and its ten flagged pairs become nine, all still `wrong` (`BLM` drops
+out) — are recorded in DEF-0004's own entry as a dated cross-reference, with its tables left as
+first published. **Not restated and not recomputed:** Gate 4's lead and inversion counts, and
+DEF-0003's all-tied 4 → 2 of 8 — both on the same corpus.
 
 ### What is NOT claimed
 
@@ -463,6 +464,16 @@ quantified, and their relative weight is unknown.
   because the tradeoff below is true regardless of how those labels came out; **decomposed
   2026-09-06** once they existed — 8 of the 10 flagged pairs are link errors, 1 is an NER span
   error and 1 is both.
+- ⚠️ **Cross-reference 2026-09-12 — see DEF-0008.** Every figure in this entry was measured on the
+  frozen 8-query corpus, which DEF-0008's audit found included papers licensed under a cited
+  article's PMC id rather than their own. **The figures below are left as first published and are
+  not restated here**; the effect was measured, reproducing the published values exactly first:
+  87 of 3,696 type-violating mentions (2.4%) becomes **80 of 3,501 (2.3%)**; the flagged census
+  pairs go from 10 to **9, all still `wrong`** — `BLM` drew every mention from such papers and drops
+  out, while `CPA` keeps its flag; 74 violating census mentions become **70**, and the 77 mentions
+  on flagged pairs become **73**. **This entry's claim is unchanged:** the check is still free,
+  still unreachable, and every flagged pair still reads `wrong`. The 8 / 1 / 1 decomposition above
+  was not re-derived for the nine.
 - **Severity:** Wrong entity, silently, at full confidence — the same reader-visible damage as
   DEF-0001, but with a **mechanically detectable** signature that DEF-0001's class does not have.
 
