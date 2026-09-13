@@ -103,6 +103,13 @@
           "title": "Title",
           "type": "string"
         },
+        "authors": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Authors",
+          "type": "array"
+        },
         "journal": {
           "anyOf": [
             {
@@ -163,6 +170,18 @@
           "default": null,
           "title": "License"
         },
+        "license_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License Url"
+        },
         "license_tier": {
           "title": "License Tier",
           "type": "string"
@@ -170,12 +189,18 @@
         "extraction_allowed": {
           "title": "Extraction Allowed",
           "type": "boolean"
+        },
+        "excerpted": {
+          "title": "Excerpted",
+          "type": "boolean"
         }
       },
       "required": [
         "title",
+        "authors",
         "license_tier",
-        "extraction_allowed"
+        "extraction_allowed",
+        "excerpted"
       ],
       "title": "PaperStub",
       "type": "object"

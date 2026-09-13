@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertExcerptsAttributable,
   assertNotesHold,
   citedPaperIds,
   countOf,
+  creators,
+  excerptedPaperIds,
   ledgerArithmetic,
   licenceLabel,
   parseAnchor,
@@ -114,6 +117,56 @@ describe("citedPaperIds", () => {
   });
 });
 
+describe("excerptedPaperIds", () => {
+  it("lists exactly the papers the answer quotes, in answer order, each named in the answer", () => {
+    // Attribution sits beside quoted text, so its list must be the quoted papers: a cluster
+    // member printed as "(no finding sentence extracted)" is named but not excerpted.
+    for (const run of RUNS) {
+      const excerpted = excerptedPaperIds(run);
+      const flagged = Object.entries(run.papers).filter(([, p]) => p.excerpted).map(([id]) => id);
+
+      expect(excerpted.length, run.slug).toBeGreaterThan(0);
+      expect([...excerpted].sort()).toEqual(flagged.sort());
+      expect(excerpted).toEqual(citedPaperIds(run).filter((id) => run.papers[id]!.excerpted));
+      for (const id of excerpted) {
+        expect(run.answer, `${run.slug}: ${id}`).toContain(`PMID ${run.papers[id]!.pmid ?? id}`);
+      }
+    }
+  });
+});
+
+describe("assertExcerptsAttributable", () => {
+  it("fails the build for an excerpt whose licence deed is missing or not Creative Commons", () => {
+    // The generator refuses these; this is the site refusing them too, because a fixture
+    // is a file and a file can be edited after the generator last saw it.
+    const statins = RUNS.find((run) => run.slug === "statins-rhabdomyolysis")!;
+    const id = excerptedPaperIds(statins)[0]!;
+    const withDeed = (license_url: string | null) => ({
+      ...statins,
+      papers: { ...statins.papers, [id]: { ...statins.papers[id]!, license_url } },
+    });
+
+    expect(() => assertExcerptsAttributable(RUNS)).not.toThrow();
+    expect(() => assertExcerptsAttributable([withDeed(null)])).toThrow(id);
+    expect(() => assertExcerptsAttributable([withDeed("https://example.org/licence")])).toThrow(id);
+  });
+});
+
+describe("creators", () => {
+  it("names every author in order, never shortening to et al., and says so when there are none", () => {
+    expect(creators(["Jane Doe"])).toBe("Jane Doe");
+    expect(creators(["Jane Doe", "Example Trial Study Group"])).toBe(
+      "Jane Doe and Example Trial Study Group",
+    );
+    expect(creators(["A One", "B Two", "C Three", "D Four"])).toBe("A One, B Two, C Three and D Four");
+    expect(creators([])).toBe("No authors listed in PubMed");
+
+    const longest = Math.max(...RUNS.flatMap((r) => Object.values(r.papers).map((p) => p.authors.length)));
+    const paper = RUNS.flatMap((r) => Object.values(r.papers)).find((p) => p.authors.length === longest)!;
+    for (const name of paper.authors) expect(creators(paper.authors)).toContain(name);
+  });
+});
+
 describe("validateFixture", () => {
   it("refuses a schema version it does not understand, and a slug that disagrees with its file", () => {
     // A fixture the site cannot fully render must fail the build, not render partially.
@@ -121,7 +174,8 @@ describe("validateFixture", () => {
     const path = "../fixtures/statins-rhabdomyolysis.json";
 
     expect(validateFixture(path, statins)).toBe(statins);
-    expect(() => validateFixture(path, { ...statins, schema_version: 2 })).toThrow(/schema_version/);
+    // Version 1 lacks the attribution fields (authors, deed, excerpted) the components now need.
+    expect(() => validateFixture(path, { ...statins, schema_version: 1 })).toThrow(/schema_version/);
     expect(() => validateFixture(path, { ...statins, slug: "other" })).toThrow(/filename/);
     expect(() => validateFixture(path, { ...statins, findings: undefined })).toThrow(/findings/);
   });

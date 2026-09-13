@@ -34,13 +34,16 @@ export type Label = string | null;
 export type Clusters = FixtureCluster[];
 export type Answer = string;
 export type Title = string;
+export type Authors = string[];
 export type Journal = string | null;
 export type Year = number | null;
 export type Doi = string | null;
 export type Pmid = string | null;
 export type License = string | null;
+export type LicenseUrl = string | null;
 export type LicenseTier = string;
 export type ExtractionAllowed = boolean;
+export type Excerpted = boolean;
 export type DefectId = string;
 export type Anchor = string;
 export type Headline = string;
@@ -121,13 +124,16 @@ export interface Papers {
  */
 export interface PaperStub {
   title: Title;
+  authors: Authors;
   journal?: Journal;
   year?: Year;
   doi?: Doi;
   pmid?: Pmid;
   license?: License;
+  license_url?: LicenseUrl;
   license_tier: LicenseTier;
   extraction_allowed: ExtractionAllowed;
+  excerpted: Excerpted;
 }
 /**
  * A defect pinned to this run, quoting the adjudication rather than paraphrasing it.

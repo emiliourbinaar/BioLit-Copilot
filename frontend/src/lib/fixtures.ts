@@ -10,7 +10,7 @@ import type { FixtureCluster, FixtureRun, StageReport } from "./fixture-types";
 export type { FixtureCluster, FixtureFinding, FixtureRun, PaperStub, StageReport } from "./fixture-types";
 
 /** The only schema version this site knows how to render. Anything else fails the build. */
-const UNDERSTOOD_SCHEMA_VERSION = 1;
+const UNDERSTOOD_SCHEMA_VERSION = 2;
 
 /**
  * Presentation order, and one line on what to look at in each run. This is site copy about
@@ -139,9 +139,31 @@ export function assertNotesHold(runs: FixtureRun[]): void {
   }
 }
 
+const DEED_PREFIX = "https://creativecommons.org/";
+
+/**
+ * Throw, naming the paper, if any excerpt cannot link its Creative Commons deed.
+ *
+ * A function declaration, so it is hoisted above the module-load call below.
+ */
+export function assertExcerptsAttributable(runs: FixtureRun[]): void {
+  for (const run of runs) {
+    for (const [id, paper] of Object.entries(run.papers)) {
+      if (paper.excerpted && !paper.license_url?.startsWith(DEED_PREFIX)) {
+        throw new Error(
+          `${run.slug}: the answer quotes ${id}, but its licence deed is ` +
+            `${JSON.stringify(paper.license_url)}. Refusing to publish an excerpt without ` +
+            "a link to its Creative Commons licence.",
+        );
+      }
+    }
+  }
+}
+
 /** All runs, in presentation order. */
 export const RUNS: FixtureRun[] = Object.keys(RUN_NOTES).map((slug) => bySlug.get(slug)!);
 assertNotesHold(RUNS);
+assertExcerptsAttributable(RUNS);
 
 /** A stage whose units match is checkable: n_in - sum(dropped) == n_out. */
 export function isCheckable(stage: StageReport): boolean {
@@ -186,6 +208,13 @@ export function licenceLabel(token: string | null | undefined): string {
   return `CC ${rest.join("-").toUpperCase()}`;
 }
 
+/** Every creator, in PubMed's order. Never shortened to "et al.": attribution names them all. */
+export function creators(authors: string[]): string {
+  if (authors.length === 0) return "No authors listed in PubMed";
+  if (authors.length === 1) return authors[0]!;
+  return `${authors.slice(0, -1).join(", ")} and ${authors.at(-1)!}`;
+}
+
 /** Paper ids cited by the answer's clusters, in the order the clusters appear. */
 export function citedPaperIds(run: FixtureRun): string[] {
   const seen = new Set<string>();
@@ -193,6 +222,15 @@ export function citedPaperIds(run: FixtureRun): string[] {
     for (const id of cluster.paper_ids) seen.add(id);
   }
   return [...seen];
+}
+
+/**
+ * Paper ids the answer quotes at least one sentence from, in the order the answer cites them.
+ * `excerpted` is the generator's, which refuses to write an excerpt that is not verbatim or
+ * cannot link its licence deed; this site does not re-derive it from the answer text.
+ */
+export function excerptedPaperIds(run: FixtureRun): string[] {
+  return citedPaperIds(run).filter((id) => run.papers[id]?.excerpted);
 }
 
 /** Parse a finding's anchor. The grammar is defined in `biolit_evals/fixture_findings.py`. */
