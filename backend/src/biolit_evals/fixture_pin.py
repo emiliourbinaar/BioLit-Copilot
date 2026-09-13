@@ -90,9 +90,38 @@ def _strip_docstrings(tree: ast.AST) -> ast.AST:
     return tree
 
 
+def _canonical(value: object) -> str:
+    """A serialisation of an AST that this module OWNS, stable across interpreter versions.
+
+    ⛔ NOT `ast.dump`. Its output format is a CPython implementation detail, and it changed:
+    Python 3.13 stopped printing empty-list and None fields, so the same source hashed
+    differently on 3.12 and 3.14, and every committed fixture read STALE on a clean checkout
+    that happened to resolve a newer interpreter. A pin that moves with the interpreter rather
+    than the code is the same fragility as a threshold tuned to one observation.
+
+    So the format is defined here, explicitly:
+    - fields in SORTED name order, never `_fields` declaration order;
+    - an absent field, a None field and an empty-list field are the SAME thing and are
+      omitted -- exactly the axis on which interpreter versions were seen to differ;
+    - positional attributes (lineno, col_offset...) are never read, only `_fields`;
+    - constants carry their type name, so `1`, `True` and `'1'` stay distinct.
+    """
+    if isinstance(value, ast.AST):
+        parts = []
+        for name in sorted(value._fields):
+            field = getattr(value, name, None)
+            if field is None or (isinstance(field, list) and not field):
+                continue
+            parts.append(f"{name}={_canonical(field)}")
+        return f"{type(value).__name__}({','.join(parts)})"
+    if isinstance(value, list):
+        return "[" + ",".join(_canonical(item) for item in value) + "]"
+    return f"{type(value).__name__}:{value!r}"
+
+
 def _normalise(source: str) -> str:
     """Source -> a string that changes with behaviour and not with prose."""
-    return ast.dump(_strip_docstrings(ast.parse(source)))
+    return _canonical(_strip_docstrings(ast.parse(source)))
 
 
 def _find(body: list[ast.stmt], name: str) -> ast.stmt | None:
@@ -128,7 +157,7 @@ def _normalise_subtrees(source: str, names: tuple[str, ...]) -> str:
                 )
             body = node.body if isinstance(node, ast.ClassDef) else []
         assert node is not None  # a qualname has at least one part, and a miss raised above
-        parts.append(f"{qualname}={ast.dump(node)}")
+        parts.append(f"{qualname}={_canonical(node)}")
     return "\n".join(parts)
 
 

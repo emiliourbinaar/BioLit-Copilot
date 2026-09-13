@@ -8,7 +8,6 @@ build/
 .venv/
 venv/
 env/
-.python-version
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -16,6 +15,8 @@ env/
 htmlcov/
 .tox/
 # note: backend/uv.lock is intentionally tracked (reproducible installs)
+# note: backend/.python-version is intentionally tracked too. It was ignored here, so nothing
+# pinned the interpreter: a clean `uv sync` resolved 3.14 locally while CI used 3.12.
 
 # Node / Next.js (frontend)
 node_modules/

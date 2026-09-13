@@ -1,7 +1,10 @@
+import ast
+
 import pytest
 
 from biolit_evals.fixture_pin import (
     PINNED_SUBTREES,
+    _canonical,
     _normalise,
     _normalise_subtrees,
     source_pin,
@@ -100,6 +103,44 @@ def test_a_pinned_subtree_fires_on_its_own_behaviour_and_nowhere_else():
     assert base != _normalise_subtrees(source.replace("PubmedData/", ".//"), names)
     with pytest.raises(RuntimeError, match="Client._gone"):
         _normalise_subtrees(source, ("Client._gone",))
+
+
+def test_the_canonical_form_ignores_default_valued_fields_a_newer_python_leaves_out():
+    """⛔ THE BUG THIS REPLACES. The pin hashed `ast.dump`, whose output is a CPython
+    implementation detail: Python 3.13 stopped printing empty-list and None fields, so the same
+    source hashed differently on 3.12 and 3.14 and every fixture read STALE on a clean checkout.
+
+    A newer interpreter is simulated here, in one interpreter, by deleting every default-valued
+    field -- the exact difference observed. The canonical form must not change, while a real
+    behavioural change still must.
+    """
+    source = "def f(x, *, y=1):\n    return [x, y]\n"
+    full = ast.parse(source)
+    pruned = ast.parse(source)
+    for node in ast.walk(pruned):
+        for field in list(node._fields):
+            value = getattr(node, field, None)
+            if value is None or (isinstance(value, list) and not value):
+                if hasattr(node, field):
+                    delattr(node, field)
+
+    assert _canonical(full) == _canonical(pruned)
+    assert _canonical(full) != _canonical(ast.parse(source.replace("[x, y]", "[y, x]")))
+    assert _canonical(ast.parse("x = 1")) != _canonical(ast.parse("x = True"))
+    assert _canonical(ast.parse("x = 1")) != _canonical(ast.parse("x = '1'"))
+
+
+def test_source_pin_never_consults_ast_dump(monkeypatch):
+    """The canonical form is only interpreter-independent if nothing reaches back into
+    `ast.dump`. A later "simplification" back to it would pass every other test on whichever
+    single interpreter CI runs, so this makes any call to it fail loudly instead.
+    """
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("source_pin must not depend on ast.dump's output format")
+
+    monkeypatch.setattr(ast, "dump", refuse)
+    assert len(source_pin()) == 64
 
 
 def test_source_pin_covers_the_pubmed_parsing_subtrees_and_refuses_one_that_vanished(monkeypatch):

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "slug": "metformin-lactic-acidosis",
   "query": "metformin and lactic acidosis",
-  "generated_at": "2026-09-10T23:09:04.284996+00:00",
-  "source_pin": "dca53c889d9d4951e520a22822f45e3d1eaf51d2fc7fa535cdf097b6305229ef",
+  "generated_at": "2026-09-13T00:06:20.058323+00:00",
+  "source_pin": "9878166052f2cd8f8f13f94a755d1ef1a567903e0cfd738c409e3a5c1948fab2",
   "stages": [
     {
       "name": "retrieve",
