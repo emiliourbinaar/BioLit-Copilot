@@ -23,8 +23,10 @@ it was consulted only once — `PipelineState.question` was set in `__main__` an
 so every cluster retrieval happened to produce went into the answer. `select_stage` keeps
 clusters sharing a MeSH concept with the question, using NCBI's own query translation because
 the local alias table NILs on terms users actually type (`depression`, `gastrointestinal
-bleeding`, `thyroid dysfunction`). It prunes an off-topic tail — 83 clusters to **75** on the
-frozen corpus.
+bleeding`, `thyroid dysfunction`). It prunes an off-topic tail — 80 clusters to **72** on the
+frozen corpus *(corrected 2026-09-12 for DEF-0008; first published as 83 to 75, including three
+clusters built only on papers licensed under a cited article's PMC id. The conclusion is
+unchanged)*.
 
 **It also orders the survivors (ADR-0020), and the two are one call because they consume the
 identical signal** — selection thresholds concept overlap, ordering grades it. They stay two

@@ -73,7 +73,7 @@ re-read to bless the fix: DEF-0003.
 | Layer | Module | Headline number |
 |---|---|---|
 | **Entity recognition** (Phase 2) | `biolit.ner` | F1 **0.8099** on the BC5CDR test split |
-| **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** — but on short all-caps acronyms, adjudicated blind, **52% of links are wrong** (census of 44 pairs; **10/27 wrong on the undisclosed pairs** — DEF-0001) |
+| **Canonicalization** (Phase 3) | `biolit.canon` | linking F1 **0.7842**; concept-level F1 **0.7697** — but on short all-caps acronyms, adjudicated blind, **52% of links are wrong** (census of 42 pairs; **10/26 wrong on the undisclosed pairs** — DEF-0001; corrected 2026-09-12 for DEF-0008 from 44 and 10/27, conclusion unchanged) |
 | **Clustering / pairing** (Phase 3) | `biolit.cluster` | same-sentence pairing F1 **0.6327**, ~halving downstream LLM calls |
 | **Sentence extraction** (Phase 4) | `biolit.extract` | deterministic control F1 **0.6238** — the LLM arm scored **0.3054** and was **not shipped** |
 | **Contradiction detection** (Phase 5) | `biolit.critic` | 900-pair corpus, 3 free baselines at chance — **gold proxy measured invalid (π̂ 0.067) and the paid run cancelled before it was ever called**; the replacement-gold search closed at π̂ 0.60 after six corpora |
@@ -153,8 +153,10 @@ project where that confound is ruled out by measurement rather than assumed away
 **An aggregate F1 can hide a class where the component is wrong more often than right.**
 Canonicalization scores linking F1 **0.7842**, and the number is real. But short all-caps
 acronyms — 204 linked mentions across eight queries — were adjudicated blind against their
-source abstracts, and **23 of 44 distinct (surface, concept) pairs are wrong: 52% by pair, 65%
-by mention.** `GSH` → *Glucocorticoid-Remediable Aldosteronism* where the abstract says
+source abstracts, and **22 of 42 distinct (surface, concept) pairs are wrong: 52% by pair, 68%
+by mention.** *(Corrected 2026-09-12 for DEF-0008: first published as 23 of 44, 52% and 65%.
+Fifteen of the 204 adjudicated mentions came from papers licensed under a cited article's PMC id
+and are excluded. The conclusion is unchanged.)* `GSH` → *Glucocorticoid-Remediable Aldosteronism* where the abstract says
 glutathione; `CP` → *Cleft Palate* where it says cisplatin; `RA` → *Rheumatoid Arthritis* where
 it says rosmarinic acid. The cause is that a surface is linked to whichever concept owns that
 acronym in CTD, with nothing consulting the surrounding text. This is a **census** of those
@@ -172,7 +174,8 @@ that has to be scored on BC5CDR, not asserted here.
 
 **That pass also cost the project a rule, and caught a defect in its own controls.** 17 of the
 44 pairs had been named — in the defect log, or in the design conversation — before labelling
-began, so the reading is reported **split**: 13/17 disclosed against **10/27 undisclosed**. The
+began, so the reading is reported **split**: 12/16 disclosed against **10/26 undisclosed**
+*(corrected 2026-09-12 for DEF-0008 from 13/17 and 10/27; the split's reading is unchanged)*. The
 gap is explicitly *not* read as disclosure bias, because the disclosed set was selected for
 looking wrong in the first place, and selection and disclosure are confounded here in a way the
 design cannot separate. Having hit that shape twice, it is now **ADR-0016 rule 6**: evidence
@@ -200,7 +203,10 @@ and after its fix. ADR-0019.
 
 **A validation pass was retired against itself, and the exact reason matters more than the
 verdict.** Query-conditioned ordering was measured against 91 blind rows — 83 real clusters
-plus 8 cross-query distractors — with four gates fixed before a single label existed. The sheet
+plus 8 cross-query distractors — with four gates fixed before a single label existed. *(Note
+2026-09-12, DEF-0008: 83 is what was labelled; three of those clusters existed only through
+mis-licensed papers, none of them `answers`, so the corpus itself is 80. The conclusion is
+unchanged.)* The sheet
 showed the question and two concept names and nothing else: no MeSH ids, no paper counts, no
 year ranges, because size and recency are signals the ranker is *forbidden* to use and a label
 nudged by either would let the gate reward them. The headline read **5/8 leads correct against
@@ -240,8 +246,9 @@ queries never run or discussed. Twenty-five were resolved and run behind a scree
 blindness is enforced by the import graph rather than by intent: it imports nothing from
 `biolit`, and a test spawns a fresh interpreter and asserts the ranker is absent from
 `sys.modules`. **Four cleared the productivity floor.** Not a bad draw — cluster yield collapses
-in proportion to how collective the drug term is (`no_cluster` 31% for single agents, 74% for
-drug classes), and this mechanism fires only on the collective end. No arm disagreement was
+in proportion to how collective the drug term is (`no_cluster` 31% for single agents, 73% for
+drug classes — 74% as first published, corrected 2026-09-12 for DEF-0008 with the conclusion
+unchanged), and this mechanism fires only on the collective end. No arm disagreement was
 ever scored. ADR-0023, DEF-0005.
 
 ## Development

@@ -126,8 +126,25 @@ makes the corrected ones comparable.
 | relevance rows (ADR-0020/0021) | 91 rows | **7 rows** contain a mis-licensed paper (labels: 4 background, 2 answers, 1 off_topic) | rows stand, provenance flagged |
 | Gate A scored clusters (ADR-0019) | 30 | **4** contain one | conclusion is structural, unaffected |
 
-⚠️ **No published number has been changed on the strength of this table.** It is reported so
-that the decision to restate, annotate or leave each figure is made deliberately.
+⭐ **APPLIED 2026-09-12, on the project owner's decision to annotate and update.** Each figure
+above is restated in place in RETROSPECTIVE.md, EVAL_REPORT.md, README.md, ARCHITECTURE.md,
+DEF-0001, DEF-0005 and ADR-0020/0022/0023, with a dated note citing this entry, the original
+value, and the statement that the conclusion is unchanged. Dependent figures on the same lines
+moved with them and were recomputed the same way: ADR-0023's rankable pairs **593 → 582** and
+**353 → 303** and its strata table; the label mix of the kept set (**43 of 70 → 41 of 67**
+`background`, **3 of 83 → 2 of 80** `off_topic`); the census's disclosure split (**10 / 27 →
+10 / 26** undisclosed). The three clusters that existed only through mis-licensed papers are
+`Cisplatin | Wounds and Injuries`, `Isotretinoin | Intracranial Hypertension` and `Warfarin |
+Atrial Fibrillation`; none was labelled `answers`.
+
+**Left as measured, deliberately:** facts about what an annotator actually labelled (83 real
+rows, 44 pairs and 204 mentions adjudicated) — restating those would misdescribe the instrument;
+and figures that could not be recomputed because the thing measured is no longer in code
+(ADR-0020's rejected narrowing filter, "33 of 83" and "empty on 2 of 8"), each carrying a note
+saying so. **Not restated, flagged here:** DEF-0004's "ten flagged pairs, all `wrong`" (one of the
+ten, `BLM`, drew every mention from mis-licensed papers) and its 87 of 3,696 type-violation rate,
+Gate 4's lead and inversion counts, and DEF-0003's all-tied 4 → 2 of 8 — all on the same corpus,
+none recomputed.
 
 ### What is NOT claimed
 
@@ -379,14 +396,16 @@ mechanism rather than a set of unlucky queries:
 
 | query drug term | queries | licensed papers | clusters | `no_cluster` |
 |---|---|---|---|---|
-| single agent (`clozapine`, `tamoxifen`, `vancomycin`) | 5 | 116 | 34 | **31%** |
-| structural class (`fluoroquinolones`, `tetracyclines`) | 6 | 117 | 21 | 53% |
-| pharmacological action class (`anticoagulants`, `immunosuppressive agents`) | 14 | 295 | 54 | **74%** |
+| single agent (`clozapine`, `tamoxifen`, `vancomycin`) | 5 | 107 | 33 | **31%** |
+| structural class (`fluoroquinolones`, `tetracyclines`) | 6 | 110 | 20 | 53% |
+| pharmacological action class (`anticoagulants`, `immunosuppressive agents`) | 14 | 277 | 49 | **73%** |
 
 Worst individual cases, all at 40 papers: `anticoagulants and intracranial hemorrhage` **19 of
-19 papers dropped, 0 clusters**; `immunosuppressive agents and opportunistic infections` 19 of
-19, 0 clusters; `proton pump inhibitors and Clostridioides difficile infection` 28 of 30, 1
-cluster. `Anti-Bacterial Agents` — the largest pharmacological class in MeSH at 209 members —
+19 papers dropped, 0 clusters**; `immunosuppressive agents and opportunistic infections` 17 of
+17, 0 clusters; `proton pump inhibitors and Clostridioides difficile infection` 27 of 29, 1
+cluster.
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* As first published the table read 116 / 34 / 31%, 117 / 21 / 53% and 295 / 54 / 74%, and the worst cases read `immunosuppressive agents` 19 of 19 and `proton pump inhibitors` 28 of 30. Those counts included papers licensed under a cited article's PMC id; recomputed without them. **The conclusion is unchanged:** the gradient is still monotone in how collective the drug term is, and every named worst case still yields the same number of clusters. `Anti-Bacterial Agents` — the largest pharmacological class in MeSH at 209 members —
 yielded **2 clusters from 15 licensed papers**.
 
 ⚠️ **IT IS NOT A SAMPLING PROBLEM, and this is the part that took a measurement to establish.**
@@ -566,7 +585,7 @@ distinction is now stated rather than left for a reader to trip over.
 
 - **Date:** 2026-09-05
 - **Component:** `biolit.canon` — `MeshDictionary.lookup` / `DictionaryLinker`
-- **Status:** ⭐ **MEASURED 2026-09-06** — 23 of 44 pairs (52.3%) and 132 of 204 mentions (64.7%) carry a wrong concept. Still **not fixed**; no consumer-side workaround, see "Why not fixed here".
+- **Status:** ⭐ **MEASURED 2026-09-06** — 22 of 42 pairs (52.4%) and 128 of 189 mentions (67.7%) carry a wrong concept *(corrected 2026-09-12 for DEF-0008; first published as 23 of 44 (52.3%) and 132 of 204 (64.7%) — see the note under the table below. The conclusion is unchanged)*. Still **not fixed**; no consumer-side workaround, see "Why not fixed here".
 - **Severity:** Wrong entity, silently, at full confidence. `LinkResult.tiebroken` is `False`
   for these, so nothing downstream can tell them from a clean link.
 
@@ -629,10 +648,12 @@ fixed before any label existed (`docs/superpowers/specs/2026-09-06-acronym-adjud
 
 | | per pair | per mention |
 |---|---|---|
-| **`wrong`** — the concept is not what the author meant | **23 / 44 (52.3%)** | **132 / 204 (64.7%)** |
-| `granularity` — right subject, wrong level (DEF-0002's shape) | 2 / 44 | 18 / 204 |
-| `correct` | 19 / 44 | 54 / 204 |
+| **`wrong`** — the concept is not what the author meant | **22 / 42 (52.4%)** | **128 / 189 (67.7%)** |
+| `granularity` — right subject, wrong level (DEF-0002's shape) | 2 / 42 | 10 / 189 |
+| `correct` | 18 / 42 | 51 / 189 |
 | `cant_tell` | **0** | — |
+
+⚠️ *Corrected 2026-09-12 (DEF-0008).* As first published this table read `wrong` 23 / 44 (52.3%) and 132 / 204 (64.7%), `granularity` 2 / 44 and 18 / 204, `correct` 19 / 44 and 54 / 204. Fifteen of the 204 adjudicated mentions came from papers the licence gate should have refused — they were licensed under a cited article's PMC id — and are excluded; two pairs (`BLM`, `wrong`; `LMWH`, `correct`) drew every mention from such papers and drop out. The adjudication itself is untouched: all 44 pairs and 204 mentions were labelled as described. **The conclusion is unchanged:** a majority of short-acronym links are wrong, and the per-mention figure is worse than the per-pair one.
 
 **A majority of these links are wrong, and the reader-facing figure is worse than the
 mechanism-facing one.** Per pair asks how often the mechanism errs; per mention asks how much
@@ -648,14 +669,16 @@ labelling:
 
 | | pairs `wrong` | mentions `wrong` |
 |---|---|---|
-| disclosed (17) | 13 / 17 | 93 / 131 |
-| **undisclosed (27)** | **10 / 27** | **39 / 73** |
+| disclosed (16) | 12 / 16 | 89 / 119 |
+| **undisclosed (26)** | **10 / 26** | **39 / 70** |
+
+*Corrected 2026-09-12 (DEF-0008), as above: first published as disclosed 13 / 17 and 93 / 131, undisclosed 10 / 27 and 39 / 73. The split's reading is unchanged.*
 
 ⛔ **The gap between the two rows must NOT be read as disclosure bias.** The disclosed set was
 *selected for looking wrong* — `DEFECTS.md` picked known-bad examples and DEF-0004's flag picked
 inconsistencies — so a higher rate there is expected by construction, disclosure or not.
 Selection and disclosure are confounded and this design cannot separate them. What the split
-does establish is that **on 27 pairs carrying no prior disclosure at all, 10 are still wrong**.
+does establish is that **on 26 pairs carrying no prior disclosure at all, 10 are still wrong** *(27 as first published; DEF-0008)*.
 
 **Two signs the labels are independent judgment rather than an echo.** The annotator marked
 `ICH` as `granularity` where this entry had named it *correct* — reading intracranial
